@@ -2002,6 +2002,7 @@ export default function EtsyOrderManager() {
             <ModelsTab
               models={models}
               stores={stores}
+              externalParts={externalParts}
               saveModels={saveModels}
               showNotification={showNotification}
             />
@@ -3229,7 +3230,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 }
 
 // Models Tab Component
-function ModelsTab({ models, stores, saveModels, showNotification }) {
+function ModelsTab({ models, stores, externalParts, saveModels, showNotification }) {
   const [showAddModel, setShowAddModel] = useState(false);
   const [editingModel, setEditingModel] = useState(null);
   const [newModel, setNewModel] = useState({
@@ -3488,7 +3489,7 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
               <input
                 type="text"
                 className="form-input"
-                value={newModel.variantName}
+                value={newModel.variantName || ''}
                 onChange={e => setNewModel({ ...newModel, variantName: e.target.value })}
                 placeholder="e.g., Small, Brown, Sage Green"
               />
