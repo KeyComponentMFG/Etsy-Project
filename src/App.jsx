@@ -333,6 +333,7 @@ export default function EtsyOrderManager() {
         const transformedModels = modelsData.map(m => ({
           id: m.id,
           name: m.name,
+          variantName: m.variant_name || '',
           filamentUsage: m.filament_usage,
           defaultColor: m.default_color,
           externalParts: m.external_parts || [],
@@ -563,6 +564,7 @@ export default function EtsyOrderManager() {
         const dbFormat = models.map(m => ({
           id: m.id,
           name: m.name,
+          variant_name: m.variantName || '',
           filament_usage: m.filamentUsage,
           default_color: m.defaultColor,
           external_parts: m.externalParts,
@@ -3232,6 +3234,7 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
   const [editingModel, setEditingModel] = useState(null);
   const [newModel, setNewModel] = useState({
     name: '',
+    variantName: '',
     filamentUsage: '',
     defaultColor: '',
     externalParts: [],
@@ -3276,19 +3279,20 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
       showNotification('Please enter model name and filament usage', 'error');
       return;
     }
-    
+
     const model = {
       id: Date.now().toString(),
       name: newModel.name,
+      variantName: newModel.variantName || '',
       filamentUsage: parseFloat(newModel.filamentUsage),
       defaultColor: newModel.defaultColor,
       externalParts: newModel.externalParts,
       storeId: newModel.storeId || null,
       imageUrl: newModel.imageUrl || ''
     };
-    
+
     saveModels([...models, model]);
-    setNewModel({ name: '', filamentUsage: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '' });
+    setNewModel({ name: '', variantName: '', filamentUsage: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '' });
     setShowAddModel(false);
     showNotification('Model added successfully');
   };
@@ -3309,11 +3313,12 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
     const newModel = {
       ...model,
       id: Date.now().toString(),
-      name: `${model.name} (Copy)`,
+      name: model.name,
+      variantName: `${model.variantName || ''} (Copy)`.trim(),
       externalParts: [...(model.externalParts || [])]
     };
     saveModels([...models, newModel]);
-    showNotification('Model duplicated - click Edit to customize');
+    showNotification('Model duplicated - click Edit to set variant name');
   };
 
   const addPartToModel = (isEditing) => {
@@ -3386,7 +3391,18 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
               <div style={{ flex: 1 }}>
                 <div className="model-header">
                   <div>
-                    <div className="model-name">{model.name}</div>
+                    <div className="model-name">
+                      {model.name}
+                      {model.variantName && (
+                        <span style={{
+                          color: '#00ccff',
+                          fontWeight: 'normal',
+                          marginLeft: '8px'
+                        }}>
+                          — {model.variantName}
+                        </span>
+                      )}
+                    </div>
                     {model.storeId && (
                       <span style={{ 
                         fontSize: '0.7rem', 
@@ -3466,7 +3482,18 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                 placeholder="e.g., Lithophane Lamp"
               />
             </div>
-            
+
+            <div className="form-group">
+              <label className="form-label">Variant (matches "Extra" column)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newModel.variantName}
+                onChange={e => setNewModel({ ...newModel, variantName: e.target.value })}
+                placeholder="e.g., Small, Brown, Sage Green"
+              />
+            </div>
+
             <div className="form-group">
               <label className="form-label">Store (Optional)</label>
               <select
@@ -3645,7 +3672,18 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                 onChange={e => setEditingModel({ ...editingModel, name: e.target.value })}
               />
             </div>
-            
+
+            <div className="form-group">
+              <label className="form-label">Variant (matches "Extra" column)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editingModel.variantName || ''}
+                onChange={e => setEditingModel({ ...editingModel, variantName: e.target.value })}
+                placeholder="e.g., Small, Brown, Sage Green"
+              />
+            </div>
+
             <div className="form-group">
               <label className="form-label">Store (Optional)</label>
               <select
