@@ -3562,12 +3562,29 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                 </div>
               )}
               <div className="add-item-row">
+                <select
+                  className="add-item-input"
+                  value={newPart.name}
+                  onChange={e => setNewPart({ ...newPart, name: e.target.value })}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Select a part...</option>
+                  {/* Get unique part names from all team members' inventory */}
+                  {[...new Set(
+                    Object.values(externalParts)
+                      .flat()
+                      .map(p => p.name)
+                  )].sort().map(partName => (
+                    <option key={partName} value={partName}>{partName}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   className="add-item-input"
-                  placeholder="Part name"
+                  placeholder="Or type new part"
                   value={newPart.name}
                   onChange={e => setNewPart({ ...newPart, name: e.target.value })}
+                  style={{ flex: 1 }}
                 />
                 <input
                   type="number"
@@ -3721,12 +3738,28 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                 </div>
               )}
               <div className="add-item-row">
+                <select
+                  className="add-item-input"
+                  value={newPart.name}
+                  onChange={e => setNewPart({ ...newPart, name: e.target.value })}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Select a part...</option>
+                  {[...new Set(
+                    Object.values(externalParts)
+                      .flat()
+                      .map(p => p.name)
+                  )].sort().map(partName => (
+                    <option key={partName} value={partName}>{partName}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   className="add-item-input"
-                  placeholder="Part name"
+                  placeholder="Or type new part"
                   value={newPart.name}
                   onChange={e => setNewPart({ ...newPart, name: e.target.value })}
+                  style={{ flex: 1 }}
                 />
                 <input
                   type="number"
