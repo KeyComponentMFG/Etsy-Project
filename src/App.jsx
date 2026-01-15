@@ -3571,8 +3571,9 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                   <option value="">Select a part...</option>
                   {/* Get unique part names from all team members' inventory */}
                   {[...new Set(
-                    Object.values(externalParts)
+                    Object.values(externalParts || {})
                       .flat()
+                      .filter(p => p && p.name)
                       .map(p => p.name)
                   )].sort().map(partName => (
                     <option key={partName} value={partName}>{partName}</option>
@@ -3746,8 +3747,9 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
                 >
                   <option value="">Select a part...</option>
                   {[...new Set(
-                    Object.values(externalParts)
+                    Object.values(externalParts || {})
                       .flat()
+                      .filter(p => p && p.name)
                       .map(p => p.name)
                   )].sort().map(partName => (
                     <option key={partName} value={partName}>{partName}</option>
