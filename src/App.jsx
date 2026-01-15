@@ -3305,6 +3305,17 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
     showNotification('Model deleted');
   };
 
+  const duplicateModel = (model) => {
+    const newModel = {
+      ...model,
+      id: Date.now().toString(),
+      name: `${model.name} (Copy)`,
+      externalParts: [...(model.externalParts || [])]
+    };
+    saveModels([...models, newModel]);
+    showNotification('Model duplicated - click Edit to customize');
+  };
+
   const addPartToModel = (isEditing) => {
     if (!newPart.name) return;
     
@@ -3394,6 +3405,9 @@ function ModelsTab({ models, stores, saveModels, showNotification }) {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button className="btn btn-secondary btn-small" onClick={() => setEditingModel(model)}>
                   <Edit2 size={14} /> Edit
+                </button>
+                <button className="btn btn-secondary btn-small" onClick={() => duplicateModel(model)} title="Create variant">
+                  <Plus size={14} /> Variant
                 </button>
                 <button className="btn btn-danger btn-small" onClick={() => deleteModel(model.id)}>
                   <Trash2 size={14} />
