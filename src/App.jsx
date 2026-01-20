@@ -2219,13 +2219,14 @@ export default function EtsyOrderManager() {
     if (filamentUsage === 0) return 0;
 
     // Find the cost per gram from filament inventory
-    const orderColor = (order.color || model.defaultColor || '').toLowerCase();
+    const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
     let costPerGram = 0;
 
     // Search through all team members' filaments to find the color
     Object.values(allFilaments).forEach(memberFilaments => {
       memberFilaments.forEach(fil => {
-        const filColor = fil.color.toLowerCase();
+        const filColor = fil.color.toLowerCase().trim();
+        // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
         if (filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor)) {
           // Use currentRollCost (new structure) or fall back to costPerRoll (old structure)
           const rollCost = fil.currentRollCost || fil.costPerRoll || 0;
@@ -2819,9 +2820,9 @@ export default function EtsyOrderManager() {
 
           // Handle extra prints - use extraPrintFilament directly
           if (o.isExtraPrint && o.extraPrintFilament > 0) {
-            const orderColor = (o.color || '').toLowerCase();
+            const orderColor = (o.color || '').toLowerCase().trim();
             const filamentIdx = memberFilaments.findIndex(f => {
-              const filColor = f.color.toLowerCase();
+              const filColor = f.color.toLowerCase().trim();
               return filColor === orderColor ||
                      filColor.includes(orderColor) ||
                      orderColor.includes(filColor);
@@ -2867,10 +2868,10 @@ export default function EtsyOrderManager() {
             const model = findModelByName(o.item);
             if (model) {
               // Deduct filament - use printer-specific amount if available
-              const orderColor = (o.color || model.defaultColor || '').toLowerCase();
+              const orderColor = (o.color || model.defaultColor || '').toLowerCase().trim();
               const filamentIdx = memberFilaments.findIndex(f => {
-                const filColor = f.color.toLowerCase();
-                // Match if exact, or if one contains the other
+                const filColor = f.color.toLowerCase().trim();
+                // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
                 return filColor === orderColor ||
                        filColor.includes(orderColor) ||
                        orderColor.includes(filColor);
@@ -4668,10 +4669,11 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     // Calculate filament cost
     let filamentCost = 0;
     if (matchingModel && order.assignedTo) {
-      const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase();
+      const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase().trim();
       const memberFilaments = filaments?.[order.assignedTo] || [];
       const matchedFilament = memberFilaments.find(f => {
-        const filColor = f.color.toLowerCase();
+        const filColor = f.color.toLowerCase().trim();
+        // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
         return filColor === orderColor ||
                filColor.includes(orderColor) ||
                orderColor.includes(filColor);
