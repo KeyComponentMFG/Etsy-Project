@@ -1519,6 +1519,7 @@ export default function EtsyOrderManager() {
           isExtraPrint: o.is_extra_print || false,
           extraPrintFilament: o.extra_print_filament || 0,
           extraPrintMinutes: o.extra_print_minutes || 0,
+          additionalColors: o.additional_colors || [],
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1780,7 +1781,8 @@ export default function EtsyOrderManager() {
           model_id: o.modelId,
           is_extra_print: o.isExtraPrint || false,
           extra_print_filament: o.extraPrintFilament || 0,
-          extra_print_minutes: o.extraPrintMinutes || 0
+          extra_print_minutes: o.extraPrintMinutes || 0,
+          additional_colors: o.additionalColors || []
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -2916,6 +2918,55 @@ export default function EtsyOrderManager() {
                   };
                   setFilamentUsageHistory(prev => [...prev, usageEvent]);
                 }
+              }
+
+              // Deduct additional colors (for multi-color prints)
+              if (o.additionalColors && o.additionalColors.length > 0) {
+                let updatedFilaments = [...memberFilaments];
+                o.additionalColors.forEach(addColor => {
+                  const addColorName = (addColor.color || '').toLowerCase().trim();
+                  const addFilamentIdx = updatedFilaments.findIndex(f => {
+                    const filColor = f.color.toLowerCase().trim();
+                    return filColor === addColorName ||
+                           filColor.includes(addColorName) ||
+                           addColorName.includes(filColor);
+                  });
+                  if (addFilamentIdx >= 0) {
+                    const addTotalUsed = (parseFloat(addColor.filamentUsage) || 0) * o.quantity;
+                    let addNewAmount = updatedFilaments[addFilamentIdx].amount - addTotalUsed;
+                    let addBackupRolls = [...(updatedFilaments[addFilamentIdx].backupRolls || [])];
+                    let addCurrentRollCost = updatedFilaments[addFilamentIdx].currentRollCost || 0;
+
+                    if (addNewAmount <= 0 && addBackupRolls.length > 0) {
+                      const nextRoll = addBackupRolls.shift();
+                      addCurrentRollCost = nextRoll.cost;
+                      addNewAmount = ROLL_SIZE + addNewAmount;
+                      showNotification(`Auto-switched to new roll of ${updatedFilaments[addFilamentIdx].color} ($${addCurrentRollCost.toFixed(2)})!`);
+                    }
+
+                    updatedFilaments[addFilamentIdx] = {
+                      ...updatedFilaments[addFilamentIdx],
+                      amount: Math.max(0, addNewAmount),
+                      backupRolls: addBackupRolls,
+                      currentRollCost: addCurrentRollCost
+                    };
+
+                    // Record usage history
+                    if (addTotalUsed > 0) {
+                      const usageEvent = {
+                        id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        color: updatedFilaments[addFilamentIdx].color,
+                        amount: addTotalUsed,
+                        date: Date.now(),
+                        orderId: o.orderId,
+                        memberId: o.assignedTo,
+                        modelName: model.name
+                      };
+                      setFilamentUsageHistory(prev => [...prev, usageEvent]);
+                    }
+                  }
+                });
+                saveFilaments({ ...filaments, [o.assignedTo]: updatedFilaments });
               }
 
               // Deduct external parts
@@ -4606,6 +4657,40 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
+  const [showAddColor, setShowAddColor] = useState(false);
+  const [newColorName, setNewColorName] = useState('');
+  const [newColorUsage, setNewColorUsage] = useState('');
+
+  const addAdditionalColor = () => {
+    if (!newColorName || !newColorUsage) return;
+    const updated = orders.map(o => {
+      if (o.orderId === order.orderId) {
+        const additionalColors = [...(o.additionalColors || [])];
+        additionalColors.push({
+          id: `color-${Date.now()}`,
+          color: newColorName,
+          filamentUsage: parseFloat(newColorUsage) || 0
+        });
+        return { ...o, additionalColors };
+      }
+      return o;
+    });
+    setOrders(updated);
+    setNewColorName('');
+    setNewColorUsage('');
+    setShowAddColor(false);
+  };
+
+  const removeAdditionalColor = (colorId) => {
+    const updated = orders.map(o => {
+      if (o.orderId === order.orderId) {
+        const additionalColors = (o.additionalColors || []).filter(c => c.id !== colorId);
+        return { ...o, additionalColors };
+      }
+      return o;
+    });
+    setOrders(updated);
+  };
 
   const statusIcons = {
     received: <Clock size={14} />,
@@ -4687,6 +4772,24 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
         const costPerGram = rollCost / 1000;
         filamentCost = filamentUsage * costPerGram * order.quantity;
+      }
+
+      // Add costs for additional colors
+      if (order.additionalColors && order.additionalColors.length > 0) {
+        order.additionalColors.forEach(addColor => {
+          const addColorName = (addColor.color || '').toLowerCase().trim();
+          const addMatchedFilament = memberFilaments.find(f => {
+            const filColor = f.color.toLowerCase().trim();
+            return filColor === addColorName ||
+                   filColor.includes(addColorName) ||
+                   addColorName.includes(filColor);
+          });
+          const addRollCost = addMatchedFilament?.currentRollCost || addMatchedFilament?.costPerRoll || 0;
+          if (addRollCost > 0) {
+            const addCostPerGram = addRollCost / 1000;
+            filamentCost += (addColor.filamentUsage || 0) * addCostPerGram * order.quantity;
+          }
+        });
       }
     }
 
@@ -4969,6 +5072,131 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           <span className="detail-label">Color</span>
           <span className="detail-value">{order.color || 'Not specified'}</span>
         </div>
+
+        {/* Additional Colors for Multi-Color Prints */}
+        {(order.additionalColors && order.additionalColors.length > 0) && (
+          <div className="detail-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <span className="detail-label" style={{ marginBottom: '4px' }}>Additional Colors</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {order.additionalColors.map(c => (
+                <span key={c.id} style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.75rem',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(165, 94, 234, 0.15)',
+                  color: '#a55eea',
+                  border: '1px solid rgba(165, 94, 234, 0.3)'
+                }}>
+                  {c.color} ({c.filamentUsage}g)
+                  <button
+                    onClick={() => removeAdditionalColor(c.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ff6b6b',
+                      cursor: 'pointer',
+                      padding: '0',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Add Color Button */}
+        {order.status === 'received' && (
+          <div style={{ marginTop: '4px' }}>
+            {showAddColor ? (
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Color"
+                  value={newColorName}
+                  onChange={e => setNewColorName(e.target.value)}
+                  style={{
+                    width: '80px',
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(165, 94, 234, 0.3)',
+                    borderRadius: '4px',
+                    color: '#fff'
+                  }}
+                />
+                <input
+                  type="number"
+                  placeholder="Grams"
+                  value={newColorUsage}
+                  onChange={e => setNewColorUsage(e.target.value)}
+                  style={{
+                    width: '60px',
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(165, 94, 234, 0.3)',
+                    borderRadius: '4px',
+                    color: '#fff'
+                  }}
+                />
+                <button
+                  onClick={addAdditionalColor}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.7rem',
+                    background: 'rgba(165, 94, 234, 0.2)',
+                    border: '1px solid rgba(165, 94, 234, 0.4)',
+                    borderRadius: '4px',
+                    color: '#a55eea',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Check size={12} />
+                </button>
+                <button
+                  onClick={() => { setShowAddColor(false); setNewColorName(''); setNewColorUsage(''); }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.7rem',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '4px',
+                    color: '#888',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddColor(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  background: 'rgba(165, 94, 234, 0.1)',
+                  border: '1px solid rgba(165, 94, 234, 0.2)',
+                  borderRadius: '4px',
+                  color: '#a55eea',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={12} /> Add Color
+              </button>
+            )}
+          </div>
+        )}
+
         {order.extra && (
           <div className="detail-item">
             <span className="detail-label">Extra</span>
