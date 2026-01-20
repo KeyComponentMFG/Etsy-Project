@@ -52,6 +52,21 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
+/* Ensure SVG icons in buttons are visible */
+button svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Fix for icon-only buttons (close buttons, qty buttons, etc.) */
+.modal-close,
+.qty-btn,
+button[style*="background: none"],
+button[style*="background:none"] {
+  background-color: transparent !important;
+  background: transparent !important;
+}
 button:hover {
   border-color: #646cff;
 }
@@ -71,4 +86,14 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+/* Spinning animation for sync button */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
 }

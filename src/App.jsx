@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, Archive, Upload, ChevronRight, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw } from 'lucide-react';
+import { Package, Printer, Users, Archive, Upload, ChevronRight, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -27,6 +27,1195 @@ const DEFAULT_STORES = [
   { id: 'store1', name: 'Main Store', color: '#00ff88' }
 ];
 
+// Default printers
+const DEFAULT_PRINTERS = [
+  { id: 'printer1', name: 'Printer 1' }
+];
+
+// Production stages
+const PRODUCTION_STAGES = [
+  { id: 'printing', name: 'Printing', color: '#00ccff', icon: 'Printer' },
+  { id: 'curing', name: 'Curing', color: '#ff9f43', icon: 'Clock' },
+  { id: 'assembly', name: 'Assembly', color: '#a55eea', icon: 'Box' },
+  { id: 'qc', name: 'QC', color: '#2ed573', icon: 'Check' },
+  { id: 'packed', name: 'Packed', color: '#00ff88', icon: 'Package' }
+];
+
+// Low Stock Alerts Component
+function LowStockAlerts({ filaments, externalParts, teamMembers, setActiveTab }) {
+  const [dismissed, setDismissed] = useState(false);
+
+  // Collect all low stock items
+  const lowStockItems = [];
+
+  // Check filaments
+  teamMembers.forEach(member => {
+    const memberFilaments = filaments[member.id] || [];
+    memberFilaments.forEach(fil => {
+      const threshold = fil.reorderAt ?? 250;
+      if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
+        lowStockItems.push({
+          type: 'filament',
+          name: fil.color,
+          member: member.name,
+          current: `${fil.amount.toFixed(0)}g`,
+          threshold: `${threshold}g`
+        });
+      }
+    });
+  });
+
+  // Check supplies
+  teamMembers.forEach(member => {
+    const memberParts = externalParts[member.id] || [];
+    memberParts.forEach(part => {
+      if (part.reorderAt && part.quantity <= part.reorderAt) {
+        lowStockItems.push({
+          type: 'supply',
+          name: part.name,
+          member: member.name,
+          current: part.quantity.toString(),
+          threshold: part.reorderAt.toString()
+        });
+      }
+    });
+  });
+
+  // Don't show if dismissed or no items
+  if (dismissed || lowStockItems.length === 0) return null;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 107, 107, 0.1) 100%)',
+      border: '1px solid rgba(255, 193, 7, 0.4)',
+      borderRadius: '12px',
+      padding: '16px 20px',
+      marginBottom: '20px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '16px'
+    }}>
+      <AlertCircle size={24} style={{ color: '#ffc107', flexShrink: 0, marginTop: '2px' }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h4 style={{ margin: 0, color: '#ffc107', fontWeight: '600' }}>
+            Low Stock Alert - {lowStockItems.length} item{lowStockItems.length !== 1 ? 's' : ''} need restock
+          </h4>
+          <button
+            onClick={() => setDismissed(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#888',
+              cursor: 'pointer',
+              padding: '4px'
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+          {lowStockItems.slice(0, 5).map((item, idx) => (
+            <span key={idx} style={{
+              background: item.type === 'filament' ? 'rgba(0, 204, 255, 0.2)' : 'rgba(0, 255, 136, 0.2)',
+              border: `1px solid ${item.type === 'filament' ? 'rgba(0, 204, 255, 0.4)' : 'rgba(0, 255, 136, 0.4)'}`,
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '0.8rem',
+              color: item.type === 'filament' ? '#00ccff' : '#00ff88'
+            }}>
+              {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
+              {item.name} ({item.current})
+            </span>
+          ))}
+          {lowStockItems.length > 5 && (
+            <span style={{ color: '#888', fontSize: '0.8rem', padding: '4px 10px' }}>
+              +{lowStockItems.length - 5} more
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => setActiveTab('restock')}
+          style={{
+            background: 'rgba(255, 193, 7, 0.2)',
+            border: '1px solid rgba(255, 193, 7, 0.4)',
+            borderRadius: '6px',
+            padding: '6px 14px',
+            color: '#ffc107',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontWeight: '500'
+          }}
+        >
+          View Restock List
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Dashboard Tab Component
+function DashboardTab({ orders, archivedOrders, purchases, models, stores, filaments, externalParts }) {
+  const [timeRange, setTimeRange] = useState('month'); // week, month, year, all
+
+  // Combine orders and archived orders for revenue calculation
+  const allOrders = [...(orders || []), ...(archivedOrders || [])];
+
+  // Filter by time range
+  const getFilteredData = (data, dateField = 'createdAt') => {
+    if (!data || !Array.isArray(data)) return [];
+    const now = new Date();
+    let startDate;
+
+    switch (timeRange) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        return data;
+    }
+
+    return data.filter(item => {
+      const itemDate = new Date(item[dateField]);
+      return itemDate >= startDate;
+    });
+  };
+
+  // Etsy fee constants
+  const TRANSACTION_FEE_RATE = 0.065; // 6.5%
+  const PAYMENT_PROCESSING_RATE = 0.03; // 3%
+  const PAYMENT_PROCESSING_FLAT = 0.25; // $0.25
+  const SALES_TAX_RATE = 0.0752; // 7.52% (fallback if no actual tax)
+
+  // Calculate revenue from orders (shipped orders) with fees breakdown
+  const calculateRevenueWithFees = () => {
+    const shippedOrders = getFilteredData(allOrders).filter(o => o.status === 'shipped');
+    let totalOrderAmount = 0;
+    let totalSalesTax = 0;
+    let totalTransactionFees = 0;
+    let totalPaymentFees = 0;
+
+    shippedOrders.forEach(order => {
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      const orderTotal = parseFloat(priceStr) || 0;
+
+      // Use actual sales tax if available, otherwise estimate
+      let salesTax;
+      if (order.salesTax != null && order.salesTax > 0) {
+        salesTax = order.salesTax;
+      } else {
+        const preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
+        salesTax = orderTotal - preTaxAmount;
+      }
+
+      const transactionFee = orderTotal * TRANSACTION_FEE_RATE;
+      const paymentFee = (orderTotal * PAYMENT_PROCESSING_RATE) + PAYMENT_PROCESSING_FLAT;
+
+      totalOrderAmount += orderTotal;
+      totalSalesTax += salesTax;
+      totalTransactionFees += transactionFee;
+      totalPaymentFees += paymentFee;
+    });
+
+    const actualRevenue = totalOrderAmount - totalSalesTax; // Revenue after extracting tax
+    const totalFees = totalTransactionFees + totalPaymentFees;
+
+    return {
+      orderTotal: totalOrderAmount,
+      actualRevenue,
+      salesTax: totalSalesTax,
+      transactionFees: totalTransactionFees,
+      paymentFees: totalPaymentFees,
+      totalFees
+    };
+  };
+
+  // Calculate expenses from purchases
+  const calculateExpenses = () => {
+    const filteredPurchases = getFilteredData(purchases || [], 'purchaseDate');
+    return filteredPurchases.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+  };
+
+  // Calculate shipping costs
+  const calculateShippingCosts = () => {
+    const shippedOrders = getFilteredData(allOrders).filter(o => o.status === 'shipped');
+    return shippedOrders.reduce((sum, o) => sum + (o.shippingCost || 0), 0);
+  };
+
+  // Get order counts
+  const getOrderCounts = () => {
+    const filteredOrders = getFilteredData(allOrders);
+    return {
+      total: filteredOrders.length,
+      shipped: filteredOrders.filter(o => o.status === 'shipped').length,
+      fulfilled: filteredOrders.filter(o => o.status === 'fulfilled').length,
+      pending: filteredOrders.filter(o => o.status === 'received').length
+    };
+  };
+
+  // Get top selling models
+  const getTopModels = () => {
+    const filteredOrders = getFilteredData(allOrders);
+    const modelCounts = {};
+
+    filteredOrders.forEach(order => {
+      const item = order.item || 'Unknown';
+      if (!modelCounts[item]) {
+        modelCounts[item] = { name: item, count: 0, quantity: 0, revenue: 0 };
+      }
+      modelCounts[item].count++;
+      modelCounts[item].quantity += order.quantity || 1;
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      modelCounts[item].revenue += parseFloat(priceStr) || 0;
+    });
+
+    return Object.values(modelCounts)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  };
+
+  // Get revenue by store
+  const getRevenueByStore = () => {
+    const filteredOrders = getFilteredData(allOrders).filter(o => o.status === 'shipped');
+    const storeRevenue = {};
+
+    filteredOrders.forEach(order => {
+      const storeId = order.storeId || 'unknown';
+      if (!storeRevenue[storeId]) {
+        storeRevenue[storeId] = { id: storeId, revenue: 0, orders: 0 };
+      }
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      storeRevenue[storeId].revenue += parseFloat(priceStr) || 0;
+      storeRevenue[storeId].orders++;
+    });
+
+    return Object.values(storeRevenue).map(sr => ({
+      ...sr,
+      name: (stores || []).find(s => s.id === sr.id)?.name || 'Unknown Store'
+    })).sort((a, b) => b.revenue - a.revenue);
+  };
+
+  // Get best selling colors (with filament weight calculation)
+  const getTopColors = () => {
+    const filteredOrders = getFilteredData(allOrders);
+    const colorCounts = {};
+
+    filteredOrders.forEach(order => {
+      const color = (order.color || '').trim();
+      if (!color) return; // Skip orders without color
+
+      const normalizedColor = color.toLowerCase();
+      if (!colorCounts[normalizedColor]) {
+        colorCounts[normalizedColor] = {
+          name: color, // Keep original casing for display
+          count: 0,
+          quantity: 0,
+          revenue: 0,
+          filamentWeight: 0
+        };
+      }
+      colorCounts[normalizedColor].count++;
+      colorCounts[normalizedColor].quantity += order.quantity || 1;
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      colorCounts[normalizedColor].revenue += parseFloat(priceStr) || 0;
+
+      // Find matching model and calculate filament weight
+      const orderItem = (order.item || '').toLowerCase();
+      const matchingModel = models?.find(m => {
+        const modelName = m.name.toLowerCase();
+        // Check main name
+        if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
+        // Check aliases
+        if (m.aliases?.some(alias => orderItem.includes(alias.toLowerCase()))) return true;
+        return false;
+      });
+
+      if (matchingModel) {
+        // Get filament usage from printer settings
+        const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId)
+          || matchingModel.printerSettings?.[0];
+
+        // Sum filament from all plates, or use legacy filamentUsage
+        let filamentUsage = 0;
+        if (printerSettings?.plates?.length > 0) {
+          filamentUsage = printerSettings.plates.reduce((sum, plate) =>
+            sum + (parseFloat(plate.filamentUsage) || 0), 0);
+        } else if (matchingModel.filamentUsage) {
+          filamentUsage = parseFloat(matchingModel.filamentUsage) || 0;
+        }
+
+        colorCounts[normalizedColor].filamentWeight += filamentUsage * (order.quantity || 1);
+      }
+    });
+
+    return Object.values(colorCounts)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+  };
+
+  const revenueData = calculateRevenueWithFees();
+  const expenses = calculateExpenses();
+  const shippingCosts = calculateShippingCosts();
+  // Net profit = actual revenue - expenses - shipping - Etsy fees
+  const netProfit = revenueData.actualRevenue - expenses - shippingCosts - revenueData.totalFees;
+  const orderCounts = getOrderCounts();
+  const topModels = getTopModels();
+  const revenueByStore = getRevenueByStore();
+  const topColors = getTopColors();
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="page-title"><TrendingUp size={28} /> Revenue Dashboard</h2>
+        <select
+          className="form-input"
+          value={timeRange}
+          onChange={e => setTimeRange(e.target.value)}
+          style={{ width: '180px' }}
+        >
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+
+      {/* Key Metrics */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.15) 0%, rgba(0, 255, 136, 0.05) 100%)',
+          border: '1px solid rgba(0, 255, 136, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue (after tax)</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${revenueData.actualRevenue.toFixed(2)}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+            ${revenueData.orderTotal.toFixed(2)} total - ${revenueData.salesTax.toFixed(2)} tax
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 159, 67, 0.15) 0%, rgba(255, 159, 67, 0.05) 100%)',
+          border: '1px solid rgba(255, 159, 67, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Etsy Fees</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${revenueData.totalFees.toFixed(2)}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+            6.5% + 3% + $0.25/order
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.15) 0%, rgba(255, 107, 107, 0.05) 100%)',
+          border: '1px solid rgba(255, 107, 107, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Material Expenses</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${expenses.toFixed(2)}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+            From purchases & materials
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 204, 255, 0.15) 0%, rgba(0, 204, 255, 0.05) 100%)',
+          border: '1px solid rgba(0, 204, 255, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Shipping Costs</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${shippingCosts.toFixed(2)}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+            Avg ${(shippingCosts / (orderCounts.shipped || 1)).toFixed(2)}/order
+          </div>
+        </div>
+
+        <div style={{
+          background: netProfit >= 0
+            ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 204, 255, 0.1) 100%)'
+            : 'linear-gradient(135deg, rgba(255, 107, 107, 0.2) 0%, rgba(255, 193, 7, 0.1) 100%)',
+          border: `1px solid ${netProfit >= 0 ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 107, 107, 0.4)'}`,
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Net Profit</div>
+          <div style={{
+            fontSize: '2rem',
+            fontWeight: '700',
+            color: netProfit >= 0 ? '#00ff88' : '#ff6b6b',
+            fontFamily: 'JetBrains Mono, monospace'
+          }}>
+            {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+            {revenueData.actualRevenue > 0 ? `${((netProfit / revenueData.actualRevenue) * 100).toFixed(1)}% margin` : 'No revenue yet'}
+          </div>
+        </div>
+      </div>
+
+      {/* Order Status Summary */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '24px',
+        border: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Package size={20} /> Order Summary
+        </h3>
+        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#fff' }}>{orderCounts.total}</div>
+            <div style={{ fontSize: '0.85rem', color: '#888' }}>Total Orders</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ffc107' }}>{orderCounts.pending}</div>
+            <div style={{ fontSize: '0.85rem', color: '#888' }}>In Progress</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ccff' }}>{orderCounts.fulfilled}</div>
+            <div style={{ fontSize: '0.85rem', color: '#888' }}>Ready to Ship</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ff88' }}>{orderCounts.shipped}</div>
+            <div style={{ fontSize: '0.85rem', color: '#888' }}>Shipped</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
+        {/* Top Selling Items */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <h3 style={{ color: '#00ccff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Star size={20} /> Top Selling Items
+          </h3>
+          {topModels.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No orders yet</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {topModels.map((model, idx) => (
+                <div key={model.name} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{
+                      background: idx === 0 ? 'rgba(255, 193, 7, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                      color: idx === 0 ? '#ffc107' : '#888',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600'
+                    }}>
+                      #{idx + 1}
+                    </span>
+                    <div>
+                      <div style={{ fontWeight: '500', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {model.name?.slice(0, 30)}{model.name?.length > 30 ? '...' : ''}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                        {model.count} orders • {model.quantity} items
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ color: '#00ff88', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
+                    ${model.revenue.toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Revenue by Store */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Store size={20} /> Revenue by Store
+          </h3>
+          {revenueByStore.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No store data yet</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {revenueByStore.map((store, idx) => {
+                const percentage = revenueData.orderTotal > 0 ? (store.revenue / revenueData.orderTotal) * 100 : 0;
+                return (
+                  <div key={store.id} style={{
+                    padding: '10px 12px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: '500' }}>{store.name}</span>
+                      <span style={{ color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+                        ${store.revenue.toFixed(2)}
+                      </span>
+                    </div>
+                    <div style={{
+                      height: '6px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '3px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${percentage}%`,
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #00ff88, #00ccff)',
+                        borderRadius: '3px'
+                      }} />
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                      {store.orders} orders • {percentage.toFixed(1)}% of revenue
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Best Selling Colors */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <h3 style={{ color: '#a55eea', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Palette size={20} /> Best Selling Colors
+          </h3>
+          {topColors.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No color data yet</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {topColors.map((color, idx) => {
+                const maxQty = topColors[0]?.quantity || 1;
+                const percentage = (color.quantity / maxQty) * 100;
+                return (
+                  <div key={color.name} style={{
+                    padding: '10px 12px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                          color: idx === 0 ? '#a55eea' : '#888',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600'
+                        }}>
+                          #{idx + 1}
+                        </span>
+                        <span style={{ fontWeight: '500', textTransform: 'capitalize' }}>{color.name}</span>
+                      </div>
+                      <span style={{ color: '#a55eea', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
+                        {color.quantity} sold
+                      </span>
+                    </div>
+                    <div style={{
+                      height: '4px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '2px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${percentage}%`,
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #a55eea, #7c3aed)',
+                        borderRadius: '2px'
+                      }} />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '4px' }}>
+                      {color.count} orders • ${color.revenue.toFixed(2)} revenue
+                      {color.filamentWeight > 0 && (
+                        <span style={{ color: '#00ccff' }}> • {color.filamentWeight.toFixed(0)}g filament</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Analytics Tab Component - Color stats and filament usage tracking
+function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, models, filaments, teamMembers, filamentUsageHistory, showNotification }) {
+  const [timeRange, setTimeRange] = useState('all'); // week, month, year, all
+  const [sortBy, setSortBy] = useState('quantity'); // quantity, weight, revenue
+  const [editingColor, setEditingColor] = useState(null);
+  const [newColorName, setNewColorName] = useState('');
+
+  // Rename a color across all orders
+  const renameColor = () => {
+    if (!editingColor || !newColorName.trim()) return;
+
+    const oldColorLower = editingColor.toLowerCase();
+    const newColor = newColorName.trim();
+
+    // Update active orders
+    const updatedOrders = orders.map(o => {
+      if ((o.color || '').toLowerCase() === oldColorLower) {
+        return { ...o, color: newColor };
+      }
+      return o;
+    });
+
+    // Update archived orders
+    const updatedArchived = archivedOrders.map(o => {
+      if ((o.color || '').toLowerCase() === oldColorLower) {
+        return { ...o, color: newColor };
+      }
+      return o;
+    });
+
+    // Count how many were updated
+    const activeCount = orders.filter(o => (o.color || '').toLowerCase() === oldColorLower).length;
+    const archivedCount = archivedOrders.filter(o => (o.color || '').toLowerCase() === oldColorLower).length;
+
+    setOrders(updatedOrders);
+    setArchivedOrders(updatedArchived);
+    setEditingColor(null);
+    setNewColorName('');
+    showNotification(`Renamed "${editingColor}" to "${newColor}" on ${activeCount + archivedCount} orders`);
+  };
+
+  // Delete/clear a color from orders (set to empty)
+  const clearColor = () => {
+    if (!editingColor) return;
+
+    const oldColorLower = editingColor.toLowerCase();
+
+    // Update active orders
+    const updatedOrders = orders.map(o => {
+      if ((o.color || '').toLowerCase() === oldColorLower) {
+        return { ...o, color: '' };
+      }
+      return o;
+    });
+
+    // Update archived orders
+    const updatedArchived = archivedOrders.map(o => {
+      if ((o.color || '').toLowerCase() === oldColorLower) {
+        return { ...o, color: '' };
+      }
+      return o;
+    });
+
+    const activeCount = orders.filter(o => (o.color || '').toLowerCase() === oldColorLower).length;
+    const archivedCount = archivedOrders.filter(o => (o.color || '').toLowerCase() === oldColorLower).length;
+
+    setOrders(updatedOrders);
+    setArchivedOrders(updatedArchived);
+    setEditingColor(null);
+    setNewColorName('');
+    showNotification(`Cleared "${editingColor}" from ${activeCount + archivedCount} orders`);
+  };
+
+  // Combine all orders for analysis
+  const allOrders = [...(orders || []), ...(archivedOrders || [])];
+
+  // Filter by time range
+  const getFilteredOrders = () => {
+    if (timeRange === 'all') return allOrders;
+
+    const now = new Date();
+    let startDate;
+
+    switch (timeRange) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        return allOrders;
+    }
+
+    return allOrders.filter(order => {
+      const orderDate = new Date(order.createdAt || order.archivedAt);
+      return orderDate >= startDate;
+    });
+  };
+
+  // Calculate comprehensive color stats
+  const getColorStats = () => {
+    const filteredOrders = getFilteredOrders();
+    const colorStats = {};
+
+    filteredOrders.forEach(order => {
+      const color = (order.color || '').trim();
+      if (!color) return;
+
+      const normalizedColor = color.toLowerCase();
+      if (!colorStats[normalizedColor]) {
+        colorStats[normalizedColor] = {
+          name: color,
+          orderCount: 0,
+          quantity: 0,
+          revenue: 0,
+          filamentWeight: 0
+        };
+      }
+
+      colorStats[normalizedColor].orderCount++;
+      colorStats[normalizedColor].quantity += order.quantity || 1;
+
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      colorStats[normalizedColor].revenue += parseFloat(priceStr) || 0;
+
+      // Calculate filament weight from matching model
+      const orderItem = (order.item || '').toLowerCase();
+      const matchingModel = models?.find(m => {
+        const modelName = m.name.toLowerCase();
+        if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
+        if (m.aliases?.some(alias => orderItem.includes(alias.toLowerCase()))) return true;
+        return false;
+      });
+
+      if (matchingModel) {
+        const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId)
+          || matchingModel.printerSettings?.[0];
+
+        let filamentUsage = 0;
+        if (printerSettings?.plates?.length > 0) {
+          filamentUsage = printerSettings.plates.reduce((sum, plate) =>
+            sum + (parseFloat(plate.filamentUsage) || 0), 0);
+        } else if (matchingModel.filamentUsage) {
+          filamentUsage = parseFloat(matchingModel.filamentUsage) || 0;
+        }
+
+        colorStats[normalizedColor].filamentWeight += filamentUsage * (order.quantity || 1);
+      }
+    });
+
+    // Sort based on selected criteria
+    const sorted = Object.values(colorStats).sort((a, b) => {
+      switch (sortBy) {
+        case 'weight': return b.filamentWeight - a.filamentWeight;
+        case 'revenue': return b.revenue - a.revenue;
+        default: return b.quantity - a.quantity;
+      }
+    });
+
+    return sorted;
+  };
+
+  // Calculate usage rate from history (grams per week)
+  const getUsageRate = (color) => {
+    const colorHistory = (filamentUsageHistory || []).filter(h =>
+      h.color?.toLowerCase() === color.toLowerCase()
+    );
+
+    if (colorHistory.length < 2) return null;
+
+    // Sort by date
+    const sorted = [...colorHistory].sort((a, b) => a.date - b.date);
+    const firstDate = new Date(sorted[0].date);
+    const lastDate = new Date(sorted[sorted.length - 1].date);
+    const daysDiff = Math.max(1, (lastDate - firstDate) / (1000 * 60 * 60 * 24));
+
+    const totalUsed = colorHistory.reduce((sum, h) => sum + (h.amount || 0), 0);
+    const dailyRate = totalUsed / daysDiff;
+    const weeklyRate = dailyRate * 7;
+
+    return {
+      daily: dailyRate,
+      weekly: weeklyRate,
+      monthly: dailyRate * 30,
+      totalUsed,
+      dataPoints: colorHistory.length
+    };
+  };
+
+  // Get current inventory for a color
+  const getColorInventory = (colorName) => {
+    let total = 0;
+    teamMembers.forEach(member => {
+      const memberFilaments = filaments[member.id] || [];
+      memberFilaments.forEach(fil => {
+        if (fil.color.toLowerCase() === colorName.toLowerCase()) {
+          total += fil.amount + (fil.rolls || 0) * 1000;
+        }
+      });
+    });
+    return total;
+  };
+
+  // Calculate days until reorder
+  const getDaysUntilReorder = (color, currentInventory) => {
+    const rate = getUsageRate(color);
+    if (!rate || rate.daily === 0) return null;
+
+    // Find reorder threshold for this color
+    let reorderThreshold = 250; // default
+    teamMembers.forEach(member => {
+      const memberFilaments = filaments[member.id] || [];
+      memberFilaments.forEach(fil => {
+        if (fil.color.toLowerCase() === color.toLowerCase() && fil.reorderAt) {
+          reorderThreshold = fil.reorderAt;
+        }
+      });
+    });
+
+    const usableInventory = currentInventory - reorderThreshold;
+    if (usableInventory <= 0) return 0;
+
+    return Math.floor(usableInventory / rate.daily);
+  };
+
+  const colorStats = getColorStats();
+  const totalFilamentUsed = colorStats.reduce((sum, c) => sum + c.filamentWeight, 0);
+  const totalRevenue = colorStats.reduce((sum, c) => sum + c.revenue, 0);
+  const totalQuantity = colorStats.reduce((sum, c) => sum + c.quantity, 0);
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="page-title"><BarChart3 size={28} /> Color Analytics</h2>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <select
+            className="form-input"
+            value={timeRange}
+            onChange={e => setTimeRange(e.target.value)}
+            style={{ padding: '8px 12px', minWidth: '120px' }}
+          >
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="all">All Time</option>
+          </select>
+          <select
+            className="form-input"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{ padding: '8px 12px', minWidth: '140px' }}
+          >
+            <option value="quantity">Sort by Quantity</option>
+            <option value="weight">Sort by Weight</option>
+            <option value="revenue">Sort by Revenue</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Summary Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(165, 94, 234, 0.1) 0%, rgba(165, 94, 234, 0.05) 100%)',
+          border: '1px solid rgba(165, 94, 234, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Colors Tracked</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+            {colorStats.length}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 204, 255, 0.1) 0%, rgba(0, 204, 255, 0.05) 100%)',
+          border: '1px solid rgba(0, 204, 255, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Items Sold</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>
+            {totalQuantity.toLocaleString()}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%)',
+          border: '1px solid rgba(0, 255, 136, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Filament Used</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+            {(totalFilamentUsed / 1000).toFixed(2)} kg
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%)',
+          border: '1px solid rgba(255, 193, 7, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Revenue</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ffc107', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${totalRevenue.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      {/* Color Stats Table */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        padding: '20px'
+      }}>
+        <h3 style={{ color: '#a55eea', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Palette size={20} /> Color Breakdown
+        </h3>
+
+        {colorStats.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <Palette size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
+            <p>No color data available yet</p>
+            <p style={{ fontSize: '0.85rem' }}>Import orders with color information to see analytics</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Rank</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Color</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Qty Sold</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Orders</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Filament Used</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Revenue</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Inventory</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Usage Rate</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Reorder In</th>
+                </tr>
+              </thead>
+              <tbody>
+                {colorStats.map((color, idx) => {
+                  const inventory = getColorInventory(color.name);
+                  const usageRate = getUsageRate(color.name);
+                  const daysUntilReorder = getDaysUntilReorder(color.name, inventory);
+                  const isLow = daysUntilReorder !== null && daysUntilReorder <= 14;
+                  const isCritical = daysUntilReorder !== null && daysUntilReorder <= 7;
+
+                  return (
+                    <tr key={color.name} style={{
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      background: isCritical ? 'rgba(255, 107, 107, 0.1)' : isLow ? 'rgba(255, 193, 7, 0.05)' : 'transparent'
+                    }}>
+                      <td style={{ padding: '12px 8px' }}>
+                        <span style={{
+                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : idx < 3 ? 'rgba(165, 94, 234, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+                          color: idx === 0 ? '#a55eea' : idx < 3 ? '#c084fc' : '#888',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600'
+                        }}>
+                          #{idx + 1}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: '500', textTransform: 'capitalize' }}>{color.name}</span>
+                          <button
+                            className="qty-btn"
+                            onClick={() => {
+                              setEditingColor(color.name);
+                              setNewColorName(color.name);
+                            }}
+                            title="Edit color"
+                            style={{ width: '24px', height: '24px', minWidth: '24px' }}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#00ccff' }}>
+                        {color.quantity.toLocaleString()}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#888' }}>
+                        {color.orderCount}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#00ff88' }}>
+                        {color.filamentWeight > 0 ? `${color.filamentWeight.toFixed(0)}g` : '-'}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#ffc107' }}>
+                        ${color.revenue.toFixed(2)}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
+                        {inventory > 0 ? `${inventory.toFixed(0)}g` : <span style={{ color: '#666' }}>-</span>}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }}>
+                        {usageRate ? (
+                          <span style={{ color: '#00ccff' }}>{usageRate.weekly.toFixed(0)}g/wk</span>
+                        ) : (
+                          <span style={{ color: '#666' }}>-</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
+                        {daysUntilReorder !== null ? (
+                          <span style={{
+                            color: isCritical ? '#ff6b6b' : isLow ? '#ffc107' : '#00ff88',
+                            fontWeight: isCritical || isLow ? '600' : '400'
+                          }}>
+                            {daysUntilReorder === 0 ? 'Now!' : `${daysUntilReorder} days`}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#666' }}>-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Usage History Info */}
+      <div style={{
+        marginTop: '24px',
+        background: 'rgba(0, 204, 255, 0.05)',
+        border: '1px solid rgba(0, 204, 255, 0.2)',
+        borderRadius: '12px',
+        padding: '16px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <AlertCircle size={18} style={{ color: '#00ccff' }} />
+          <strong style={{ color: '#00ccff' }}>About Usage Rates & Reorder Predictions</strong>
+        </div>
+        <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>
+          Usage rates and reorder predictions are calculated from filament deductions when orders are fulfilled.
+          The more orders you process, the more accurate these predictions become.
+          {(filamentUsageHistory || []).length > 0 ? (
+            <span style={{ color: '#00ff88' }}> Currently tracking {(filamentUsageHistory || []).length} usage events.</span>
+          ) : (
+            <span> No usage history recorded yet - fulfill some orders to start tracking.</span>
+          )}
+        </p>
+      </div>
+
+      {/* Edit Color Modal */}
+      {editingColor && (
+        <div className="modal-overlay" onClick={() => setEditingColor(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Edit Color</h2>
+              <button className="modal-close" onClick={() => setEditingColor(null)}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                background: 'rgba(165, 94, 234, 0.1)',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '0.9rem'
+              }}>
+                <span style={{ color: '#888' }}>Current color: </span>
+                <span style={{ color: '#a55eea', fontWeight: '600', textTransform: 'capitalize' }}>{editingColor}</span>
+                <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                  This will update all orders with this color
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>
+                  New Color Name
+                </label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  value={newColorName}
+                  onChange={e => setNewColorName(e.target.value)}
+                  placeholder="Enter new color name"
+                  style={{ width: '100%', padding: '12px' }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={renameColor}
+                  style={{ flex: 1 }}
+                  disabled={!newColorName.trim() || newColorName.toLowerCase() === editingColor.toLowerCase()}
+                >
+                  <Save size={16} /> Rename Color
+                </button>
+              </div>
+
+              <div style={{
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+                paddingTop: '16px',
+                marginTop: '8px'
+              }}>
+                <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '12px' }}>
+                  Not a real color? Remove it from all orders:
+                </p>
+                <button
+                  className="btn btn-secondary"
+                  onClick={clearColor}
+                  style={{ width: '100%', color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' }}
+                >
+                  <Trash2 size={16} /> Clear This Color
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function EtsyOrderManager() {
   const [activeTab, setActiveTab] = useState('queue');
   const [orders, setOrders] = useState([]);
@@ -37,6 +1226,7 @@ export default function EtsyOrderManager() {
   const [supplyCategories, setSupplyCategories] = useState(DEFAULT_SUPPLY_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState(DEFAULT_TEAM);
   const [stores, setStores] = useState(DEFAULT_STORES);
+  const [printers, setPrinters] = useState(DEFAULT_PRINTERS);
   const [selectedStoreFilter, setSelectedStoreFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -46,6 +1236,12 @@ export default function EtsyOrderManager() {
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvPreview, setCsvPreview] = useState(null);
   const [importStoreId, setImportStoreId] = useState('');
+  const [googleSheetUrl, setGoogleSheetUrl] = useState('');
+  const [syncingSheet, setSyncingSheet] = useState(false);
+  const [modelsLoadedSuccessfully, setModelsLoadedSuccessfully] = useState(false);
+  const [purchases, setPurchases] = useState([]);
+  const [filamentUsageHistory, setFilamentUsageHistory] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
 
   // Helper function to parse color field
   const parseColorField = (colorField) => {
@@ -157,20 +1353,23 @@ export default function EtsyOrderManager() {
       console.log('Has tabs?', hasTab);
       
       if (hasTab && firstLineStartsWithTxn) {
-        // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations
+        // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations, Price, Tax
         console.log('Format: TAB-separated WITHOUT headers');
-        
+
         const firstRow = lines[0].split('\t').map(v => v.trim());
         console.log('First row values:', firstRow);
-        
+
         const transactionId = firstRow[0] || '';
         const product = firstRow[1] || '';
         const quantity = parseInt(firstRow[2]) || 1;
         const colorField = firstRow[3] || '';
-        
+        const price = firstRow[4] || '$0';
+        const taxStr = firstRow[5] || '0';
+        const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
         const { extractedColor, extractedExtra } = parseColorField(colorField);
-        
-        setCsvPreview({ 
+
+        setCsvPreview({
           rowCount: lines.length,
           format: 'TAB (no headers)',
           transactionId,
@@ -178,36 +1377,43 @@ export default function EtsyOrderManager() {
           extractedQuantity: quantity,
           extractedColor,
           extractedExtra,
-          colorField
+          colorField,
+          price,
+          salesTax
         });
       } else if (hasTab || lines[0]?.includes(',')) {
         // Has tabs or commas AND first line doesn't start with TXN - has headers
         console.log('Format: CSV/TSV with headers');
-        
+
         const headerLine = lines[0];
         const delimiter = headerLine.includes('\t') ? '\t' : ',';
         const headers = headerLine.split(delimiter).map(h => h.trim().toLowerCase());
-        
+
         if (lines.length < 2) {
           setCsvPreview(null);
           return;
         }
-        
+
         const txnIdx = headers.findIndex(h => h.includes('transaction') || h.includes('order id'));
         const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('title'));
         const qtyIdx = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
         const colorIdx = headers.findIndex(h => h.includes('color') || h.includes('variation'));
-        
+        const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('total') || h.includes('amount'));
+        const taxIdx = headers.findIndex(h => h.includes('tax') || h.includes('sales tax'));
+
         const firstRowValues = lines[1].split(delimiter).map(v => v.trim());
-        
+
         const transactionId = txnIdx >= 0 ? firstRowValues[txnIdx] : '';
         const product = productIdx >= 0 ? firstRowValues[productIdx] : '';
         const quantity = qtyIdx >= 0 ? parseInt(firstRowValues[qtyIdx]) || 1 : 1;
         const colorField = colorIdx >= 0 ? firstRowValues[colorIdx] : '';
-        
+        const price = priceIdx >= 0 ? firstRowValues[priceIdx] : '$0';
+        const taxStr = taxIdx >= 0 ? firstRowValues[taxIdx] : '0';
+        const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
         const { extractedColor, extractedExtra } = parseColorField(colorField);
-        
-        setCsvPreview({ 
+
+        setCsvPreview({
           rowCount: lines.length - 1,
           format: 'CSV',
           transactionId,
@@ -215,12 +1421,14 @@ export default function EtsyOrderManager() {
           extractedQuantity: quantity,
           extractedColor,
           extractedExtra,
-          colorField
+          colorField,
+          price,
+          salesTax
         });
       } else {
         // Unknown format
         console.log('Unknown format - showing as single item');
-        setCsvPreview({ 
+        setCsvPreview({
           rowCount: 1,
           format: 'UNKNOWN',
           transactionId: '',
@@ -228,7 +1436,9 @@ export default function EtsyOrderManager() {
           extractedQuantity: 1,
           extractedColor: '',
           extractedExtra: '',
-          colorField: ''
+          colorField: '',
+          price: '$0',
+          salesTax: 0
         });
       }
     } catch (e) {
@@ -244,14 +1454,18 @@ export default function EtsyOrderManager() {
 
       // Fetch all data in parallel
       const [
-        { data: ordersData },
-        { data: archivedData },
-        { data: filamentsData },
-        { data: modelsData },
-        { data: partsData },
-        { data: categoriesData },
-        { data: teamData },
-        { data: storesData }
+        { data: ordersData, error: ordersError },
+        { data: archivedData, error: archivedError },
+        { data: filamentsData, error: filamentsError },
+        { data: modelsData, error: modelsError },
+        { data: partsData, error: partsError },
+        { data: categoriesData, error: categoriesError },
+        { data: teamData, error: teamError },
+        { data: storesData, error: storesError },
+        { data: printersData, error: printersError },
+        { data: purchasesData, error: purchasesError },
+        { data: usageHistoryData, error: usageHistoryError },
+        { data: subscriptionsData, error: subscriptionsError }
       ] = await Promise.all([
         supabase.from('orders').select('*'),
         supabase.from('archived_orders').select('*'),
@@ -260,10 +1474,19 @@ export default function EtsyOrderManager() {
         supabase.from('external_parts').select('*'),
         supabase.from('supply_categories').select('*'),
         supabase.from('team_members').select('*'),
-        supabase.from('stores').select('*')
+        supabase.from('stores').select('*'),
+        supabase.from('printers').select('*'),
+        supabase.from('purchases').select('*'),
+        supabase.from('filament_usage_history').select('*'),
+        supabase.from('subscriptions').select('*')
       ]);
 
+      // Log any errors
+      if (modelsError) console.error('Error loading models:', modelsError);
+      if (ordersError) console.error('Error loading orders:', ordersError);
+
       console.log('Orders from Supabase:', ordersData?.length || 0);
+      console.log('Models from Supabase:', modelsData?.length || 0, 'Error:', modelsError);
 
       // Transform orders from DB format to app format
       if (ordersData) {
@@ -283,6 +1506,19 @@ export default function EtsyOrderManager() {
           shippedAt: o.shipped_at,
           fulfilledAt: o.fulfilled_at,
           createdAt: o.created_at,
+          scheduledStart: o.scheduled_start,
+          printerId: o.printer_id,
+          shippingCost: o.shipping_cost,
+          productionStage: o.production_stage,
+          salesTax: o.sales_tax,
+          isReplacement: o.is_replacement || false,
+          originalOrderId: o.original_order_id,
+          materialCost: o.material_cost || 0,
+          filamentUsed: o.filament_used || 0,
+          modelId: o.model_id,
+          isExtraPrint: o.is_extra_print || false,
+          extraPrintFilament: o.extra_print_filament || 0,
+          extraPrintMinutes: o.extra_print_minutes || 0,
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -307,6 +1543,12 @@ export default function EtsyOrderManager() {
           fulfilledAt: o.fulfilled_at,
           createdAt: o.created_at,
           archivedAt: o.archived_at,
+          shippingCost: o.shipping_cost,
+          isHistorical: o.is_historical || false,
+          salesTax: o.sales_tax,
+          materialCost: o.material_cost || 0,
+          filamentUsed: o.filament_used || 0,
+          modelId: o.model_id,
           id: o.id
         }));
         setArchivedOrders(transformedArchived);
@@ -322,14 +1564,17 @@ export default function EtsyOrderManager() {
             color: f.color,
             colorHex: f.color_hex,
             amount: f.amount,
-            rolls: f.rolls
+            rolls: f.rolls,
+            costPerRoll: f.cost_per_roll || 0,
+            reorderAt: f.reorder_at ?? 250
           });
         });
         setFilaments(filamentsObj);
       }
 
       // Transform models
-      if (modelsData) {
+      if (modelsData !== null && modelsData !== undefined) {
+        console.log('Raw models from Supabase:', modelsData.length, modelsData);
         const transformedModels = modelsData.map(m => ({
           id: m.id,
           name: m.name,
@@ -338,9 +1583,18 @@ export default function EtsyOrderManager() {
           defaultColor: m.default_color,
           externalParts: m.external_parts || [],
           storeId: m.store_id,
-          imageUrl: m.image_url || ''
+          imageUrl: m.image_url || '',
+          printDuration: m.print_duration || null,
+          printerSettings: m.printer_settings || [],
+          aliases: m.aliases || [],
+          file3mfUrl: m.file_3mf_url || ''
         }));
+        console.log('Transformed models:', transformedModels.length, transformedModels);
         setModels(transformedModels);
+        setModelsLoadedSuccessfully(true);
+      } else {
+        console.log('No models data received from Supabase - NOT clearing local models');
+        // Don't clear models if load failed - keep existing
       }
 
       // Transform external parts: flat array -> object keyed by member_id
@@ -353,7 +1607,8 @@ export default function EtsyOrderManager() {
             name: p.name,
             quantity: p.quantity,
             categoryId: p.category_id,
-            reorderAt: p.reorder_at
+            reorderAt: p.reorder_at,
+            costPerUnit: p.cost_per_unit || 0
           });
         });
         setExternalParts(partsObj);
@@ -368,6 +1623,54 @@ export default function EtsyOrderManager() {
       }
       if (storesData && storesData.length > 0) {
         setStores(storesData.map(s => ({ id: s.id, name: s.name, color: s.color })));
+      }
+      if (printersData && printersData.length > 0) {
+        setPrinters(printersData.map(p => ({ id: p.id, name: p.name })));
+      }
+
+      // Transform purchases
+      if (purchasesData) {
+        const transformedPurchases = purchasesData.map(p => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          totalCost: p.total_cost,
+          quantity: p.quantity,
+          unitCost: p.unit_cost,
+          supplier: p.supplier,
+          purchaseDate: p.purchase_date,
+          notes: p.notes,
+          createdAt: p.created_at
+        }));
+        setPurchases(transformedPurchases);
+      }
+
+      // Transform filament usage history
+      if (usageHistoryData) {
+        const transformedHistory = usageHistoryData.map(h => ({
+          id: h.id,
+          color: h.color,
+          amount: h.amount,
+          date: h.date,
+          orderId: h.order_id,
+          memberId: h.member_id,
+          modelName: h.model_name
+        }));
+        setFilamentUsageHistory(transformedHistory);
+      }
+
+      // Transform subscriptions
+      if (subscriptionsData) {
+        const transformedSubs = subscriptionsData.map(s => ({
+          id: s.id,
+          name: s.name,
+          price: s.price,
+          frequency: s.frequency,
+          url: s.url,
+          notes: s.notes,
+          createdAt: s.created_at
+        }));
+        setSubscriptions(transformedSubs);
       }
 
       setLastRefresh(new Date());
@@ -404,9 +1707,13 @@ export default function EtsyOrderManager() {
   const prevFilamentsRef = useRef(null);
   const prevModelsRef = useRef(null);
   const prevStoresRef = useRef(null);
+  const prevPrintersRef = useRef(null);
   const prevPartsRef = useRef(null);
   const prevTeamRef = useRef(null);
   const prevCategoriesRef = useRef(null);
+  const prevPurchasesRef = useRef(null);
+  const prevUsageHistoryRef = useRef(null);
+  const prevSubscriptionsRef = useRef(null);
 
   // Auto-save: Save data whenever state changes (after initial load)
   useEffect(() => {
@@ -450,7 +1757,20 @@ export default function EtsyOrderManager() {
           store_id: o.storeId,
           shipped_at: o.shippedAt,
           fulfilled_at: o.fulfilledAt,
-          created_at: o.createdAt
+          created_at: o.createdAt,
+          scheduled_start: o.scheduledStart,
+          printer_id: o.printerId,
+          shipping_cost: o.shippingCost,
+          production_stage: o.productionStage,
+          sales_tax: o.salesTax,
+          is_replacement: o.isReplacement || false,
+          original_order_id: o.originalOrderId,
+          material_cost: o.materialCost || 0,
+          filament_used: o.filamentUsed || 0,
+          model_id: o.modelId,
+          is_extra_print: o.isExtraPrint || false,
+          extra_print_filament: o.extraPrintFilament || 0,
+          extra_print_minutes: o.extraPrintMinutes || 0
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -483,20 +1803,30 @@ export default function EtsyOrderManager() {
           buyer_name: o.buyerName,
           item: o.item,
           quantity: o.quantity,
-          color: o.color,
-          extra: o.extra,
+          color: o.color || '',
+          extra: o.extra || '',
           price: o.price,
           address: o.address,
           status: o.status,
           assigned_to: o.assignedTo,
           notes: o.notes,
           store_id: o.storeId,
-          shipped_at: o.shippedAt,
-          fulfilled_at: o.fulfilledAt,
-          created_at: o.createdAt,
-          archived_at: o.archivedAt
+          shipped_at: o.shippedAt || null,
+          fulfilled_at: o.fulfilledAt || null,
+          created_at: o.createdAt || Date.now(),
+          archived_at: o.archivedAt || Date.now(),
+          shipping_cost: o.shippingCost,
+          is_historical: o.isHistorical || false,
+          sales_tax: o.salesTax,
+          material_cost: o.materialCost || 0,
+          filament_used: o.filamentUsed || 0,
+          model_id: o.modelId
         }));
-        await supabase.from('archived_orders').upsert(dbFormat);
+        console.log('Saving archived orders:', dbFormat);
+        const { error } = await supabase.from('archived_orders').upsert(dbFormat);
+        if (error) {
+          console.error('Error saving archived orders:', error);
+        }
       }
     };
     syncArchived();
@@ -521,7 +1851,9 @@ export default function EtsyOrderManager() {
             color: f.color,
             color_hex: f.colorHex,
             amount: f.amount,
-            rolls: f.rolls
+            rolls: f.rolls,
+            cost_per_roll: f.costPerRoll || 0,
+            reorder_at: f.reorderAt ?? 250
           });
         });
       });
@@ -551,31 +1883,53 @@ export default function EtsyOrderManager() {
     prevModelsRef.current = models;
 
     const syncModels = async () => {
-      const { data: dbModels } = await supabase.from('models').select('id');
-      const dbIds = new Set(dbModels?.map(m => m.id) || []);
-      const currentIds = new Set(models.map(m => m.id));
+      try {
+        const { data: dbModels, error: fetchError } = await supabase.from('models').select('id');
+        if (fetchError) {
+          console.error('Error fetching models:', fetchError);
+          return;
+        }
+        const dbIds = new Set(dbModels?.map(m => m.id) || []);
+        const currentIds = new Set(models.map(m => m.id));
 
-      const toDelete = [...dbIds].filter(id => !currentIds.has(id));
-      if (toDelete.length > 0) {
-        await supabase.from('models').delete().in('id', toDelete);
-      }
+        // Only delete if models loaded successfully AND we have local models
+        // This prevents accidental deletion when load fails
+        const toDelete = [...dbIds].filter(id => !currentIds.has(id));
+        if (toDelete.length > 0 && modelsLoadedSuccessfully && models.length > 0) {
+          const { error: deleteError } = await supabase.from('models').delete().in('id', toDelete);
+          if (deleteError) console.error('Error deleting models:', deleteError);
+        } else if (toDelete.length > 0 && models.length === 0) {
+          console.log('Skipping model deletion - local models empty, might be load error');
+        }
 
-      if (models.length > 0) {
-        const dbFormat = models.map(m => ({
-          id: m.id,
-          name: m.name,
-          variant_name: m.variantName || '',
-          filament_usage: m.filamentUsage,
-          default_color: m.defaultColor,
-          external_parts: m.externalParts,
-          store_id: m.storeId,
-          image_url: m.imageUrl
-        }));
-        await supabase.from('models').upsert(dbFormat);
+        if (models.length > 0) {
+          const dbFormat = models.map(m => ({
+            id: m.id,
+            name: m.name,
+            variant_name: m.variantName || '',
+            filament_usage: m.filamentUsage,
+            default_color: m.defaultColor,
+            external_parts: m.externalParts,
+            store_id: m.storeId,
+            image_url: m.imageUrl,
+            print_duration: m.printDuration,
+            printer_settings: m.printerSettings,
+            aliases: m.aliases || [],
+            file_3mf_url: m.file3mfUrl || ''
+          }));
+          const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
+          if (upsertError) {
+            console.error('Error saving models:', upsertError);
+          } else {
+            console.log('Models saved successfully:', models.length);
+          }
+        }
+      } catch (e) {
+        console.error('Sync models error:', e);
       }
     };
     syncModels();
-  }, [models, initialLoadComplete]);
+  }, [models, initialLoadComplete, modelsLoadedSuccessfully]);
 
   useEffect(() => {
     if (!initialLoadComplete) {
@@ -604,6 +1958,31 @@ export default function EtsyOrderManager() {
 
   useEffect(() => {
     if (!initialLoadComplete) {
+      prevPrintersRef.current = printers;
+      return;
+    }
+    if (JSON.stringify(printers) === JSON.stringify(prevPrintersRef.current)) return;
+    prevPrintersRef.current = printers;
+
+    const syncPrinters = async () => {
+      const { data: dbPrinters } = await supabase.from('printers').select('id');
+      const dbIds = new Set(dbPrinters?.map(p => p.id) || []);
+      const currentIds = new Set(printers.map(p => p.id));
+
+      const toDelete = [...dbIds].filter(id => !currentIds.has(id));
+      if (toDelete.length > 0) {
+        await supabase.from('printers').delete().in('id', toDelete);
+      }
+
+      if (printers.length > 0) {
+        await supabase.from('printers').upsert(printers);
+      }
+    };
+    syncPrinters();
+  }, [printers, initialLoadComplete]);
+
+  useEffect(() => {
+    if (!initialLoadComplete) {
       prevPartsRef.current = externalParts;
       return;
     }
@@ -621,7 +2000,8 @@ export default function EtsyOrderManager() {
             name: p.name,
             quantity: p.quantity,
             category_id: p.categoryId,
-            reorder_at: p.reorderAt
+            reorder_at: p.reorderAt,
+            cost_per_unit: p.costPerUnit || 0
           });
         });
       });
@@ -692,6 +2072,111 @@ export default function EtsyOrderManager() {
     syncCategories();
   }, [supplyCategories, initialLoadComplete]);
 
+  useEffect(() => {
+    if (!initialLoadComplete) {
+      prevPurchasesRef.current = purchases;
+      return;
+    }
+    if (JSON.stringify(purchases) === JSON.stringify(prevPurchasesRef.current)) return;
+    prevPurchasesRef.current = purchases;
+
+    const syncPurchases = async () => {
+      const { data: dbPurchases } = await supabase.from('purchases').select('id');
+      const dbIds = new Set(dbPurchases?.map(p => p.id) || []);
+      const currentIds = new Set(purchases.map(p => p.id));
+
+      const toDelete = [...dbIds].filter(id => !currentIds.has(id));
+      if (toDelete.length > 0) {
+        await supabase.from('purchases').delete().in('id', toDelete);
+      }
+
+      if (purchases.length > 0) {
+        const dbFormat = purchases.map(p => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          total_cost: p.totalCost,
+          quantity: p.quantity,
+          unit_cost: p.unitCost,
+          supplier: p.supplier,
+          purchase_date: p.purchaseDate,
+          notes: p.notes,
+          created_at: p.createdAt
+        }));
+        await supabase.from('purchases').upsert(dbFormat);
+      }
+    };
+    syncPurchases();
+  }, [purchases, initialLoadComplete]);
+
+  // Auto-save filament usage history
+  useEffect(() => {
+    if (!initialLoadComplete) {
+      prevUsageHistoryRef.current = filamentUsageHistory;
+      return;
+    }
+    if (JSON.stringify(filamentUsageHistory) === JSON.stringify(prevUsageHistoryRef.current)) return;
+    prevUsageHistoryRef.current = filamentUsageHistory;
+
+    const syncUsageHistory = async () => {
+      // Only insert new records, don't delete (history should be preserved)
+      if (filamentUsageHistory.length > 0) {
+        const dbFormat = filamentUsageHistory.map(h => ({
+          id: h.id,
+          color: h.color,
+          amount: h.amount,
+          date: h.date,
+          order_id: h.orderId,
+          member_id: h.memberId,
+          model_name: h.modelName
+        }));
+        const { error } = await supabase.from('filament_usage_history').upsert(dbFormat);
+        if (error) {
+          console.error('Error saving usage history:', error);
+        }
+      }
+    };
+    syncUsageHistory();
+  }, [filamentUsageHistory, initialLoadComplete]);
+
+  // Auto-save subscriptions
+  useEffect(() => {
+    if (!initialLoadComplete) {
+      prevSubscriptionsRef.current = subscriptions;
+      return;
+    }
+    if (JSON.stringify(subscriptions) === JSON.stringify(prevSubscriptionsRef.current)) return;
+    prevSubscriptionsRef.current = subscriptions;
+
+    const syncSubscriptions = async () => {
+      const { data: dbSubs } = await supabase.from('subscriptions').select('id');
+      const dbIds = new Set(dbSubs?.map(s => s.id) || []);
+      const currentIds = new Set(subscriptions.map(s => s.id));
+
+      const toDelete = [...dbIds].filter(id => !currentIds.has(id));
+      if (toDelete.length > 0) {
+        await supabase.from('subscriptions').delete().in('id', toDelete);
+      }
+
+      if (subscriptions.length > 0) {
+        const dbFormat = subscriptions.map(s => ({
+          id: s.id,
+          name: s.name,
+          price: s.price,
+          frequency: s.frequency,
+          url: s.url,
+          notes: s.notes,
+          created_at: s.createdAt
+        }));
+        const { error } = await supabase.from('subscriptions').upsert(dbFormat);
+        if (error) {
+          console.error('Error saving subscriptions:', error);
+        }
+      }
+    };
+    syncSubscriptions();
+  }, [subscriptions, initialLoadComplete]);
+
   // Save data functions - using shared storage so all users see the same data
   const saveOrders = async (newOrders) => {
     setOrders(newOrders);
@@ -705,12 +2190,121 @@ export default function EtsyOrderManager() {
     setFilaments(newFilaments);
   };
 
+  // Calculate material cost for an order based on model and filament data
+  const calculateMaterialCost = (order, model, allFilaments) => {
+    if (!model) return 0;
+
+    // Get filament usage from model
+    const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+    let filamentUsage = 0;
+    if (printerSettings?.plates?.length > 0) {
+      filamentUsage = printerSettings.plates.reduce((sum, plate) =>
+        sum + (parseFloat(plate.filamentUsage) || 0), 0);
+    } else if (model.filamentUsage) {
+      filamentUsage = parseFloat(model.filamentUsage) || 0;
+    }
+
+    if (filamentUsage === 0) return 0;
+
+    // Find the cost per gram from filament inventory
+    const orderColor = (order.color || model.defaultColor || '').toLowerCase();
+    let costPerGram = 0;
+
+    // Search through all team members' filaments to find the color
+    Object.values(allFilaments).forEach(memberFilaments => {
+      memberFilaments.forEach(fil => {
+        const filColor = fil.color.toLowerCase();
+        if (filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor)) {
+          if (fil.costPerRoll && fil.costPerRoll > 0) {
+            costPerGram = fil.costPerRoll / 1000; // Cost per gram (assuming 1kg rolls)
+          }
+        }
+      });
+    });
+
+    return filamentUsage * (order.quantity || 1) * costPerGram;
+  };
+
+  // Find model by order item name
+  const findModelForOrder = (order, modelsList) => {
+    const orderItem = (order.item || '').toLowerCase();
+    return modelsList.find(m => {
+      const modelName = m.name.toLowerCase();
+      if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
+      if (m.aliases?.some(alias => orderItem.includes(alias.toLowerCase()))) return true;
+      return false;
+    });
+  };
+
+  // Recalculate material costs for all orders based on current models
+  const recalculateOrderCosts = (modelsList) => {
+    // Update active orders
+    const updatedOrders = orders.map(order => {
+      const model = findModelForOrder(order, modelsList);
+      const materialCost = calculateMaterialCost(order, model, filaments);
+
+      // Calculate filament used for display
+      let filamentUsed = 0;
+      if (model) {
+        const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+        if (printerSettings?.plates?.length > 0) {
+          filamentUsed = printerSettings.plates.reduce((sum, plate) =>
+            sum + (parseFloat(plate.filamentUsage) || 0), 0);
+        } else if (model.filamentUsage) {
+          filamentUsed = parseFloat(model.filamentUsage) || 0;
+        }
+        filamentUsed *= (order.quantity || 1);
+      }
+
+      return {
+        ...order,
+        materialCost: materialCost,
+        filamentUsed: filamentUsed,
+        modelId: model?.id || null
+      };
+    });
+
+    // Update archived orders (for analytics only - no filament deduction)
+    const updatedArchived = archivedOrders.map(order => {
+      const model = findModelForOrder(order, modelsList);
+      const materialCost = calculateMaterialCost(order, model, filaments);
+
+      let filamentUsed = 0;
+      if (model) {
+        const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+        if (printerSettings?.plates?.length > 0) {
+          filamentUsed = printerSettings.plates.reduce((sum, plate) =>
+            sum + (parseFloat(plate.filamentUsage) || 0), 0);
+        } else if (model.filamentUsage) {
+          filamentUsed = parseFloat(model.filamentUsage) || 0;
+        }
+        filamentUsed *= (order.quantity || 1);
+      }
+
+      return {
+        ...order,
+        materialCost: materialCost,
+        filamentUsed: filamentUsed,
+        modelId: model?.id || null
+      };
+    });
+
+    setOrders(updatedOrders);
+    setArchivedOrders(updatedArchived);
+  };
+
   const saveModels = async (newModels) => {
     setModels(newModels);
+    // Recalculate costs for all orders when models change
+    recalculateOrderCosts(newModels);
   };
 
   const saveStores = async (newStores) => {
     setStores(newStores);
+  };
+
+  const savePrinters = async (newPrinters) => {
+    setPrinters(newPrinters);
   };
 
   const saveExternalParts = async (newParts) => {
@@ -723,6 +2317,14 @@ export default function EtsyOrderManager() {
 
   const saveSupplyCategories = async (newCategories) => {
     setSupplyCategories(newCategories);
+  };
+
+  const savePurchases = async (newPurchases) => {
+    setPurchases(newPurchases);
+  };
+
+  const saveSubscriptions = async (newSubscriptions) => {
+    setSubscriptions(newSubscriptions);
   };
 
   // Clear all stored data
@@ -789,9 +2391,31 @@ export default function EtsyOrderManager() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // Helper function to find a model by name or alias
+  const findModelByName = (itemName) => {
+    if (!itemName) return null;
+    const lowerItem = itemName.toLowerCase();
+    return models.find(m => {
+      // Check main name
+      if (m.name.toLowerCase() === lowerItem) return true;
+      // Check if item contains model name or vice versa
+      if (m.name.toLowerCase().includes(lowerItem) || lowerItem.includes(m.name.toLowerCase())) return true;
+      // Check aliases
+      if (m.aliases && m.aliases.length > 0) {
+        return m.aliases.some(alias => {
+          const lowerAlias = alias.toLowerCase();
+          return lowerAlias === lowerItem ||
+                 lowerAlias.includes(lowerItem) ||
+                 lowerItem.includes(lowerAlias);
+        });
+      }
+      return false;
+    });
+  };
+
   // Auto-assignment algorithm
   const autoAssignOrder = (order, currentOrders) => {
-    const model = models.find(m => m.name.toLowerCase() === order.item?.toLowerCase());
+    const model = findModelByName(order.item);
     if (!model) return null;
 
     const scores = teamMembers.map(member => {
@@ -865,26 +2489,33 @@ export default function EtsyOrderManager() {
         
         for (let i = 0; i < lines.length; i++) {
           const values = lines[i].split('\t').map(v => v.trim());
-          
+
           const transactionId = values[0] || '';
           const product = values[1] || 'Unknown Product';
           const quantity = parseInt(values[2]) || 1;
           const colorField = values[3] || '';
-          
-          console.log(`Row ${i + 1}:`, { transactionId, product: product.substring(0, 40), quantity, colorField });
-          
+          const price = values[4] || '$0';
+          // Parse tax - remove $ and parse as float
+          const taxStr = values[5] || '0';
+          const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
+          console.log(`Row ${i + 1}:`, { transactionId, product: product.substring(0, 40), quantity, colorField, price, salesTax });
+
           if (!transactionId || !/^\d+$/.test(transactionId)) {
             console.log('Skipping invalid transaction ID');
             continue;
           }
-          
-          if (orders.find(o => o.orderId === transactionId) || archivedOrders.find(o => o.orderId === transactionId)) {
+
+          // Check existing orders, archived orders, AND orders being added in this batch
+          if (orders.find(o => o.orderId === transactionId) ||
+              archivedOrders.find(o => o.orderId === transactionId) ||
+              newOrders.find(o => o.orderId === transactionId)) {
             duplicates++;
             continue;
           }
-          
+
           const { extractedColor, extractedExtra } = parseColorField(colorField);
-          
+
           newOrders.push({
             orderId: transactionId,
             buyerName: 'Unknown',
@@ -892,13 +2523,14 @@ export default function EtsyOrderManager() {
             quantity: quantity,
             color: extractedColor,
             extra: extractedExtra,
-            price: '$0',
+            price: price.startsWith('$') ? price : `$${price}`,
             address: '',
             status: 'received',
             assignedTo: null,
             createdAt: Date.now(),
             notes: '',
-            storeId: importStoreId && importStoreId !== '' ? importStoreId : null
+            storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+            salesTax: salesTax
           });
         }
       } else if (hasTab || lines[0]?.includes(',')) {
@@ -928,6 +2560,8 @@ export default function EtsyOrderManager() {
         const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('title'));
         const qtyIdx = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
         const colorIdx = headers.findIndex(h => h.includes('color') || h.includes('variation'));
+        const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('total') || h.includes('amount'));
+        const taxIdx = headers.findIndex(h => h.includes('tax') || h.includes('sales tax'));
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
@@ -937,19 +2571,25 @@ export default function EtsyOrderManager() {
           } else {
             values = line.split(delimiter).map(v => v.trim());
           }
-          
+
           const transactionId = txnIdx >= 0 ? values[txnIdx] : `ORD-${Date.now()}-${i}`;
           const product = productIdx >= 0 ? values[productIdx] : 'Unknown Product';
           const quantity = qtyIdx >= 0 ? parseInt(values[qtyIdx]) || 1 : 1;
           const colorField = colorIdx >= 0 ? values[colorIdx] : '';
-          
-          if (orders.find(o => o.orderId === transactionId) || archivedOrders.find(o => o.orderId === transactionId)) {
+          const priceVal = priceIdx >= 0 ? values[priceIdx] : '$0';
+          const taxStr = taxIdx >= 0 ? values[taxIdx] : '0';
+          const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
+          // Check existing orders, archived orders, AND orders being added in this batch
+          if (orders.find(o => o.orderId === transactionId) ||
+              archivedOrders.find(o => o.orderId === transactionId) ||
+              newOrders.find(o => o.orderId === transactionId)) {
             duplicates++;
             continue;
           }
-          
+
           const { extractedColor, extractedExtra } = parseColorField(colorField);
-          
+
           newOrders.push({
             orderId: transactionId,
             buyerName: 'Unknown',
@@ -957,13 +2597,14 @@ export default function EtsyOrderManager() {
             quantity: quantity,
             color: extractedColor,
             extra: extractedExtra,
-            price: '$0',
+            price: priceVal.startsWith('$') ? priceVal : `$${priceVal}`,
             address: '',
             status: 'received',
             assignedTo: null,
             createdAt: Date.now(),
             notes: '',
-            storeId: importStoreId && importStoreId !== '' ? importStoreId : null
+            storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+            salesTax: salesTax
           });
         }
       }
@@ -997,61 +2638,278 @@ export default function EtsyOrderManager() {
     }
   };
 
+  // Sync from Google Sheets
+  const syncFromGoogleSheet = async () => {
+    if (!googleSheetUrl.trim()) {
+      showNotification('Please enter a Google Sheet URL', 'error');
+      return;
+    }
+
+    setSyncingSheet(true);
+    try {
+      // Convert Google Sheet URL to CSV export URL
+      // Format: https://docs.google.com/spreadsheets/d/SHEET_ID/edit#gid=0
+      // To: https://docs.google.com/spreadsheets/d/SHEET_ID/export?format=csv&gid=0
+      let csvUrl = googleSheetUrl.trim();
+
+      // Extract sheet ID and gid
+      const sheetIdMatch = csvUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      const gidMatch = csvUrl.match(/gid=(\d+)/);
+
+      if (!sheetIdMatch) {
+        showNotification('Invalid Google Sheet URL. Make sure it looks like: https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/...', 'error');
+        setSyncingSheet(false);
+        return;
+      }
+
+      const sheetId = sheetIdMatch[1];
+      const gid = gidMatch ? gidMatch[1] : '0';
+      csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+
+      console.log('Fetching CSV from:', csvUrl);
+
+      // Fetch the CSV
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sheet: ${response.status}. Make sure the sheet is shared as "Anyone with the link can view"`);
+      }
+
+      const csvText = await response.text();
+      console.log('Received CSV:', csvText.substring(0, 200));
+
+      // Parse CSV
+      const lines = csvText.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length < 2) {
+        showNotification('Sheet appears to be empty or has no data rows', 'error');
+        setSyncingSheet(false);
+        return;
+      }
+
+      // Parse header row
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+      console.log('Headers:', headers);
+
+      // Find column indices
+      const txnIdx = headers.findIndex(h => h.includes('transaction') || h.includes('order') || h.includes('sale id') || h.includes('order id'));
+      const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('title'));
+      const qtyIdx = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
+      const colorIdx = headers.findIndex(h => h.includes('variation') || h.includes('color'));
+      const buyerIdx = headers.findIndex(h => h.includes('buyer') || h.includes('customer') || h.includes('name'));
+      const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('total') || h.includes('amount'));
+      const taxIdx = headers.findIndex(h => h.includes('tax') || h.includes('sales tax'));
+
+      if (txnIdx === -1) {
+        showNotification('Could not find Transaction/Order ID column. Make sure your sheet has a column with "Transaction" or "Order" in the header.', 'error');
+        setSyncingSheet(false);
+        return;
+      }
+
+      console.log('Column indices:', { txnIdx, productIdx, qtyIdx, colorIdx, buyerIdx, priceIdx, taxIdx });
+
+      // Parse rows
+      const newOrders = [];
+      let duplicates = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        // Simple CSV parse (handles basic quoted fields)
+        const values = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g)?.map(v => v.trim().replace(/^"|"$/g, '')) || [];
+
+        const transactionId = txnIdx >= 0 ? values[txnIdx]?.trim() : '';
+        if (!transactionId || !/^\d+$/.test(transactionId)) continue;
+
+        // Check for duplicates
+        if (orders.find(o => o.orderId === transactionId) ||
+            archivedOrders.find(o => o.orderId === transactionId) ||
+            newOrders.find(o => o.orderId === transactionId)) {
+          duplicates++;
+          continue;
+        }
+
+        const product = productIdx >= 0 ? values[productIdx]?.trim() || 'Unknown' : 'Unknown';
+        const quantity = qtyIdx >= 0 ? parseInt(values[qtyIdx]) || 1 : 1;
+        const colorField = colorIdx >= 0 ? values[colorIdx]?.trim() || '' : '';
+        const buyerName = buyerIdx >= 0 ? values[buyerIdx]?.trim() || 'Unknown' : 'Unknown';
+        const priceVal = priceIdx >= 0 ? values[priceIdx]?.trim() || '$0' : '$0';
+        const taxStr = taxIdx >= 0 ? values[taxIdx]?.trim() || '0' : '0';
+        const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
+        const { extractedColor, extractedExtra } = parseColorField(colorField);
+
+        newOrders.push({
+          orderId: transactionId,
+          buyerName: buyerName,
+          item: product,
+          quantity: quantity,
+          color: extractedColor,
+          extra: extractedExtra,
+          price: priceVal.startsWith('$') ? priceVal : `$${priceVal}`,
+          address: '',
+          status: 'received',
+          assignedTo: null,
+          createdAt: Date.now(),
+          notes: '',
+          storeId: importStoreId || null,
+          salesTax: salesTax
+        });
+      }
+
+      if (newOrders.length === 0) {
+        showNotification(`No new orders found. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
+        setSyncingSheet(false);
+        return;
+      }
+
+      // Auto-assign orders
+      const allOrders = [...orders];
+      newOrders.forEach(order => {
+        order.assignedTo = autoAssignOrder(order, [...allOrders, ...newOrders.filter(o => o !== order)]);
+        allOrders.push(order);
+      });
+
+      saveOrders([...orders, ...newOrders]);
+      showNotification(`Synced ${newOrders.length} new order${newOrders.length > 1 ? 's' : ''} from Google Sheets. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
+
+      // Save the URL to localStorage for next time
+      localStorage.setItem('googleSheetUrl', googleSheetUrl);
+
+    } catch (e) {
+      console.error('Sync error:', e);
+      showNotification('Sync failed: ' + e.message, 'error');
+    }
+    setSyncingSheet(false);
+  };
+
+  // Load saved Google Sheet URL on mount
+  useEffect(() => {
+    const savedUrl = localStorage.getItem('googleSheetUrl');
+    if (savedUrl) setGoogleSheetUrl(savedUrl);
+  }, []);
+
   // Update order status
-  const updateOrderStatus = (orderId, newStatus) => {
+  const updateOrderStatus = (orderId, newStatus, shippingCost = null) => {
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
         const updates = { status: newStatus };
-        if (newStatus === 'shipped') updates.shippedAt = Date.now();
+        if (newStatus === 'shipped') {
+          updates.shippedAt = Date.now();
+          if (shippingCost !== null) {
+            updates.shippingCost = parseFloat(shippingCost) || 0;
+          }
+        }
         if (newStatus === 'fulfilled') updates.fulfilledAt = Date.now();
         
         // Deduct inventory when fulfilled
         if (newStatus === 'fulfilled' && o.assignedTo) {
-          const model = models.find(m => m.name.toLowerCase() === o.item?.toLowerCase());
-          if (model) {
-            // Deduct filament
-            const ROLL_SIZE = 1000;
-            const memberFilaments = [...(filaments[o.assignedTo] || [])];
-            const orderColor = (o.color || model.defaultColor || '').toLowerCase();
+          const ROLL_SIZE = 1000;
+          const memberFilaments = [...(filaments[o.assignedTo] || [])];
+
+          // Handle extra prints - use extraPrintFilament directly
+          if (o.isExtraPrint && o.extraPrintFilament > 0) {
+            const orderColor = (o.color || '').toLowerCase();
             const filamentIdx = memberFilaments.findIndex(f => {
               const filColor = f.color.toLowerCase();
-              // Match if exact, or if one contains the other
-              return filColor === orderColor || 
-                     filColor.includes(orderColor) || 
+              return filColor === orderColor ||
+                     filColor.includes(orderColor) ||
                      orderColor.includes(filColor);
             });
             if (filamentIdx >= 0) {
-              let newAmount = memberFilaments[filamentIdx].amount - model.filamentUsage * o.quantity;
+              const totalUsed = o.extraPrintFilament;
+              let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
               let rolls = memberFilaments[filamentIdx].rolls || 0;
-              
-              // If amount goes to 0 or below and we have backup rolls, switch to new roll
+
               if (newAmount <= 0 && rolls > 0) {
-                newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll
+                newAmount = ROLL_SIZE + newAmount;
                 rolls -= 1;
                 showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}! ${rolls} backup roll${rolls !== 1 ? 's' : ''} remaining.`);
               }
-              
+
               memberFilaments[filamentIdx] = {
                 ...memberFilaments[filamentIdx],
                 amount: Math.max(0, newAmount),
                 rolls: rolls
               };
               saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
+
+              // Record usage history for analytics
+              if (totalUsed > 0) {
+                const usageEvent = {
+                  id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  color: memberFilaments[filamentIdx].color,
+                  amount: totalUsed,
+                  date: Date.now(),
+                  orderId: o.orderId,
+                  memberId: o.assignedTo,
+                  modelName: o.item
+                };
+                setFilamentUsageHistory(prev => [...prev, usageEvent]);
+              }
             }
-            
-            // Deduct external parts
-            if (model.externalParts?.length > 0) {
-              const memberParts = [...(externalParts[o.assignedTo] || [])];
-              model.externalParts.forEach(needed => {
-                const partIdx = memberParts.findIndex(p => p.name.toLowerCase() === needed.name.toLowerCase());
-                if (partIdx >= 0) {
-                  memberParts[partIdx] = {
-                    ...memberParts[partIdx],
-                    quantity: Math.max(0, memberParts[partIdx].quantity - needed.quantity * o.quantity)
-                  };
-                }
+          } else {
+            // Regular order - look up model for filament usage
+            const model = findModelByName(o.item);
+            if (model) {
+              // Deduct filament - use printer-specific amount if available
+              const orderColor = (o.color || model.defaultColor || '').toLowerCase();
+              const filamentIdx = memberFilaments.findIndex(f => {
+                const filColor = f.color.toLowerCase();
+                // Match if exact, or if one contains the other
+                return filColor === orderColor ||
+                       filColor.includes(orderColor) ||
+                       orderColor.includes(filColor);
               });
-              saveExternalParts({ ...externalParts, [o.assignedTo]: memberParts });
+              if (filamentIdx >= 0) {
+                // Get printer-specific filament usage from plates, fallback to first printer's settings or 0
+                const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
+                // Sum filament from all plates
+                const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
+                  sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
+                const totalUsed = filamentUsage * o.quantity;
+                let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
+                let rolls = memberFilaments[filamentIdx].rolls || 0;
+
+                // If amount goes to 0 or below and we have backup rolls, switch to new roll
+                if (newAmount <= 0 && rolls > 0) {
+                  newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll
+                  rolls -= 1;
+                  showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}! ${rolls} backup roll${rolls !== 1 ? 's' : ''} remaining.`);
+                }
+
+                memberFilaments[filamentIdx] = {
+                  ...memberFilaments[filamentIdx],
+                  amount: Math.max(0, newAmount),
+                  rolls: rolls
+                };
+                saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
+
+                // Record usage history for analytics
+                if (totalUsed > 0) {
+                  const usageEvent = {
+                    id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    color: memberFilaments[filamentIdx].color,
+                    amount: totalUsed,
+                    date: Date.now(),
+                    orderId: o.orderId,
+                    memberId: o.assignedTo,
+                    modelName: model.name
+                  };
+                  setFilamentUsageHistory(prev => [...prev, usageEvent]);
+                }
+              }
+
+              // Deduct external parts
+              if (model.externalParts?.length > 0) {
+                const memberParts = [...(externalParts[o.assignedTo] || [])];
+                model.externalParts.forEach(needed => {
+                  const partIdx = memberParts.findIndex(p => p.name.toLowerCase() === needed.name.toLowerCase());
+                  if (partIdx >= 0) {
+                    memberParts[partIdx] = {
+                      ...memberParts[partIdx],
+                      quantity: Math.max(0, memberParts[partIdx].quantity - needed.quantity * o.quantity)
+                    };
+                  }
+                });
+                saveExternalParts({ ...externalParts, [o.assignedTo]: memberParts });
+              }
             }
           }
         }
@@ -1081,12 +2939,17 @@ export default function EtsyOrderManager() {
   }
 
   const tabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
     { id: 'queue', label: 'Order Queue', icon: Package },
+    { id: 'schedule', label: 'Schedule', icon: Clock },
     { id: 'stores', label: 'Stores', icon: Store },
+    { id: 'printers', label: 'Printers', icon: Printer },
     { id: 'filament', label: 'Filament', icon: Palette },
-    { id: 'models', label: 'Models', icon: Printer },
-    { id: 'parts', label: 'Supplies', icon: Box },
-    { id: 'restock', label: 'Restock', icon: ShoppingBag },
+    { id: 'models', label: 'Models', icon: Box },
+    { id: 'parts', label: 'Supplies', icon: ShoppingBag },
+    { id: 'costs', label: 'Costs', icon: DollarSign },
+    { id: 'restock', label: 'Restock', icon: AlertCircle },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'archive', label: 'Archive', icon: Archive },
     { id: 'team', label: 'Team', icon: Users }
   ];
@@ -1323,8 +3186,9 @@ export default function EtsyOrderManager() {
         
         .orders-list {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
           gap: 1rem;
+          align-items: start;
         }
         
         .order-card {
@@ -1896,18 +3760,37 @@ export default function EtsyOrderManager() {
           )}
         </div>
         <div className="header-actions">
-          <button 
-            className="btn btn-secondary" 
-            onClick={() => loadData(false)} 
+          <button
+            className="btn btn-secondary"
+            onClick={() => loadData(false)}
             style={{ marginRight: '8px' }}
             title="Refresh data now"
           >
             <RefreshCw size={18} />
             Refresh
           </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              if (googleSheetUrl) {
+                syncFromGoogleSheet();
+              } else {
+                setShowCsvModal(true);
+              }
+            }}
+            disabled={syncingSheet}
+            style={{ marginRight: '8px' }}
+            title={googleSheetUrl ? "Sync orders from Google Sheets" : "Set up Google Sheets sync"}
+          >
+            {syncingSheet ? (
+              <><RefreshCw size={18} className="spinning" /> Syncing...</>
+            ) : (
+              <><ShoppingBag size={18} /> {googleSheetUrl ? 'Sync Sheet' : 'Sheet Sync'}</>
+            )}
+          </button>
           <button className="btn btn-primary" onClick={() => setShowCsvModal(true)}>
             <Upload size={18} />
-            Import CSV
+            Import
           </button>
         </div>
       </header>
@@ -1927,17 +3810,18 @@ export default function EtsyOrderManager() {
                   }
                 });
               });
-              // Count filaments needing restock (<=250g and 0 rolls)
+              // Count filaments needing restock (at or below threshold and 0 rolls)
               teamMembers.forEach(member => {
                 const memberFilaments = filaments[member.id] || [];
                 memberFilaments.forEach(fil => {
-                  if (fil.amount <= 250 && (fil.rolls || 0) === 0) {
+                  const threshold = fil.reorderAt ?? 250;
+                  if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
                     restockCount++;
                   }
                 });
               });
             }
-            
+
             return (
             <div
               key={tab.id}
@@ -1966,19 +3850,54 @@ export default function EtsyOrderManager() {
         </nav>
 
         <main className="content-area">
+          {/* Low Stock Alerts Banner */}
+          <LowStockAlerts
+            filaments={filaments}
+            externalParts={externalParts}
+            teamMembers={teamMembers}
+            setActiveTab={setActiveTab}
+          />
+          {activeTab === 'dashboard' && (
+            <DashboardTab
+              orders={orders}
+              archivedOrders={archivedOrders}
+              purchases={purchases}
+              models={models}
+              stores={stores}
+              filaments={filaments}
+              externalParts={externalParts}
+            />
+          )}
+
           {activeTab === 'queue' && (
             <QueueTab
               orders={orders}
+              setOrders={setOrders}
               teamMembers={teamMembers}
               stores={stores}
+              printers={printers}
               models={models}
+              filaments={filaments}
+              externalParts={externalParts}
               selectedStoreFilter={selectedStoreFilter}
               setSelectedStoreFilter={setSelectedStoreFilter}
               updateOrderStatus={updateOrderStatus}
               reassignOrder={reassignOrder}
+              showNotification={showNotification}
+              saveFilaments={saveFilaments}
             />
           )}
-          
+
+          {activeTab === 'schedule' && (
+            <ScheduleTab
+              orders={orders}
+              models={models}
+              teamMembers={teamMembers}
+              printers={printers}
+              setOrders={setOrders}
+            />
+          )}
+
           {activeTab === 'stores' && (
             <StoresTab
               stores={stores}
@@ -1988,7 +3907,16 @@ export default function EtsyOrderManager() {
               showNotification={showNotification}
             />
           )}
-          
+
+          {activeTab === 'printers' && (
+            <PrintersTab
+              printers={printers}
+              savePrinters={savePrinters}
+              orders={orders}
+              showNotification={showNotification}
+            />
+          )}
+
           {activeTab === 'filament' && (
             <FilamentTab
               filaments={filaments}
@@ -2002,6 +3930,7 @@ export default function EtsyOrderManager() {
             <ModelsTab
               models={models}
               stores={stores}
+              printers={printers}
               externalParts={externalParts}
               saveModels={saveModels}
               showNotification={showNotification}
@@ -2018,7 +3947,17 @@ export default function EtsyOrderManager() {
               showNotification={showNotification}
             />
           )}
-          
+
+          {activeTab === 'costs' && (
+            <CostsTab
+              purchases={purchases}
+              savePurchases={savePurchases}
+              subscriptions={subscriptions}
+              saveSubscriptions={saveSubscriptions}
+              showNotification={showNotification}
+            />
+          )}
+
           {activeTab === 'restock' && (
             <RestockTab
               externalParts={externalParts}
@@ -2027,12 +3966,31 @@ export default function EtsyOrderManager() {
               filaments={filaments}
             />
           )}
-          
+
+          {activeTab === 'analytics' && (
+            <AnalyticsTab
+              orders={orders}
+              setOrders={setOrders}
+              archivedOrders={archivedOrders}
+              setArchivedOrders={setArchivedOrders}
+              models={models}
+              filaments={filaments}
+              teamMembers={teamMembers}
+              filamentUsageHistory={filamentUsageHistory}
+              showNotification={showNotification}
+            />
+          )}
+
           {activeTab === 'archive' && (
             <ArchiveTab
               archivedOrders={archivedOrders}
+              saveArchivedOrders={setArchivedOrders}
+              orders={orders}
+              setOrders={setOrders}
               teamMembers={teamMembers}
               models={models}
+              stores={stores}
+              showNotification={showNotification}
             />
           )}
           
@@ -2053,15 +4011,74 @@ export default function EtsyOrderManager() {
         <div className="modal-overlay" onClick={() => { setShowCsvModal(false); setCsvPreview(null); setCsvInput(''); setImportStoreId(''); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Import Etsy CSV</h2>
+              <h2 className="modal-title">Import Orders</h2>
               <button className="modal-close" onClick={() => { setShowCsvModal(false); setCsvPreview(null); setCsvInput(''); setImportStoreId(''); }}>
                 <X size={24} />
               </button>
             </div>
-            <p className="csv-help">
-              Paste your Etsy order data below. Supports both tab-separated format with headers, 
-              or concatenated format (Transaction ID followed directly by product data).
-            </p>
+
+            {/* Google Sheets Sync Section */}
+            <div style={{
+              background: 'rgba(0,204,255,0.1)',
+              border: '1px solid rgba(0,204,255,0.3)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <ShoppingBag size={20} style={{ color: '#00ccff' }} />
+                <strong style={{ color: '#00ccff' }}>Google Sheets Sync</strong>
+                {googleSheetUrl && <Check size={16} style={{ color: '#00ff88' }} />}
+              </div>
+              <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '12px' }}>
+                Connect your Google Sheet to auto-import orders. Make sure the sheet is shared as "Anyone with the link can view".
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={googleSheetUrl}
+                  onChange={e => setGoogleSheetUrl(e.target.value)}
+                  placeholder="Paste Google Sheet URL here..."
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (googleSheetUrl) {
+                      localStorage.setItem('googleSheetUrl', googleSheetUrl);
+                      syncFromGoogleSheet();
+                    }
+                  }}
+                  disabled={!googleSheetUrl || syncingSheet}
+                >
+                  {syncingSheet ? (
+                    <><RefreshCw size={16} className="spinning" /> Syncing</>
+                  ) : (
+                    <><RefreshCw size={16} /> Sync Now</>
+                  )}
+                </button>
+              </div>
+              {googleSheetUrl && (
+                <p style={{ fontSize: '0.75rem', color: '#00ff88', marginTop: '8px' }}>
+                  Sheet URL saved. Use the "Sync Sheet" button in the header anytime.
+                </p>
+              )}
+            </div>
+
+            <div style={{
+              borderTop: '1px solid rgba(255,255,255,0.1)',
+              paddingTop: '16px',
+              marginBottom: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Upload size={20} style={{ color: '#00ff88' }} />
+                <strong>Manual CSV Import</strong>
+              </div>
+              <p className="csv-help" style={{ margin: 0 }}>
+                Or paste your Etsy order data below. Supports tab-separated or concatenated format.
+              </p>
+            </div>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '8px', color: '#888', fontSize: '0.9rem' }}>
                 <Store size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
@@ -2125,6 +4142,18 @@ export default function EtsyOrderManager() {
                         {csvPreview.extractedExtra || 'none'}
                       </span>
                     </div>
+                    <div>
+                      <span style={{ color: '#888' }}>Price: </span>
+                      <span style={{ color: csvPreview.price && csvPreview.price !== '$0' ? '#00ff88' : '#888' }}>
+                        {csvPreview.price?.startsWith('$') ? csvPreview.price : `$${csvPreview.price || '0'}`}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#888' }}>Tax: </span>
+                      <span style={{ color: csvPreview.salesTax > 0 ? '#ff9f43' : '#888' }}>
+                        ${csvPreview.salesTax?.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
                   </div>
                   {csvPreview.colorField && (
                     <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: '#666' }}>
@@ -2151,8 +4180,57 @@ export default function EtsyOrderManager() {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
+  const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
+  const [extraPrint, setExtraPrint] = useState({
+    name: '',
+    color: '',
+    filamentUsage: '',
+    printHours: '0',
+    printMinutes: '0',
+    assignedTo: teamMembers[0]?.id || '',
+    printerId: ''
+  });
+
+  // Add extra print to queue
+  const addExtraPrint = () => {
+    if (!extraPrint.name || !extraPrint.filamentUsage || !extraPrint.color) {
+      showNotification('Please fill in name, color, and filament usage', 'error');
+      return;
+    }
+
+    const newOrder = {
+      id: `extra-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      orderId: `EXTRA-${Date.now().toString().slice(-6)}`,
+      item: extraPrint.name,
+      buyerName: 'Extra Print',
+      quantity: 1,
+      color: extraPrint.color,
+      price: '$0.00',
+      status: 'pending',
+      assignedTo: extraPrint.assignedTo || null,
+      printerId: extraPrint.printerId || null,
+      isExtraPrint: true,
+      extraPrintFilament: parseFloat(extraPrint.filamentUsage) || 0,
+      extraPrintMinutes: (parseInt(extraPrint.printHours) || 0) * 60 + (parseInt(extraPrint.printMinutes) || 0),
+      createdAt: Date.now(),
+      storeId: null
+    };
+
+    setOrders([newOrder, ...orders]);
+    setExtraPrint({
+      name: '',
+      color: '',
+      filamentUsage: '',
+      printHours: '0',
+      printMinutes: '0',
+      assignedTo: teamMembers[0]?.id || '',
+      printerId: ''
+    });
+    setShowExtraPrintForm(false);
+    showNotification('Extra print added to queue');
+  };
   
   console.log('=== QUEUE TAB DEBUG ===');
   console.log('Total orders:', orders?.length);
@@ -2192,7 +4270,7 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
   return (
     <>
       <h2 className="page-title"><Package size={28} /> Order Queue</h2>
-      
+
       {/* Filters */}
       <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
         {/* Store Filter */}
@@ -2211,7 +4289,7 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
           ))}
         </select>
         </div>
-        
+
         {/* Partner Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Users size={20} style={{ color: '#00ccff' }} />
@@ -2228,6 +4306,178 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
               <option key={member.id} value={member.id}>{member.name}</option>
             ))}
           </select>
+        </div>
+
+        {/* Extra Print Button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowExtraPrintForm(!showExtraPrintForm)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              background: showExtraPrintForm ? 'rgba(255, 159, 67, 0.2)' : 'rgba(255, 159, 67, 0.1)',
+              border: '1px solid rgba(255, 159, 67, 0.4)',
+              borderRadius: '8px',
+              color: '#ff9f43',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: '500'
+            }}
+          >
+            <RefreshCw size={16} />
+            Extra Print
+            <ChevronRight
+              size={14}
+              style={{
+                transform: showExtraPrintForm ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s'
+              }}
+            />
+          </button>
+
+          {/* Extra Print Dropdown */}
+          {showExtraPrintForm && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: '0',
+              marginTop: '8px',
+              background: '#1a1a2e',
+              border: '1px solid rgba(255, 159, 67, 0.3)',
+              borderRadius: '12px',
+              padding: '16px',
+              width: '320px',
+              zIndex: 100,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+            }}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Description *</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., Tray lid reprint"
+                  value={extraPrint.name}
+                  onChange={e => setExtraPrint({ ...extraPrint, name: e.target.value })}
+                  style={{ width: '100%', padding: '8px', fontSize: '0.85rem' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Color *</label>
+                  <input
+                    type="text"
+                    className="add-item-input"
+                    placeholder="Sage Green"
+                    value={extraPrint.color}
+                    onChange={e => setExtraPrint({ ...extraPrint, color: e.target.value })}
+                    style={{ width: '100%', padding: '8px', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Filament (g) *</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="25"
+                    value={extraPrint.filamentUsage}
+                    onChange={e => setExtraPrint({ ...extraPrint, filamentUsage: e.target.value })}
+                    style={{ width: '100%', padding: '8px', fontSize: '0.85rem' }}
+                    min="0"
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Time (h:m)</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <input
+                      type="number"
+                      className="add-item-input"
+                      placeholder="0"
+                      value={extraPrint.printHours}
+                      onChange={e => setExtraPrint({ ...extraPrint, printHours: e.target.value })}
+                      style={{ width: '50%', padding: '8px', fontSize: '0.85rem' }}
+                      min="0"
+                    />
+                    <input
+                      type="number"
+                      className="add-item-input"
+                      placeholder="0"
+                      value={extraPrint.printMinutes}
+                      onChange={e => setExtraPrint({ ...extraPrint, printMinutes: e.target.value })}
+                      style={{ width: '50%', padding: '8px', fontSize: '0.85rem' }}
+                      min="0"
+                      max="59"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Assign To</label>
+                  <select
+                    value={extraPrint.assignedTo}
+                    onChange={e => setExtraPrint({ ...extraPrint, assignedTo: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    <option value="">Unassigned</option>
+                    {teamMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Printer</label>
+                <select
+                  value={extraPrint.printerId}
+                  onChange={e => setExtraPrint({ ...extraPrint, printerId: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <option value="">Select Printer</option>
+                  {printers?.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={addExtraPrint}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  background: 'linear-gradient(135deg, #ff9f43 0%, #ee5a24 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Plus size={16} /> Add to Queue
+              </button>
+            </div>
+          )}
         </div>
       </div>
       
@@ -2277,9 +4527,14 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
                 <OrderCard
                   key={order.orderId}
                   order={order}
+                  orders={orders}
+                  setOrders={setOrders}
                   teamMembers={teamMembers}
                   stores={stores}
+                  printers={printers}
                   models={models}
+                  filaments={filaments}
+                  externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
                 />
@@ -2305,9 +4560,14 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
                 <OrderCard
                   key={order.orderId}
                   order={order}
+                  orders={orders}
+                  setOrders={setOrders}
                   teamMembers={teamMembers}
                   stores={stores}
+                  printers={printers}
                   models={models}
+                  filaments={filaments}
+                  externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
                 />
@@ -2321,7 +4581,10 @@ function QueueTab({ orders, teamMembers, stores, models, selectedStoreFilter, se
 }
 
 // Order Card Component
-function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reassignOrder }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder }) {
+  const [showShippingModal, setShowShippingModal] = useState(false);
+  const [shippingCostInput, setShippingCostInput] = useState('');
+
   const statusIcons = {
     received: <Clock size={14} />,
     fulfilled: <Check size={14} />,
@@ -2330,13 +4593,135 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
 
   const store = stores?.find(s => s.id === order.storeId);
   const assignedMember = teamMembers?.find(m => m.id === order.assignedTo);
-  
-  // Find matching model by name (case-insensitive, partial match)
+  const assignedPrinter = printers?.find(p => p.id === order.printerId);
+
+  // Find matching model by name or alias (case-insensitive, partial match)
   const matchingModel = models?.find(m => {
     const modelName = m.name.toLowerCase();
     const orderItem = (order.item || '').toLowerCase();
-    return orderItem.includes(modelName) || modelName.includes(orderItem);
+    // Check main name
+    if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
+    // Check aliases
+    if (m.aliases && m.aliases.length > 0) {
+      return m.aliases.some(alias => {
+        const lowerAlias = alias.toLowerCase();
+        return orderItem.includes(lowerAlias) || lowerAlias.includes(orderItem);
+      });
+    }
+    return false;
   });
+
+  // Calculate profit for this order
+  const calculateProfit = () => {
+    // Parse revenue from price (remove $ and parse)
+    const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+    const orderTotal = parseFloat(priceStr) || 0;
+
+    // Etsy fees
+    const TRANSACTION_FEE_RATE = 0.065; // 6.5%
+    const PAYMENT_PROCESSING_RATE = 0.03; // 3%
+    const PAYMENT_PROCESSING_FLAT = 0.25; // $0.25
+    const SALES_TAX_RATE = 0.0752; // 7.52% (fallback if no actual tax)
+
+    // Use actual sales tax if available, otherwise estimate from rate
+    let salesTax;
+    let preTaxAmount;
+    if (order.salesTax != null && order.salesTax > 0) {
+      // Use actual tax from order
+      salesTax = order.salesTax;
+      preTaxAmount = orderTotal - salesTax;
+    } else {
+      // Estimate tax using average rate
+      preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
+      salesTax = orderTotal - preTaxAmount;
+    }
+
+    // Fees are calculated on the full order total
+    const transactionFee = orderTotal * TRANSACTION_FEE_RATE;
+    const paymentProcessingFee = (orderTotal * PAYMENT_PROCESSING_RATE) + PAYMENT_PROCESSING_FLAT;
+    const totalFees = transactionFee + paymentProcessingFee;
+
+    // Revenue after tax (what you actually keep before other costs)
+    const revenue = preTaxAmount;
+
+    // Calculate filament cost
+    let filamentCost = 0;
+    if (matchingModel && order.assignedTo) {
+      const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase();
+      const memberFilaments = filaments?.[order.assignedTo] || [];
+      const matchedFilament = memberFilaments.find(f => {
+        const filColor = f.color.toLowerCase();
+        return filColor === orderColor ||
+               filColor.includes(orderColor) ||
+               orderColor.includes(filColor);
+      });
+
+      if (matchedFilament && matchedFilament.costPerRoll > 0) {
+        // Get filament usage from printer settings or fall back
+        const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
+        const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
+          sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
+        const costPerGram = matchedFilament.costPerRoll / 1000;
+        filamentCost = filamentUsage * costPerGram * order.quantity;
+      }
+    }
+
+    // Calculate external parts cost
+    let partsCost = 0;
+    if (matchingModel && matchingModel.externalParts?.length > 0 && order.assignedTo) {
+      const memberParts = externalParts?.[order.assignedTo] || [];
+      matchingModel.externalParts.forEach(needed => {
+        const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+        if (matchedPart && matchedPart.costPerUnit > 0) {
+          partsCost += matchedPart.costPerUnit * needed.quantity * order.quantity;
+        }
+      });
+    }
+
+    // Shipping cost
+    const shippingCost = order.shippingCost || 0;
+
+    // Total cost and profit
+    const totalCost = filamentCost + partsCost + shippingCost + totalFees;
+    const profit = revenue - totalCost;
+
+    return {
+      orderTotal,
+      revenue,
+      salesTax,
+      transactionFee,
+      paymentProcessingFee,
+      totalFees,
+      filamentCost,
+      partsCost,
+      shippingCost,
+      totalCost,
+      profit,
+      hasData: orderTotal > 0 || totalCost > 0
+    };
+  };
+
+  const profitData = calculateProfit();
+
+  // Update printer for this order
+  const updatePrinter = (printerId) => {
+    const updated = orders.map(o =>
+      (o.id === order.id || o.orderId === order.orderId) ? { ...o, printerId } : o
+    );
+    setOrders(updated);
+  };
+
+  // Handle shipping with cost
+  const handleMarkShipped = () => {
+    setShowShippingModal(true);
+    setShippingCostInput('');
+  };
+
+  const confirmShipping = () => {
+    updateOrderStatus(order.orderId, 'shipped', shippingCostInput);
+    setShowShippingModal(false);
+    setShippingCostInput('');
+  };
 
   return (
     <div className="order-card">
@@ -2378,10 +4763,10 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                 <div className="order-id">{order.orderId}</div>
                 {store && (
-                  <span style={{ 
-                    fontSize: '0.65rem', 
-                    padding: '2px 6px', 
-                    borderRadius: '8px', 
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
                     backgroundColor: store.color + '20',
                     color: store.color,
                     border: `1px solid ${store.color}40`
@@ -2389,10 +4774,47 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
                     {store.name}
                   </span>
                 )}
+                {order.isReplacement && (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255, 159, 67, 0.2)',
+                    color: '#ff9f43',
+                    border: '1px solid rgba(255, 159, 67, 0.4)',
+                    fontWeight: '600'
+                  }}>
+                    REPLACEMENT
+                  </span>
+                )}
+                {order.isExtraPrint && (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(165, 94, 234, 0.2)',
+                    color: '#a55eea',
+                    border: '1px solid rgba(165, 94, 234, 0.4)',
+                    fontWeight: '600'
+                  }}>
+                    EXTRA PRINT
+                  </span>
+                )}
               </div>
               <div className="order-item" style={{ fontSize: '0.85rem', lineHeight: '1.3' }}>{order.item}</div>
             </div>
-            <span className={`status-badge status-${order.status}`}>
+            <span
+              className={`status-badge status-${order.status}`}
+              onClick={() => {
+                if (order.status === 'fulfilled') {
+                  updateOrderStatus(order.orderId, 'received');
+                } else if (order.status === 'shipped') {
+                  updateOrderStatus(order.orderId, 'fulfilled');
+                }
+              }}
+              style={order.status !== 'received' ? { cursor: 'pointer' } : {}}
+              title={order.status === 'fulfilled' ? 'Click to revert to Received' : order.status === 'shipped' ? 'Click to revert to Fulfilled' : ''}
+            >
               {statusIcons[order.status]}
               {order.status}
             </span>
@@ -2433,8 +4855,87 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
             Unassigned
           </span>
         )}
+
+        {/* Printer Badge */}
+        {assignedPrinter ? (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '0.75rem',
+            padding: '4px 10px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(0, 255, 136, 0.15)',
+            color: '#00ff88',
+            border: '1px solid rgba(0, 255, 136, 0.3)',
+            marginLeft: '8px'
+          }}>
+            <Printer size={12} />
+            {assignedPrinter.name}
+          </span>
+        ) : (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '0.75rem',
+            padding: '4px 10px',
+            borderRadius: '12px',
+            backgroundColor: 'rgba(136, 136, 136, 0.15)',
+            color: '#888',
+            border: '1px solid rgba(136, 136, 136, 0.3)',
+            marginLeft: '8px'
+          }}>
+            <Printer size={12} />
+            No printer
+          </span>
+        )}
       </div>
-      
+
+      {/* Production Stage Tracker - only show for received/in-progress orders */}
+      {order.status === 'received' && (
+        <div style={{
+          margin: '12px 0',
+          padding: '10px',
+          background: 'rgba(255,255,255,0.03)',
+          borderRadius: '8px',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '8px' }}>Production Stage</div>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            {PRODUCTION_STAGES.map((stage, idx) => {
+              const isActive = order.productionStage === stage.id;
+              const isPast = PRODUCTION_STAGES.findIndex(s => s.id === order.productionStage) > idx;
+              return (
+                <button
+                  key={stage.id}
+                  onClick={() => {
+                    const updated = orders.map(o =>
+                      (o.id === order.id || o.orderId === order.orderId) ? { ...o, productionStage: stage.id } : o
+                    );
+                    setOrders(updated);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '0.75rem',
+                    borderRadius: '6px',
+                    border: isActive ? `2px solid ${stage.color}` : '1px solid rgba(255,255,255,0.1)',
+                    background: isActive ? `${stage.color}20` : isPast ? 'rgba(255,255,255,0.05)' : 'transparent',
+                    color: isActive ? stage.color : isPast ? '#666' : '#888',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontWeight: isActive ? '600' : '400'
+                  }}
+                >
+                  {isPast && !isActive && <Check size={10} style={{ marginRight: '4px', color: '#00ff88' }} />}
+                  {stage.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="order-details">
         <div className="detail-item">
           <span className="detail-label">Quantity</span>
@@ -2450,9 +4951,80 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
             <span className="detail-value">{order.extra}</span>
           </div>
         )}
+        {order.shippingCost != null && order.shippingCost > 0 && (
+          <div className="detail-item">
+            <span className="detail-label">Shipping</span>
+            <span className="detail-value" style={{ color: '#ff6b6b' }}>${order.shippingCost.toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
+      {/* Profit Calculator Display */}
+      {profitData.hasData && (
+        <div style={{
+          marginTop: '12px',
+          padding: '10px',
+          background: profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 107, 107, 0.1)',
+          borderRadius: '8px',
+          border: `1px solid ${profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#888' }}>
+              <TrendingUp size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+              Profit Analysis
+            </span>
+            <span style={{
+              fontWeight: '600',
+              fontSize: '1rem',
+              color: profitData.profit >= 0 ? '#00ff88' : '#ff6b6b'
+            }}>
+              {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {profitData.orderTotal > 0 && <span>Order: ${profitData.orderTotal.toFixed(2)}</span>}
+            {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
+            {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
+            {profitData.filamentCost > 0 && <span>Filament: -${profitData.filamentCost.toFixed(2)}</span>}
+            {profitData.partsCost > 0 && <span>Parts: -${profitData.partsCost.toFixed(2)}</span>}
+            {profitData.shippingCost > 0 && <span>Ship: -${profitData.shippingCost.toFixed(2)}</span>}
+          </div>
+        </div>
+      )}
+
       <div className="order-actions" style={{ marginTop: 'auto' }}>
+        {/* Open 3MF Button */}
+        {matchingModel?.file3mfUrl && (
+          <button
+            className="btn btn-primary btn-small"
+            title={matchingModel.file3mfUrl.startsWith('http') ? 'Open file' : 'Copy path to clipboard'}
+            style={{ marginRight: '8px' }}
+            onClick={() => {
+              if (matchingModel.file3mfUrl.startsWith('http')) {
+                window.open(matchingModel.file3mfUrl, '_blank');
+              } else {
+                navigator.clipboard.writeText(matchingModel.file3mfUrl);
+                alert('Path copied! Use ⌘+Shift+G in Finder to open.');
+              }
+            }}
+          >
+            <Printer size={14} /> {matchingModel.file3mfUrl.startsWith('http') ? 'Open 3MF' : 'Copy Path'}
+          </button>
+        )}
+
+        {/* Printer Selector */}
+        <select
+          className="assign-select"
+          value={order.printerId || ''}
+          onChange={e => updatePrinter(e.target.value || null)}
+          style={{ marginRight: '8px' }}
+        >
+          <option value="">Select Printer</option>
+          {printers.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+
         <select
           className="assign-select"
           value={order.assignedTo || ''}
@@ -2475,7 +5047,7 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
         {order.status === 'fulfilled' && (
           <button
             className="btn btn-primary btn-small"
-            onClick={() => updateOrderStatus(order.orderId, 'shipped')}
+            onClick={handleMarkShipped}
           >
             <Truck size={16} /> Mark Shipped
           </button>
@@ -2486,6 +5058,49 @@ function OrderCard({ order, teamMembers, stores, models, updateOrderStatus, reas
           </span>
         )}
       </div>
+
+      {/* Shipping Cost Modal */}
+      {showShippingModal && (
+        <div className="modal-overlay" onClick={() => setShowShippingModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3><Truck size={20} /> Mark as Shipped</h3>
+              <button className="close-btn" onClick={() => setShowShippingModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px', color: '#aaa' }}>
+                Order: <strong>{order.orderId}</strong>
+              </p>
+              <div className="form-group">
+                <label>Shipping Cost ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Enter shipping cost"
+                  value={shippingCostInput}
+                  onChange={e => setShippingCostInput(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') confirmShipping();
+                    if (e.key === 'Escape') setShowShippingModal(false);
+                  }}
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowShippingModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={confirmShipping}>
+                <Truck size={16} /> Confirm Shipped
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2903,14 +5518,14 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
 
 // Filament Tab Component
 function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }) {
-  const [newFilament, setNewFilament] = useState({ color: '', amount: '', colorHex: '#ffffff', rolls: '0' });
+  const [newFilament, setNewFilament] = useState({ color: '', amount: '', colorHex: '#ffffff', rolls: '0', costPerRoll: '', reorderAt: '250' });
   const [editingFilament, setEditingFilament] = useState(null);
   const [editingMemberId, setEditingMemberId] = useState(null);
   const ROLL_SIZE = 1000; // grams per roll
-  const REORDER_THRESHOLD = 250; // grams - show reorder alert when at or below this with 0 rolls
 
   const needsRestock = (fil) => {
-    return fil.amount <= REORDER_THRESHOLD && (fil.rolls || 0) === 0;
+    const threshold = fil.reorderAt ?? 250;
+    return fil.amount <= threshold && (fil.rolls || 0) === 0;
   };
 
   const addFilament = (memberId) => {
@@ -2927,18 +5542,26 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
     if (existing >= 0) {
       memberFilaments[existing].amount += parseFloat(newFilament.amount);
       memberFilaments[existing].rolls = (memberFilaments[existing].rolls || 0) + parseInt(newFilament.rolls || 0);
+      if (newFilament.costPerRoll) {
+        memberFilaments[existing].costPerRoll = parseFloat(newFilament.costPerRoll);
+      }
+      if (newFilament.reorderAt) {
+        memberFilaments[existing].reorderAt = parseInt(newFilament.reorderAt);
+      }
     } else {
       memberFilaments.push({
         id: Date.now().toString(),
         color: newFilament.color,
         colorHex: newFilament.colorHex,
         amount: parseFloat(newFilament.amount),
-        rolls: parseInt(newFilament.rolls || 0)
+        rolls: parseInt(newFilament.rolls || 0),
+        costPerRoll: parseFloat(newFilament.costPerRoll) || 0,
+        reorderAt: parseInt(newFilament.reorderAt) || 250
       });
     }
-    
+
     saveFilaments({ ...filaments, [memberId]: memberFilaments });
-    setNewFilament({ color: '', amount: '', colorHex: '#ffffff', rolls: '0' });
+    setNewFilament({ color: '', amount: '', colorHex: '#ffffff', rolls: '0', costPerRoll: '', reorderAt: '250' });
     showNotification('Filament added successfully');
   };
 
@@ -3013,7 +5636,9 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
       memberFilaments[idx] = {
         ...editingFilament,
         amount: parseFloat(editingFilament.amount) || 0,
-        rolls: parseInt(editingFilament.rolls) || 0
+        rolls: parseInt(editingFilament.rolls) || 0,
+        costPerRoll: parseFloat(editingFilament.costPerRoll) || 0,
+        reorderAt: parseInt(editingFilament.reorderAt) || 250
       };
       saveFilaments({ ...filaments, [editingMemberId]: memberFilaments });
       showNotification('Filament updated');
@@ -3069,6 +5694,14 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               + {fil.rolls} backup roll{fil.rolls !== 1 ? 's' : ''} ({fil.rolls * ROLL_SIZE}g)
                             </span>
                           )}
+                          <span style={{ color: '#888', marginLeft: '8px' }}>
+                            (reorder at {fil.reorderAt ?? 250}g)
+                          </span>
+                          {fil.costPerRoll > 0 && (
+                            <span style={{ color: '#00ff88', marginLeft: '8px' }}>
+                              ${fil.costPerRoll}/roll
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '4px' }}>
@@ -3107,46 +5740,95 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               )}
             </div>
 
-            <div className="add-item-form">
-              <div style={{ marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  className="add-item-input"
-                  placeholder="Color name (e.g., Sage Green)"
-                  value={newFilament.color}
-                  onChange={e => setNewFilament({ ...newFilament, color: e.target.value })}
-                  style={{ flex: 1, padding: '10px 12px', fontSize: '0.95rem' }}
-                />
-                <input
-                  type="color"
-                  value={newFilament.colorHex}
-                  onChange={e => setNewFilament({ ...newFilament, colorHex: e.target.value })}
-                  style={{ width: '50px', height: '40px', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
-                  title="Pick color"
-                />
+            <div className="add-item-form" style={{
+              background: 'rgba(0, 255, 136, 0.05)',
+              padding: '16px',
+              borderRadius: '10px',
+              border: '1px solid rgba(0, 255, 136, 0.2)'
+            }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#00ff88', marginBottom: '12px' }}>
+                <Plus size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+                Add New Filament
               </div>
-              <div className="add-item-row">
-                <input
-                  type="number"
-                  className="add-item-input"
-                  placeholder="Amount (g)"
-                  value={newFilament.amount}
-                  onChange={e => setNewFilament({ ...newFilament, amount: e.target.value })}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  className="add-item-input"
-                  placeholder="Backup rolls"
-                  value={newFilament.rolls}
-                  onChange={e => setNewFilament({ ...newFilament, rolls: e.target.value })}
-                  style={{ flex: 1 }}
-                  min="0"
-                />
-                <button className="btn btn-primary btn-small" onClick={() => addFilament(member.id)}>
-                  <Plus size={16} /> Add
-                </button>
+
+              {/* Color Name + Color Picker */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Color Name</label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    className="add-item-input"
+                    placeholder="e.g., Sage Green, Matte Black"
+                    value={newFilament.color}
+                    onChange={e => setNewFilament({ ...newFilament, color: e.target.value })}
+                    style={{ flex: 1, padding: '10px 12px', fontSize: '0.95rem' }}
+                  />
+                  <input
+                    type="color"
+                    value={newFilament.colorHex}
+                    onChange={e => setNewFilament({ ...newFilament, colorHex: e.target.value })}
+                    style={{ width: '50px', height: '40px', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
+                    title="Pick display color"
+                  />
+                </div>
               </div>
+
+              {/* Other fields in a grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Amount (grams)</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="e.g., 850"
+                    value={newFilament.amount}
+                    onChange={e => setNewFilament({ ...newFilament, amount: e.target.value })}
+                    style={{ width: '100%', padding: '10px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Backup Rolls</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="e.g., 2"
+                    value={newFilament.rolls}
+                    onChange={e => setNewFilament({ ...newFilament, rolls: e.target.value })}
+                    style={{ width: '100%', padding: '10px' }}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Reorder At (g)</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="e.g., 250"
+                    title="Alert when amount falls to this level with 0 backup rolls"
+                    value={newFilament.reorderAt}
+                    onChange={e => setNewFilament({ ...newFilament, reorderAt: e.target.value })}
+                    style={{ width: '100%', padding: '10px' }}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Cost/Roll ($)</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="e.g., 22.99"
+                    value={newFilament.costPerRoll}
+                    onChange={e => setNewFilament({ ...newFilament, costPerRoll: e.target.value })}
+                    style={{ width: '100%', padding: '10px' }}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <button className="btn btn-primary" onClick={() => addFilament(member.id)} style={{ width: '100%' }}>
+                <Plus size={16} /> Add Filament
+              </button>
             </div>
           </div>
         ))}
@@ -3203,15 +5885,37 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               />
             </div>
 
-            <div style={{ 
-              padding: '12px', 
-              background: 'rgba(255, 193, 7, 0.1)', 
-              borderRadius: '8px', 
-              marginBottom: '16px',
-              fontSize: '0.85rem',
-              color: '#888'
-            }}>
-              <strong style={{ color: '#ffc107' }}>Restock Alert:</strong> Filament will appear on the Restock page when amount falls to 250g or below with 0 backup rolls.
+            <div className="form-group">
+              <label className="form-label">Cost Per Roll ($)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={editingFilament.costPerRoll || ''}
+                onChange={e => setEditingFilament({ ...editingFilament, costPerRoll: e.target.value })}
+                min="0"
+                step="0.01"
+                placeholder="Enter cost per roll"
+              />
+              {editingFilament.costPerRoll > 0 && (
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                  Cost per gram: ${(editingFilament.costPerRoll / 1000).toFixed(4)}
+                </p>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Reorder Threshold (grams)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={editingFilament.reorderAt ?? 250}
+                onChange={e => setEditingFilament({ ...editingFilament, reorderAt: e.target.value })}
+                min="0"
+                placeholder="Alert when at or below this amount"
+              />
+              <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                Alert triggers when amount falls to {editingFilament.reorderAt ?? 250}g or below with 0 backup rolls
+              </p>
             </div>
             
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -3230,18 +5934,81 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 }
 
 // Models Tab Component
-function ModelsTab({ models, stores, externalParts, saveModels, showNotification }) {
+function ModelsTab({ models, stores, printers, externalParts, saveModels, showNotification }) {
   const [showAddModel, setShowAddModel] = useState(false);
   const [editingModel, setEditingModel] = useState(null);
   const [newModel, setNewModel] = useState({
     name: '',
     variantName: '',
-    filamentUsage: '',
     defaultColor: '',
     externalParts: [],
     storeId: '',
-    imageUrl: ''
+    imageUrl: '',
+    printerSettings: [],
+    aliases: [],
+    file3mfUrl: ''
   });
+  const [newAlias, setNewAlias] = useState('');
+
+  // Initialize printer settings for a model (now with plates)
+  const initPrinterSettings = () => {
+    return printers.map(p => ({
+      printerId: p.id,
+      plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+    }));
+  };
+
+  // Add a plate to a printer setting
+  const addPlate = (settings, printerId) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        const plateNum = (s.plates?.length || 0) + 1;
+        return {
+          ...s,
+          plates: [...(s.plates || []), { name: `Plate ${plateNum}`, filamentUsage: '', printHours: '', printMinutes: '' }]
+        };
+      }
+      return s;
+    });
+  };
+
+  // Remove a plate from a printer setting
+  const removePlate = (settings, printerId, plateIdx) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        return {
+          ...s,
+          plates: s.plates.filter((_, i) => i !== plateIdx)
+        };
+      }
+      return s;
+    });
+  };
+
+  // Update a specific plate in a printer setting
+  const updatePlate = (settings, printerId, plateIdx, field, value) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        return {
+          ...s,
+          plates: s.plates.map((plate, i) =>
+            i === plateIdx ? { ...plate, [field]: value } : plate
+          )
+        };
+      }
+      return s;
+    });
+  };
+
+  // Calculate totals for a printer setting
+  const calculatePrinterTotals = (printerSetting) => {
+    if (!printerSetting?.plates?.length) return { totalFilament: 0, totalMinutes: 0 };
+    return printerSetting.plates.reduce((acc, plate) => ({
+      totalFilament: acc.totalFilament + (parseFloat(plate.filamentUsage) || 0),
+      totalMinutes: acc.totalMinutes + ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0)
+    }), { totalFilament: 0, totalMinutes: 0 });
+  };
+
   const [newPart, setNewPart] = useState({ name: '', quantity: 1 });
 
   const getStoreName = (storeId) => {
@@ -3276,24 +6043,37 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
   };
 
   const addModel = () => {
-    if (!newModel.name || !newModel.filamentUsage) {
-      showNotification('Please enter model name and filament usage', 'error');
+    if (!newModel.name) {
+      showNotification('Please enter model name', 'error');
       return;
     }
+
+    // Convert printer settings to proper format with plates
+    const printerSettings = newModel.printerSettings.map(s => ({
+      printerId: s.printerId,
+      plates: (s.plates || []).map(plate => ({
+        name: plate.name || 'Plate',
+        filamentUsage: parseFloat(plate.filamentUsage) || 0,
+        printHours: parseInt(plate.printHours) || 0,
+        printMinutes: parseInt(plate.printMinutes) || 0
+      })).filter(plate => plate.filamentUsage > 0 || plate.printHours > 0 || plate.printMinutes > 0)
+    })).filter(s => s.plates && s.plates.length > 0);
 
     const model = {
       id: Date.now().toString(),
       name: newModel.name,
       variantName: newModel.variantName || '',
-      filamentUsage: parseFloat(newModel.filamentUsage),
       defaultColor: newModel.defaultColor,
       externalParts: newModel.externalParts,
       storeId: newModel.storeId || null,
-      imageUrl: newModel.imageUrl || ''
+      imageUrl: newModel.imageUrl || '',
+      printerSettings: printerSettings,
+      aliases: newModel.aliases || [],
+      file3mfUrl: newModel.file3mfUrl || ''
     };
 
     saveModels([...models, model]);
-    setNewModel({ name: '', variantName: '', filamentUsage: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '' });
+    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '' });
     setShowAddModel(false);
     showNotification('Model added successfully');
   };
@@ -3420,6 +6200,22 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                     )}
                   </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                {model.file3mfUrl && (
+                  <button
+                    className="btn btn-primary btn-small"
+                    title={model.file3mfUrl.startsWith('http') ? 'Open file' : 'Copy path to clipboard'}
+                    onClick={() => {
+                      if (model.file3mfUrl.startsWith('http')) {
+                        window.open(model.file3mfUrl, '_blank');
+                      } else {
+                        navigator.clipboard.writeText(model.file3mfUrl);
+                        showNotification('Path copied! Use ⌘+Shift+G in Finder to open');
+                      }
+                    }}
+                  >
+                    <Printer size={14} /> {model.file3mfUrl.startsWith('http') ? 'Open 3MF' : 'Copy Path'}
+                  </button>
+                )}
                 <button className="btn btn-secondary btn-small" onClick={() => setEditingModel(model)}>
                   <Edit2 size={14} /> Edit
                 </button>
@@ -3431,21 +6227,60 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 </button>
               </div>
             </div>
-            
-            <div className="model-meta">
-              <div className="model-meta-item">
-                <Palette size={16} />
-                Filament: <span>{model.filamentUsage}g</span>
-              </div>
-              {model.defaultColor && (
+
+            {model.defaultColor && (
+              <div className="model-meta">
                 <div className="model-meta-item">
                   Default Color: <span>{model.defaultColor}</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Printer Settings with Plates */}
+            {model.printerSettings?.length > 0 && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Printer Settings:</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {model.printerSettings.map(setting => {
+                    const printer = printers.find(p => p.id === setting.printerId);
+                    const totals = calculatePrinterTotals(setting);
+                    return printer ? (
+                      <div key={setting.printerId} style={{
+                        background: 'rgba(0,255,136,0.1)',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                          <div style={{ color: '#00ccff', fontSize: '0.8rem' }}>
+                            Total: {totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                          </div>
+                        </div>
+                        {setting.plates?.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {setting.plates.map((plate, idx) => (
+                              <span key={idx} style={{
+                                background: 'rgba(0,0,0,0.3)',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                color: '#ccc'
+                              }}>
+                                {plate.name}: {plate.filamentUsage}g, {plate.printHours || 0}h {plate.printMinutes || 0}m
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
               </div>
             </div>
-            
+
             {model.externalParts?.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Required Parts:</div>
@@ -3491,7 +6326,7 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 className="form-input"
                 value={newModel.variantName || ''}
                 onChange={e => setNewModel({ ...newModel, variantName: e.target.value })}
-                placeholder="e.g., Small, Brown, Sage Green"
+                placeholder="e.g., Small, LED Plug-In, Rechargeable"
               />
             </div>
 
@@ -3508,7 +6343,84 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 ))}
               </select>
             </div>
-            
+
+            <div className="form-group">
+              <label className="form-label">Product Title Aliases</label>
+              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>
+                Add alternate Etsy listing titles that should match to this model
+              </p>
+              {(newModel.aliases || []).length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {newModel.aliases.map((alias, idx) => (
+                    <span key={idx} style={{
+                      background: 'rgba(0, 204, 255, 0.15)',
+                      border: '1px solid rgba(0, 204, 255, 0.3)',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {alias}
+                      <button
+                        type="button"
+                        onClick={() => setNewModel({
+                          ...newModel,
+                          aliases: newModel.aliases.filter((_, i) => i !== idx)
+                        })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ff6b6b',
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newAlias}
+                  onChange={e => setNewAlias(e.target.value)}
+                  placeholder="e.g., Modern Minimalist Incense Holder"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newAlias.trim()) {
+                      e.preventDefault();
+                      setNewModel({
+                        ...newModel,
+                        aliases: [...(newModel.aliases || []), newAlias.trim()]
+                      });
+                      setNewAlias('');
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (newAlias.trim()) {
+                      setNewModel({
+                        ...newModel,
+                        aliases: [...(newModel.aliases || []), newAlias.trim()]
+                      });
+                      setNewAlias('');
+                    }
+                  }}
+                >
+                  <Plus size={16} /> Add
+                </button>
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Product Image</label>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -3556,7 +6468,7 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                     style={{ display: 'none' }}
                     id="model-image-upload"
                   />
-                  <label 
+                  <label
                     htmlFor="model-image-upload"
                     className="btn btn-secondary"
                     style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
@@ -3568,28 +6480,154 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 </div>
               </div>
             </div>
-            
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Filament Usage (grams)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={newModel.filamentUsage}
-                  onChange={e => setNewModel({ ...newModel, filamentUsage: e.target.value })}
-                  placeholder="e.g., 150"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Default Color</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newModel.defaultColor}
-                  onChange={e => setNewModel({ ...newModel, defaultColor: e.target.value })}
-                  placeholder="e.g., White"
-                />
-              </div>
+
+            <div className="form-group">
+              <label className="form-label">3MF File Path</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newModel.file3mfUrl}
+                onChange={e => setNewModel({ ...newModel, file3mfUrl: e.target.value })}
+                placeholder="/Users/you/3DPrinting/Model.3mf"
+              />
+              <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
+                Local file path or server URL
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Default Color</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newModel.defaultColor}
+                onChange={e => setNewModel({ ...newModel, defaultColor: e.target.value })}
+                placeholder="e.g., White"
+              />
+            </div>
+
+            {/* Printer Settings with Plates */}
+            <div className="form-group">
+              <label className="form-label">Printer Settings & Plates</label>
+              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+                Add plates for each printer with their filament usage and print time
+              </p>
+              {printers.map(printer => {
+                const setting = newModel.printerSettings.find(s => s.printerId === printer.id) || {
+                  printerId: printer.id, plates: []
+                };
+                const totals = calculatePrinterTotals(setting);
+                return (
+                  <div key={printer.id} style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                      {setting.plates?.length > 0 && (
+                        <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                          Total: {totals.totalFilament}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Plates list */}
+                    {(setting.plates || []).map((plate, plateIdx) => (
+                      <div key={plateIdx} style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        marginBottom: '8px'
+                      }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={plate.name}
+                            onChange={e => {
+                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'name', e.target.value);
+                              setNewModel({ ...newModel, printerSettings: updated });
+                            }}
+                            placeholder="Plate name"
+                            style={{ width: '120px' }}
+                          />
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.filamentUsage}
+                            onChange={e => {
+                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'filamentUsage', e.target.value);
+                              setNewModel({ ...newModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            style={{ width: '70px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>g</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.printHours}
+                            onChange={e => {
+                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'printHours', e.target.value);
+                              setNewModel({ ...newModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            style={{ width: '50px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>h</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.printMinutes}
+                            onChange={e => {
+                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'printMinutes', e.target.value);
+                              setNewModel({ ...newModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            max="59"
+                            style={{ width: '50px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>m</span>
+                          <button
+                            className="qty-btn"
+                            onClick={() => {
+                              const updated = removePlate(newModel.printerSettings, printer.id, plateIdx);
+                              setNewModel({ ...newModel, printerSettings: updated });
+                            }}
+                            title="Remove plate"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => {
+                        const existing = newModel.printerSettings.find(s => s.printerId === printer.id);
+                        let updated;
+                        if (existing) {
+                          updated = addPlate(newModel.printerSettings, printer.id);
+                        } else {
+                          updated = [...newModel.printerSettings, {
+                            printerId: printer.id,
+                            plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+                          }];
+                        }
+                        setNewModel({ ...newModel, printerSettings: updated });
+                      }}
+                    >
+                      <Plus size={14} /> Add Plate
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="form-group">
@@ -3681,7 +6719,7 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 className="form-input"
                 value={editingModel.variantName || ''}
                 onChange={e => setEditingModel({ ...editingModel, variantName: e.target.value })}
-                placeholder="e.g., Small, Brown, Sage Green"
+                placeholder="e.g., Small, LED Plug-In, Rechargeable"
               />
             </div>
 
@@ -3746,7 +6784,7 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                     style={{ display: 'none' }}
                     id="edit-model-image-upload"
                   />
-                  <label 
+                  <label
                     htmlFor="edit-model-image-upload"
                     className="btn btn-secondary"
                     style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
@@ -3758,26 +6796,230 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
                 </div>
               </div>
             </div>
-            
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Filament Usage (grams)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={editingModel.filamentUsage}
-                  onChange={e => setEditingModel({ ...editingModel, filamentUsage: parseFloat(e.target.value) })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Default Color</label>
+
+            <div className="form-group">
+              <label className="form-label">3MF File Path</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editingModel.file3mfUrl || ''}
+                onChange={e => setEditingModel({ ...editingModel, file3mfUrl: e.target.value })}
+                placeholder="/Users/you/3DPrinting/Model.3mf"
+              />
+              <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
+                Local file path or server URL
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Default Color</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editingModel.defaultColor || ''}
+                onChange={e => setEditingModel({ ...editingModel, defaultColor: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Product Title Aliases</label>
+              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>
+                Add alternate Etsy listing titles that should match to this model
+              </p>
+              {(editingModel.aliases || []).length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {editingModel.aliases.map((alias, idx) => (
+                    <span key={idx} style={{
+                      background: 'rgba(0, 204, 255, 0.15)',
+                      border: '1px solid rgba(0, 204, 255, 0.3)',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {alias}
+                      <button
+                        type="button"
+                        onClick={() => setEditingModel({
+                          ...editingModel,
+                          aliases: editingModel.aliases.filter((_, i) => i !== idx)
+                        })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ff6b6b',
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="text"
                   className="form-input"
-                  value={editingModel.defaultColor || ''}
-                  onChange={e => setEditingModel({ ...editingModel, defaultColor: e.target.value })}
+                  value={newAlias}
+                  onChange={e => setNewAlias(e.target.value)}
+                  placeholder="e.g., Modern Minimalist Incense Holder"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newAlias.trim()) {
+                      e.preventDefault();
+                      setEditingModel({
+                        ...editingModel,
+                        aliases: [...(editingModel.aliases || []), newAlias.trim()]
+                      });
+                      setNewAlias('');
+                    }
+                  }}
+                  style={{ flex: 1 }}
                 />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (newAlias.trim()) {
+                      setEditingModel({
+                        ...editingModel,
+                        aliases: [...(editingModel.aliases || []), newAlias.trim()]
+                      });
+                      setNewAlias('');
+                    }
+                  }}
+                >
+                  <Plus size={16} /> Add
+                </button>
               </div>
+            </div>
+
+            {/* Printer Settings with Plates */}
+            <div className="form-group">
+              <label className="form-label">Printer Settings & Plates</label>
+              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+                Add plates for each printer with their filament usage and print time
+              </p>
+              {printers.map(printer => {
+                const setting = (editingModel.printerSettings || []).find(s => s.printerId === printer.id) || {
+                  printerId: printer.id, plates: []
+                };
+                const totals = calculatePrinterTotals(setting);
+                return (
+                  <div key={printer.id} style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                      {setting.plates?.length > 0 && (
+                        <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                          Total: {totals.totalFilament}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Plates list */}
+                    {(setting.plates || []).map((plate, plateIdx) => (
+                      <div key={plateIdx} style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        marginBottom: '8px'
+                      }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={plate.name || ''}
+                            onChange={e => {
+                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'name', e.target.value);
+                              setEditingModel({ ...editingModel, printerSettings: updated });
+                            }}
+                            placeholder="Plate name"
+                            style={{ width: '120px' }}
+                          />
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.filamentUsage || ''}
+                            onChange={e => {
+                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'filamentUsage', e.target.value);
+                              setEditingModel({ ...editingModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            style={{ width: '70px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>g</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.printHours || ''}
+                            onChange={e => {
+                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'printHours', e.target.value);
+                              setEditingModel({ ...editingModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            style={{ width: '50px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>h</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={plate.printMinutes || ''}
+                            onChange={e => {
+                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'printMinutes', e.target.value);
+                              setEditingModel({ ...editingModel, printerSettings: updated });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            max="59"
+                            style={{ width: '50px' }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>m</span>
+                          <button
+                            className="qty-btn"
+                            onClick={() => {
+                              const updated = removePlate(editingModel.printerSettings || [], printer.id, plateIdx);
+                              setEditingModel({ ...editingModel, printerSettings: updated });
+                            }}
+                            title="Remove plate"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => {
+                        const existing = (editingModel.printerSettings || []).find(s => s.printerId === printer.id);
+                        let updated;
+                        if (existing) {
+                          updated = addPlate(editingModel.printerSettings || [], printer.id);
+                        } else {
+                          updated = [...(editingModel.printerSettings || []), {
+                            printerId: printer.id,
+                            plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+                          }];
+                        }
+                        setEditingModel({ ...editingModel, printerSettings: updated });
+                      }}
+                    >
+                      <Plus size={14} /> Add Plate
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="form-group">
@@ -3845,7 +7087,7 @@ function ModelsTab({ models, stores, externalParts, saveModels, showNotification
 
 // Supplies Tab Component (formerly External Parts)
 function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalParts, saveSupplyCategories, showNotification }) {
-  const [newPart, setNewPart] = useState({ name: '', quantity: '', categoryId: '', reorderAt: '' });
+  const [newPart, setNewPart] = useState({ name: '', quantity: '', categoryId: '', reorderAt: '', costPerUnit: '' });
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategory, setNewCategory] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
@@ -3890,17 +7132,21 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
       showNotification('Please enter supply name and quantity', 'error');
       return;
     }
-    
+
     const memberParts = [...(externalParts[memberId] || [])];
-    const existing = memberParts.findIndex(p => 
+    const existing = memberParts.findIndex(p =>
       p.name.toLowerCase() === newPart.name.toLowerCase()
     );
-    
+
     if (existing >= 0) {
       memberParts[existing].quantity += parseInt(newPart.quantity);
       // Update reorderAt if provided
       if (newPart.reorderAt) {
         memberParts[existing].reorderAt = parseInt(newPart.reorderAt);
+      }
+      // Update costPerUnit if provided
+      if (newPart.costPerUnit) {
+        memberParts[existing].costPerUnit = parseFloat(newPart.costPerUnit);
       }
     } else {
       memberParts.push({
@@ -3908,12 +7154,13 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
         name: newPart.name,
         quantity: parseInt(newPart.quantity),
         categoryId: newPart.categoryId || null,
-        reorderAt: newPart.reorderAt ? parseInt(newPart.reorderAt) : null
+        reorderAt: newPart.reorderAt ? parseInt(newPart.reorderAt) : null,
+        costPerUnit: newPart.costPerUnit ? parseFloat(newPart.costPerUnit) : 0
       });
     }
-    
+
     saveExternalParts({ ...externalParts, [memberId]: memberParts });
-    setNewPart({ name: '', quantity: '', categoryId: newPart.categoryId, reorderAt: '' });
+    setNewPart({ name: '', quantity: '', categoryId: newPart.categoryId, reorderAt: '', costPerUnit: '' });
     showNotification('Supply added successfully');
   };
 
@@ -4049,6 +7296,11 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                                 (reorder at {part.reorderAt})
                               </span>
                             )}
+                            {part.costPerUnit > 0 && (
+                              <span style={{ color: '#00ff88', marginLeft: '8px' }}>
+                                ${part.costPerUnit.toFixed(2)}/unit
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="inventory-item-controls">
@@ -4115,6 +7367,17 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                   value={newPart.reorderAt}
                   onChange={e => setNewPart({ ...newPart, reorderAt: e.target.value })}
                   style={{ flex: 1 }}
+                />
+                <input
+                  type="number"
+                  className="add-item-input"
+                  placeholder="Cost/unit ($)"
+                  title="Cost per unit for profit calculation"
+                  value={newPart.costPerUnit}
+                  onChange={e => setNewPart({ ...newPart, costPerUnit: e.target.value })}
+                  style={{ flex: 1 }}
+                  min="0"
+                  step="0.01"
                 />
                 <button className="btn btn-primary btn-small" onClick={() => addPart(member.id)}>
                   <Plus size={16} /> Add
@@ -4217,8 +7480,6 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
 
 // Restock Tab Component
 function RestockTab({ externalParts, supplyCategories, teamMembers, filaments }) {
-  const FILAMENT_REORDER_THRESHOLD = 250; // grams
-  
   // Collect all supplies that need restocking
   const restockSupplies = [];
   teamMembers.forEach(member => {
@@ -4235,17 +7496,19 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
     });
   });
 
-  // Collect all filaments that need restocking (<=250g and 0 rolls)
+  // Collect all filaments that need restocking (at or below custom threshold and 0 rolls)
   const restockFilaments = [];
   teamMembers.forEach(member => {
     const memberFilaments = filaments[member.id] || [];
     memberFilaments.forEach(fil => {
-      if (fil.amount <= FILAMENT_REORDER_THRESHOLD && (fil.rolls || 0) === 0) {
+      const threshold = fil.reorderAt ?? 250;
+      if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
         restockFilaments.push({
           ...fil,
           type: 'filament',
           memberId: member.id,
-          memberName: member.name
+          memberName: member.name,
+          threshold: threshold
         });
       }
     });
@@ -4359,6 +7622,8 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                         <span style={{ color: '#ff6b6b' }}>{fil.amount.toFixed(0)}g</span> remaining
                         <span style={{ margin: '0 8px' }}>•</span>
                         <span style={{ color: '#888' }}>0 backup rolls</span>
+                        <span style={{ margin: '0 8px' }}>•</span>
+                        <span style={{ color: '#ffc107' }}>Reorder at {fil.threshold}g</span>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -4474,18 +7739,977 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
   );
 }
 
-// Archive Tab Component
-function ArchiveTab({ archivedOrders, teamMembers, models }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  const filteredOrders = archivedOrders.filter(o => 
-    o.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.item.toLowerCase().includes(searchTerm.toLowerCase())
+// Costs Tab Component
+function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, showNotification }) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newPurchase, setNewPurchase] = useState({
+    name: '',
+    category: 'filament',
+    totalCost: '',
+    quantity: '1',
+    supplier: '',
+    purchaseDate: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [editingId, setEditingId] = useState(null);
+
+  // Subscription state
+  const [showSubForm, setShowSubForm] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState(null);
+  const [newSubscription, setNewSubscription] = useState({
+    name: '',
+    price: '',
+    frequency: 'monthly',
+    url: '',
+    notes: ''
+  });
+
+  const frequencies = [
+    { id: 'daily', name: 'Daily', toYearly: 365 },
+    { id: 'weekly', name: 'Weekly', toYearly: 52 },
+    { id: 'monthly', name: 'Monthly', toYearly: 12 },
+    { id: 'quarterly', name: 'Quarterly', toYearly: 4 },
+    { id: 'yearly', name: 'Yearly', toYearly: 1 }
+  ];
+
+  const startEditSubscription = (sub) => {
+    setEditingSubscription(sub);
+    setNewSubscription({
+      name: sub.name,
+      price: sub.price.toString(),
+      frequency: sub.frequency,
+      url: sub.url || '',
+      notes: sub.notes || ''
+    });
+    setShowSubForm(true);
+  };
+
+  const saveSubscription = () => {
+    if (!newSubscription.name || !newSubscription.price) {
+      showNotification('Please fill in name and price', 'error');
+      return;
+    }
+
+    if (editingSubscription) {
+      // Update existing subscription
+      const updated = subscriptions.map(s =>
+        s.id === editingSubscription.id
+          ? {
+              ...s,
+              name: newSubscription.name,
+              price: parseFloat(newSubscription.price),
+              frequency: newSubscription.frequency,
+              url: newSubscription.url,
+              notes: newSubscription.notes
+            }
+          : s
+      );
+      saveSubscriptions(updated);
+      showNotification('Subscription updated');
+    } else {
+      // Add new subscription
+      const subscription = {
+        id: Date.now().toString(),
+        name: newSubscription.name,
+        price: parseFloat(newSubscription.price),
+        frequency: newSubscription.frequency,
+        url: newSubscription.url,
+        notes: newSubscription.notes,
+        createdAt: Date.now()
+      };
+      saveSubscriptions([...subscriptions, subscription]);
+      showNotification('Subscription added');
+    }
+
+    setNewSubscription({ name: '', price: '', frequency: 'monthly', url: '', notes: '' });
+    setEditingSubscription(null);
+    setShowSubForm(false);
+  };
+
+  const closeSubForm = () => {
+    setShowSubForm(false);
+    setEditingSubscription(null);
+    setNewSubscription({ name: '', price: '', frequency: 'monthly', url: '', notes: '' });
+  };
+
+  const deleteSubscription = (id) => {
+    if (confirm('Delete this subscription?')) {
+      saveSubscriptions(subscriptions.filter(s => s.id !== id));
+      showNotification('Subscription deleted');
+    }
+  };
+
+  // Calculate subscription costs in all time periods
+  const yearlySubCost = subscriptions.reduce((sum, sub) => {
+    const freq = frequencies.find(f => f.id === sub.frequency);
+    return sum + (sub.price * (freq?.toYearly || 12));
+  }, 0);
+
+  const monthlySubCost = yearlySubCost / 12;
+  const weeklySubCost = yearlySubCost / 52;
+  const dailySubCost = yearlySubCost / 365;
+
+  const categories = [
+    { id: 'filament', name: 'Filament', color: '#00ff88' },
+    { id: 'parts', name: 'External Parts', color: '#00ccff' },
+    { id: 'packaging', name: 'Packaging', color: '#ff9f43' },
+    { id: 'electronics', name: 'Electronics', color: '#a55eea' },
+    { id: 'hardware', name: 'Hardware', color: '#ff6b6b' },
+    { id: 'shipping', name: 'Shipping Supplies', color: '#ffc107' },
+    { id: 'other', name: 'Other', color: '#888' }
+  ];
+
+  const getCategoryColor = (catId) => {
+    return categories.find(c => c.id === catId)?.color || '#888';
+  };
+
+  const getCategoryName = (catId) => {
+    return categories.find(c => c.id === catId)?.name || catId;
+  };
+
+  const addPurchase = () => {
+    if (!newPurchase.name || !newPurchase.totalCost || !newPurchase.quantity) {
+      showNotification('Please fill in name, total cost, and quantity', 'error');
+      return;
+    }
+
+    const totalCost = parseFloat(newPurchase.totalCost);
+    const quantity = parseInt(newPurchase.quantity);
+    const unitCost = totalCost / quantity;
+
+    const purchase = {
+      id: Date.now().toString(),
+      name: newPurchase.name,
+      category: newPurchase.category,
+      totalCost: totalCost,
+      quantity: quantity,
+      unitCost: unitCost,
+      supplier: newPurchase.supplier,
+      purchaseDate: new Date(newPurchase.purchaseDate).getTime(),
+      notes: newPurchase.notes,
+      createdAt: Date.now()
+    };
+
+    savePurchases([...purchases, purchase]);
+    setNewPurchase({
+      name: '',
+      category: 'filament',
+      totalCost: '',
+      quantity: '1',
+      supplier: '',
+      purchaseDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    });
+    setShowAddForm(false);
+    showNotification('Purchase added successfully');
+  };
+
+  const deletePurchase = (id) => {
+    if (confirm('Delete this purchase record?')) {
+      savePurchases(purchases.filter(p => p.id !== id));
+      showNotification('Purchase deleted');
+    }
+  };
+
+  // Calculate analytics
+  const analytics = {
+    totalSpent: purchases.reduce((sum, p) => sum + p.totalCost, 0),
+    byCategory: categories.map(cat => ({
+      ...cat,
+      total: purchases.filter(p => p.category === cat.id).reduce((sum, p) => sum + p.totalCost, 0),
+      count: purchases.filter(p => p.category === cat.id).length
+    })).filter(c => c.total > 0).sort((a, b) => b.total - a.total),
+    thisMonth: purchases.filter(p => {
+      const purchaseDate = new Date(p.purchaseDate);
+      const now = new Date();
+      return purchaseDate.getMonth() === now.getMonth() && purchaseDate.getFullYear() === now.getFullYear();
+    }).reduce((sum, p) => sum + p.totalCost, 0),
+    lastMonth: purchases.filter(p => {
+      const purchaseDate = new Date(p.purchaseDate);
+      const now = new Date();
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return purchaseDate.getMonth() === lastMonth.getMonth() && purchaseDate.getFullYear() === lastMonth.getFullYear();
+    }).reduce((sum, p) => sum + p.totalCost, 0),
+    avgUnitCosts: categories.map(cat => {
+      const catPurchases = purchases.filter(p => p.category === cat.id);
+      if (catPurchases.length === 0) return null;
+      const avgUnit = catPurchases.reduce((sum, p) => sum + p.unitCost, 0) / catPurchases.length;
+      return { ...cat, avgUnit };
+    }).filter(c => c !== null)
+  };
+
+  // Sort purchases by date (newest first)
+  const sortedPurchases = [...purchases].sort((a, b) => b.purchaseDate - a.purchaseDate);
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="section-title">
+          <DollarSign size={28} /> Cost Tracking
+        </h2>
+        <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+          <Plus size={20} /> Add Purchase
+        </button>
+      </div>
+
+      {/* Analytics Summary */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%)',
+          border: '1px solid rgba(0, 255, 136, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Spent</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${analytics.totalSpent.toFixed(2)}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 204, 255, 0.1) 0%, rgba(0, 204, 255, 0.05) 100%)',
+          border: '1px solid rgba(0, 204, 255, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>This Month</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${analytics.thisMonth.toFixed(2)}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 159, 67, 0.1) 0%, rgba(255, 159, 67, 0.05) 100%)',
+          border: '1px solid rgba(255, 159, 67, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Last Month</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
+            ${analytics.lastMonth.toFixed(2)}
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(165, 94, 234, 0.1) 0%, rgba(165, 94, 234, 0.05) 100%)',
+          border: '1px solid rgba(165, 94, 234, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Purchases</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+            {purchases.length}
+          </div>
+        </div>
+      </div>
+
+      {/* Spending by Category */}
+      {analytics.byCategory.length > 0 && (
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
+            <TrendingUp size={20} style={{ color: '#00ff88' }} />
+            Spending by Category
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {analytics.byCategory.map(cat => {
+              const percentage = (cat.total / analytics.totalSpent) * 100;
+              return (
+                <div key={cat.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '3px',
+                        background: cat.color
+                      }} />
+                      {cat.name}
+                      <span style={{ color: '#666', fontSize: '0.85rem' }}>({cat.count})</span>
+                    </span>
+                    <span style={{ fontWeight: '600', color: cat.color, fontFamily: 'JetBrains Mono, monospace' }}>
+                      ${cat.total.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{
+                    height: '8px',
+                    background: 'rgba(255,255,255,0.1)',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${percentage}%`,
+                      background: cat.color,
+                      borderRadius: '4px',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Subscriptions Section */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '24px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
+            <RefreshCw size={20} style={{ color: '#a55eea' }} />
+            Subscriptions
+            <span style={{
+              fontSize: '0.75rem',
+              background: 'rgba(165, 94, 234, 0.2)',
+              color: '#a55eea',
+              padding: '4px 10px',
+              borderRadius: '12px',
+              marginLeft: '8px'
+            }}>
+              ${monthlySubCost.toFixed(2)}/mo
+            </span>
+          </h3>
+          <button className="btn btn-primary" onClick={() => setShowSubForm(true)} style={{ padding: '8px 16px' }}>
+            <Plus size={16} /> Add
+          </button>
+        </div>
+
+        {subscriptions.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
+            <RefreshCw size={36} style={{ opacity: 0.3, marginBottom: '12px' }} />
+            <p style={{ margin: 0 }}>No subscriptions tracked yet</p>
+            <p style={{ fontSize: '0.85rem', margin: '8px 0 0 0' }}>Add subscriptions to track recurring costs</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {subscriptions.map(sub => {
+              const freq = frequencies.find(f => f.id === sub.frequency);
+              const yearlyAmount = sub.price * (freq?.multiplier || 12);
+              return (
+                <div key={sub.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '14px 16px',
+                  background: 'rgba(165, 94, 234, 0.08)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(165, 94, 234, 0.2)'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600', color: '#fff' }}>{sub.name}</span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        background: 'rgba(165, 94, 234, 0.3)',
+                        color: '#a55eea',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        textTransform: 'capitalize'
+                      }}>
+                        {sub.frequency}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      {sub.url && (
+                        <a
+                          href={sub.url.startsWith('http') ? sub.url : `https://${sub.url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#00ccff', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <ExternalLink size={12} /> Manage
+                        </a>
+                      )}
+                      {sub.notes && <span style={{ color: '#888' }}>{sub.notes}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                        ${sub.price.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                        ${yearlyAmount.toFixed(2)}/yr
+                      </div>
+                    </div>
+                    <button
+                      className="qty-btn"
+                      onClick={() => startEditSubscription(sub)}
+                      title="Edit subscription"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      className="qty-btn"
+                      onClick={() => deleteSubscription(sub.id)}
+                      style={{ color: '#ff6b6b' }}
+                      title="Delete subscription"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Subscriptions Total */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '12px',
+              padding: '16px',
+              background: 'rgba(165, 94, 234, 0.15)',
+              borderRadius: '8px',
+              marginTop: '8px'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Daily</div>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                  ${dailySubCost.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Weekly</div>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                  ${weeklySubCost.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Monthly</div>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                  ${monthlySubCost.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Yearly</div>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                  ${yearlySubCost.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Subscription Form Modal */}
+      {showSubForm && (
+        <div className="modal-overlay" onClick={closeSubForm}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{editingSubscription ? 'Edit Subscription' : 'Add Subscription'}</h2>
+              <button className="modal-close" onClick={closeSubForm}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Service Name *</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., Canva Pro, Etsy Ads"
+                  value={newSubscription.name}
+                  onChange={e => setNewSubscription({ ...newSubscription, name: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Price ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="add-item-input"
+                    placeholder="12.99"
+                    value={newSubscription.price}
+                    onChange={e => setNewSubscription({ ...newSubscription, price: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Frequency</label>
+                  <select
+                    value={newSubscription.frequency}
+                    onChange={e => setNewSubscription({ ...newSubscription, frequency: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '1rem'
+                    }}
+                  >
+                    {frequencies.map(freq => (
+                      <option key={freq.id} value={freq.id}>{freq.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Manage/Cancel URL</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., canva.com/account or link to cancel page"
+                  value={newSubscription.url}
+                  onChange={e => setNewSubscription({ ...newSubscription, url: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Notes</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., Renews on 15th, Annual plan"
+                  value={newSubscription.notes}
+                  onChange={e => setNewSubscription({ ...newSubscription, notes: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <button className="btn btn-primary" onClick={saveSubscription} style={{ width: '100%', padding: '14px' }}>
+                {editingSubscription ? <><Save size={20} /> Save Changes</> : <><Plus size={20} /> Add Subscription</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Purchase Form Modal */}
+      {showAddForm && (
+        <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add Purchase</h2>
+              <button className="modal-close" onClick={() => setShowAddForm(false)}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Item Name *</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., Hatchbox PLA Filament"
+                  value={newPurchase.name}
+                  onChange={e => setNewPurchase({ ...newPurchase, name: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Category *</label>
+                <select
+                  value={newPurchase.category}
+                  onChange={e => setNewPurchase({ ...newPurchase, category: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '1rem'
+                  }}
+                >
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Total Cost ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="add-item-input"
+                    placeholder="29.99"
+                    value={newPurchase.totalCost}
+                    onChange={e => setNewPurchase({ ...newPurchase, totalCost: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Quantity *</label>
+                  <input
+                    type="number"
+                    className="add-item-input"
+                    placeholder="1"
+                    value={newPurchase.quantity}
+                    onChange={e => setNewPurchase({ ...newPurchase, quantity: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+              </div>
+
+              {newPurchase.totalCost && newPurchase.quantity && (
+                <div style={{
+                  background: 'rgba(0, 255, 136, 0.1)',
+                  border: '1px solid rgba(0, 255, 136, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <span style={{ color: '#888', fontSize: '0.85rem' }}>Unit Cost: </span>
+                  <span style={{ color: '#00ff88', fontWeight: '700', fontSize: '1.1rem', fontFamily: 'JetBrains Mono, monospace' }}>
+                    ${(parseFloat(newPurchase.totalCost) / parseInt(newPurchase.quantity || 1)).toFixed(2)}
+                  </span>
+                  <span style={{ color: '#888', fontSize: '0.85rem' }}> per item</span>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Supplier</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  placeholder="e.g., Amazon, MatterHackers"
+                  value={newPurchase.supplier}
+                  onChange={e => setNewPurchase({ ...newPurchase, supplier: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Purchase Date</label>
+                <input
+                  type="date"
+                  className="add-item-input"
+                  value={newPurchase.purchaseDate}
+                  onChange={e => setNewPurchase({ ...newPurchase, purchaseDate: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Notes</label>
+                <textarea
+                  className="add-item-input"
+                  placeholder="Any additional notes..."
+                  value={newPurchase.notes}
+                  onChange={e => setNewPurchase({ ...newPurchase, notes: e.target.value })}
+                  style={{ width: '100%', padding: '12px', minHeight: '80px', resize: 'vertical' }}
+                />
+              </div>
+
+              <button className="btn btn-primary" onClick={addPurchase} style={{ width: '100%', padding: '14px' }}>
+                <Plus size={20} /> Add Purchase
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase History */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        padding: '20px'
+      }}>
+        <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
+          <ShoppingBag size={20} style={{ color: '#00ccff' }} />
+          Purchase History
+        </h3>
+
+        {sortedPurchases.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <DollarSign size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
+            <p>No purchases recorded yet</p>
+            <p style={{ fontSize: '0.85rem' }}>Add your first purchase to start tracking costs</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {sortedPurchases.map(purchase => (
+              <div key={purchase.id} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.7rem',
+                      fontWeight: '600',
+                      background: `${getCategoryColor(purchase.category)}20`,
+                      color: getCategoryColor(purchase.category)
+                    }}>
+                      {getCategoryName(purchase.category)}
+                    </span>
+                    <span style={{ fontWeight: '600', color: '#fff' }}>{purchase.name}</span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#666', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <span>Qty: <span style={{ color: '#00ccff' }}>{purchase.quantity}</span></span>
+                    <span>Unit: <span style={{ color: '#00ff88' }}>${purchase.unitCost.toFixed(2)}</span></span>
+                    {purchase.supplier && <span>From: <span style={{ color: '#888' }}>{purchase.supplier}</span></span>}
+                    <span>{new Date(purchase.purchaseDate).toLocaleDateString()}</span>
+                  </div>
+                  {purchase.notes && (
+                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', fontStyle: 'italic' }}>
+                      {purchase.notes}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+                      ${purchase.totalCost.toFixed(2)}
+                    </div>
+                  </div>
+                  <button
+                    className="qty-btn"
+                    onClick={() => deletePurchase(purchase.id)}
+                    style={{ color: '#ff6b6b' }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
+}
+
+// Archive Tab Component
+function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, teamMembers, models, stores, showNotification }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [storeFilter, setStoreFilter] = useState('all');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pasteInput, setPasteInput] = useState('');
+  const [parsedOrders, setParsedOrders] = useState([]);
+  const [importStoreId, setImportStoreId] = useState(stores[0]?.id || '');
+
+  // Edit order state
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editForm, setEditForm] = useState({
+    item: '',
+    quantity: 1,
+    price: '',
+    color: '',
+    extra: '',
+    shippingCost: '',
+    salesTax: '',
+    storeId: ''
+  });
+
+  // Create a replacement order from an archived order
+  const createReplacementOrder = (archivedOrder) => {
+    const replacementOrder = {
+      id: `repl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      orderId: `REPL-${archivedOrder.orderId}`,
+      item: archivedOrder.item,
+      quantity: archivedOrder.quantity || 1,
+      price: '$0.00', // Replacement is free
+      buyerName: archivedOrder.buyerName || 'Replacement',
+      color: archivedOrder.color || '',
+      extra: archivedOrder.extra || '',
+      status: 'pending',
+      assignedTo: null,
+      storeId: archivedOrder.storeId,
+      isReplacement: true,
+      originalOrderId: archivedOrder.orderId,
+      createdAt: Date.now(),
+      shippingCost: null,
+      salesTax: 0
+    };
+
+    setOrders([...orders, replacementOrder]);
+    showNotification(`Replacement order created for ${archivedOrder.item}`);
+  };
+
+  const startEditOrder = (order) => {
+    setEditingOrder(order);
+    setEditForm({
+      item: order.item || '',
+      quantity: order.quantity || 1,
+      price: order.price || '',
+      color: order.color || '',
+      extra: order.extra || '',
+      shippingCost: order.shippingCost !== null && order.shippingCost !== undefined ? order.shippingCost.toString() : '',
+      salesTax: order.salesTax !== null && order.salesTax !== undefined ? order.salesTax.toString() : '',
+      storeId: order.storeId || stores[0]?.id || ''
+    });
+  };
+
+  const saveEditOrder = () => {
+    if (!editingOrder) return;
+
+    const updated = archivedOrders.map(o =>
+      o.id === editingOrder.id
+        ? {
+            ...o,
+            item: editForm.item,
+            quantity: parseInt(editForm.quantity) || 1,
+            price: editForm.price,
+            color: editForm.color,
+            extra: editForm.extra,
+            shippingCost: editForm.shippingCost ? parseFloat(editForm.shippingCost) : null,
+            salesTax: editForm.salesTax ? parseFloat(editForm.salesTax) : 0,
+            storeId: editForm.storeId
+          }
+        : o
+    );
+
+    saveArchivedOrders(updated);
+    setEditingOrder(null);
+    showNotification('Order updated');
+  };
+
+  const closeEditModal = () => {
+    setEditingOrder(null);
+    setEditForm({
+      item: '',
+      quantity: 1,
+      price: '',
+      color: '',
+      extra: '',
+      shippingCost: '',
+      salesTax: '',
+      storeId: ''
+    });
+  };
+
+  const deleteOrder = (orderId) => {
+    if (confirm('Delete this archived order?')) {
+      saveArchivedOrders(archivedOrders.filter(o => o.id !== orderId));
+      showNotification('Order deleted');
+    }
+  };
+
+  // Color values for parsing (same as main app)
+  const colorValues = [
+    'black', 'white', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown',
+    'gray', 'grey', 'beige', 'navy', 'teal', 'coral', 'mint', 'lavender', 'maroon', 'olive',
+    'cyan', 'magenta', 'gold', 'silver', 'bronze', 'cream', 'ivory', 'charcoal', 'burgundy',
+    'sage', 'forest', 'rose', 'blush', 'mustard', 'rust', 'terracotta', 'slate', 'indigo',
+    'natural', 'walnut', 'oak', 'maple', 'cherry', 'mahogany', 'espresso', 'clear', 'frosted'
+  ];
+
+  // Parse color field to separate color and extra (same logic as main app)
+  const parseColorField = (colorField) => {
+    if (!colorField) return { extractedColor: '', extractedExtra: '' };
+
+    const skipLabels = ['tray color', 'stand color', 'color', 'size', 'style', 'type', 'option', 'not requested'];
+    const parts = colorField.split(',').map(p => p.trim()).filter(p => p);
+
+    let extractedColor = '';
+    const extraParts = [];
+
+    for (const part of parts) {
+      const lowerPart = part.toLowerCase();
+      if (skipLabels.some(label => lowerPart === label || lowerPart.startsWith('not requested'))) continue;
+
+      let isColor = false;
+      if (!extractedColor) {
+        for (const color of colorValues) {
+          if (lowerPart === color || lowerPart.includes(color)) {
+            extractedColor = part;
+            isColor = true;
+            break;
+          }
+        }
+      }
+      if (!isColor) extraParts.push(part);
+    }
+
+    return { extractedColor, extractedExtra: extraParts.join(', ') };
+  };
+
+  // Parse pasted order data (tab-separated: TXN, Product, Qty, Variations, Price, Tax)
+  const parseHistoricalInput = (input) => {
+    if (!input.trim()) {
+      setParsedOrders([]);
+      return;
+    }
+
+    const lines = input.trim().split('\n').map(l => l.trim()).filter(l => l);
+    const orders = [];
+
+    for (const line of lines) {
+      const parts = line.split('\t').map(v => v.trim());
+      if (parts.length >= 2) {
+        const transactionId = parts[0] || '';
+        const product = parts[1] || '';
+        const quantity = parseInt(parts[2]) || 1;
+        const variations = parts[3] || '';
+        const price = parts[4] || '$0.00';
+        // Parse tax - remove $ and parse as float
+        const taxStr = parts[5] || '0';
+        const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+
+        const { extractedColor, extractedExtra } = parseColorField(variations);
+
+        orders.push({
+          transactionId,
+          product,
+          quantity,
+          color: extractedColor,
+          extra: extractedExtra,
+          price,
+          salesTax
+        });
+      }
+    }
+
+    setParsedOrders(orders);
+  };
+
+  // Delete all historical orders
+  const deleteHistoricalOrders = () => {
+    if (window.confirm('Are you sure you want to delete ALL historical imported orders? This cannot be undone.')) {
+      const nonHistorical = archivedOrders.filter(o => !o.isHistorical);
+      saveArchivedOrders(nonHistorical);
+      showNotification('All historical orders deleted');
+    }
+  };
+
+  const filteredOrders = archivedOrders.filter(o => {
+    const matchesSearch =
+      o.orderId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.buyerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.item?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStore = storeFilter === 'all' || o.storeId === storeFilter;
+    return matchesSearch && matchesStore;
+  });
 
   const getMemberName = (id) => teamMembers.find(m => m.id === id)?.name || 'Unknown';
-  
+
   // Find matching model by name
   const findMatchingModel = (order) => {
     return models?.find(m => {
@@ -4495,20 +8719,244 @@ function ArchiveTab({ archivedOrders, teamMembers, models }) {
     });
   };
 
+  // Import historical orders from parsed data
+  const importOrders = () => {
+    if (parsedOrders.length === 0) {
+      showNotification('No orders to import. Paste your order data first.', 'error');
+      return;
+    }
+
+    const newOrders = parsedOrders.map(order => ({
+      id: `hist-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      orderId: order.transactionId || `HIST-${Date.now()}`,
+      item: order.product || 'Unknown Item',
+      quantity: order.quantity || 1,
+      price: order.price || '$0.00',
+      buyerName: 'Historical Import',
+      color: order.color || '',
+      status: 'shipped',
+      archivedAt: Date.now(),
+      isHistorical: true,
+      assignedTo: null,
+      shippingCost: null,
+      storeId: importStoreId,
+      extra: order.extra || '',
+      salesTax: order.salesTax || 0
+    }));
+
+    saveArchivedOrders([...archivedOrders, ...newOrders]);
+    showNotification(`Imported ${newOrders.length} historical orders`);
+    setShowImportModal(false);
+    setPasteInput('');
+    setParsedOrders([]);
+  };
+
+  // Count historical vs regular orders
+  const historicalCount = archivedOrders.filter(o => o.isHistorical).length;
+  const regularCount = archivedOrders.length - historicalCount;
+
   return (
     <>
-      <h2 className="page-title"><Archive size={28} /> Archived Orders</h2>
-      
-      <div className="archive-filters">
+      <div className="section-header">
+        <h2 className="page-title"><Archive size={28} /> Archived Orders</h2>
+        <div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowImportModal(true)}
+          >
+            <Upload size={18} /> Import Historical
+          </button>
+          {historicalCount > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={deleteHistoricalOrders}
+              style={{ marginLeft: '8px', color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' }}
+            >
+              <Trash2 size={18} /> Delete Historical ({historicalCount})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-card">
+          <div className="stat-label">Total Archived</div>
+          <div className="stat-value">{archivedOrders.length}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Regular Orders</div>
+          <div className="stat-value">{regularCount}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Historical Imports</div>
+          <div className="stat-value" style={{ color: '#00ccff' }}>{historicalCount}</div>
+        </div>
+      </div>
+
+      <div className="archive-filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <input
           type="text"
           className="filter-input"
           placeholder="Search orders..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          style={{ flex: 1, maxWidth: '400px' }}
+          style={{ flex: 1, maxWidth: '300px' }}
         />
+        <select
+          className="filter-input"
+          value={storeFilter}
+          onChange={e => setStoreFilter(e.target.value)}
+          style={{ minWidth: '150px' }}
+        >
+          <option value="all">All Stores</option>
+          {stores.map(store => (
+            <option key={store.id} value={store.id}>{store.name}</option>
+          ))}
+        </select>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '85vh', overflow: 'auto' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Import Historical Orders</h2>
+              <button className="modal-close" onClick={() => setShowImportModal(false)}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px' }}>
+              {/* Store Selection */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#00ff88', fontSize: '0.9rem', fontWeight: '600' }}>
+                  <Store size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+                  Import to Store *
+                </label>
+                <select
+                  value={importStoreId}
+                  onChange={e => setImportStoreId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: 'rgba(0, 255, 136, 0.1)',
+                    border: '1px solid rgba(0, 255, 136, 0.3)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '1rem'
+                  }}
+                >
+                  {stores.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Paste Input */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#888' }}>
+                  Paste order data (tab-separated: Transaction ID, Product, Quantity, Variations, Price, Tax)
+                </label>
+                <textarea
+                  value={pasteInput}
+                  onChange={e => {
+                    setPasteInput(e.target.value);
+                    parseHistoricalInput(e.target.value);
+                  }}
+                  placeholder="Paste from Etsy or spreadsheet...&#10;4790820615&#9;Modern Hourglass Wall Sconce&#9;1&#9;Outer Shell Color, Power Type, Blue, Hard-Wired&#9;62.75&#9;4.72"
+                  style={{
+                    width: '100%',
+                    height: '150px',
+                    padding: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Preview */}
+              {parsedOrders.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ marginBottom: '8px', color: '#00ff88' }}>
+                    Preview ({parsedOrders.length} orders found)
+                  </h4>
+                  <div style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '8px',
+                    overflow: 'auto',
+                    maxHeight: '200px'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>TXN ID</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Product</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Qty</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Color</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Extra</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Price</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Tax</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedOrders.slice(0, 5).map((order, idx) => (
+                          <tr key={idx}>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontFamily: 'monospace' }}>{order.transactionId}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.product}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{order.quantity}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00ccff' }}>{order.color || '-'}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#ffc107' }}>{order.extra || '-'}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00ff88' }}>{order.price}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#ff9f43' }}>${order.salesTax?.toFixed(2) || '0.00'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {parsedOrders.length > 5 && (
+                      <div style={{ padding: '8px', color: '#888', fontSize: '0.8rem', textAlign: 'center' }}>
+                        ... and {parsedOrders.length - 5} more orders
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{
+                background: 'rgba(255, 193, 7, 0.1)',
+                border: '1px solid rgba(255, 193, 7, 0.3)',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '20px'
+              }}>
+                <p style={{ color: '#ffc107', fontSize: '0.85rem', margin: 0 }}>
+                  <AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+                  These orders will be imported as historical data and won't appear in active orders.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary" onClick={() => { setShowImportModal(false); setPasteInput(''); setParsedOrders([]); }}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={importOrders}
+                  disabled={parsedOrders.length === 0}
+                  style={{ opacity: parsedOrders.length === 0 ? 0.5 : 1 }}
+                >
+                  <Upload size={16} /> Import {parsedOrders.length} Orders
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {filteredOrders.length === 0 ? (
         <div className="empty-state">
@@ -4520,7 +8968,7 @@ function ArchiveTab({ archivedOrders, teamMembers, models }) {
           {filteredOrders.map(order => {
             const matchingModel = findMatchingModel(order);
             return (
-            <div key={order.orderId} className="order-card" style={{ opacity: 0.8 }}>
+            <div key={order.orderId} className="order-card" style={{ opacity: 0.8, height: 'auto', minHeight: 'fit-content' }}>
               <div style={{ display: 'flex', gap: '12px' }}>
                 {/* Model Image */}
                 {matchingModel?.imageUrl ? (
@@ -4553,16 +9001,27 @@ function ArchiveTab({ archivedOrders, teamMembers, models }) {
                   </div>
                 )}
                 
-                <div style={{ flex: 1 }}>
-                  <div className="order-header">
-                    <div>
-                      <div className="order-id">{order.orderId}</div>
-                      <div className="order-item">{order.item}</div>
-                    </div>
-                    <span className="status-badge status-shipped">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <span className="order-id" style={{ fontSize: '0.75rem' }}>TXN: {order.orderId}</span>
+                    {order.isHistorical && (
+                      <span style={{
+                        fontSize: '0.6rem',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(0, 204, 255, 0.2)',
+                        color: '#00ccff',
+                        border: '1px solid rgba(0, 204, 255, 0.3)',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        HISTORICAL
+                      </span>
+                    )}
+                    <span className="status-badge status-shipped" style={{ marginLeft: 'auto' }}>
                       <Archive size={14} /> Archived
                     </span>
                   </div>
+                  <div className="order-item" style={{ fontSize: '0.9rem', lineHeight: '1.3' }}>{order.item}</div>
                 </div>
               </div>
               <div className="order-details">
@@ -4570,6 +9029,12 @@ function ArchiveTab({ archivedOrders, teamMembers, models }) {
                   <span className="detail-label">Quantity</span>
                   <span className="detail-value">{order.quantity}</span>
                 </div>
+                {order.price && (
+                  <div className="detail-item">
+                    <span className="detail-label">Price</span>
+                    <span className="detail-value" style={{ color: '#00ff88' }}>{order.price}</span>
+                  </div>
+                )}
                 <div className="detail-item">
                   <span className="detail-label">Color</span>
                   <span className="detail-value">{order.color || 'N/A'}</span>
@@ -4580,19 +9045,222 @@ function ArchiveTab({ archivedOrders, teamMembers, models }) {
                     <span className="detail-value">{order.extra}</span>
                   </div>
                 )}
+                {!order.isHistorical && (
+                  <div className="detail-item">
+                    <span className="detail-label">Fulfilled By</span>
+                    <span className="detail-value">{getMemberName(order.assignedTo)}</span>
+                  </div>
+                )}
                 <div className="detail-item">
-                  <span className="detail-label">Fulfilled By</span>
-                  <span className="detail-value">{getMemberName(order.assignedTo)}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Archived</span>
+                  <span className="detail-label">{order.isHistorical ? 'Imported' : 'Archived'}</span>
                   <span className="detail-value">
                     {new Date(order.archivedAt).toLocaleDateString()}
                   </span>
                 </div>
               </div>
+
+              {/* External Parts Required */}
+              {matchingModel?.externalParts?.length > 0 && (
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '6px' }}>
+                    <Box size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                    Required Parts:
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {matchingModel.externalParts.map((part, idx) => (
+                      <span key={idx} style={{
+                        fontSize: '0.7rem',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(0, 204, 255, 0.15)',
+                        color: '#00ccff',
+                        border: '1px solid rgba(0, 204, 255, 0.3)'
+                      }}>
+                        {part.name} x{part.quantity * (order.quantity || 1)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                marginTop: '12px',
+                paddingTop: '12px',
+                borderTop: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <button
+                  className="qty-btn"
+                  onClick={() => createReplacementOrder(order)}
+                  title="Create replacement order"
+                  style={{
+                    flex: 1,
+                    width: 'auto',
+                    height: '32px',
+                    background: 'rgba(255, 159, 67, 0.2)',
+                    border: '1px solid rgba(255, 159, 67, 0.3)',
+                    color: '#ff9f43'
+                  }}
+                >
+                  <RefreshCw size={14} style={{ marginRight: '6px' }} /> Replace
+                </button>
+                <button
+                  className="qty-btn"
+                  onClick={() => startEditOrder(order)}
+                  title="Edit order"
+                  style={{ flex: 1, width: 'auto', height: '32px' }}
+                >
+                  <Edit2 size={14} style={{ marginRight: '6px' }} /> Edit
+                </button>
+                <button
+                  className="qty-btn"
+                  onClick={() => deleteOrder(order.id)}
+                  title="Delete order"
+                  style={{ color: '#ff6b6b' }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           );})}
+        </div>
+      )}
+
+      {/* Edit Order Modal */}
+      {editingOrder && (
+        <div className="modal-overlay" onClick={closeEditModal}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Edit Archived Order</h2>
+              <button className="modal-close" onClick={closeEditModal}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{
+                background: 'rgba(0, 204, 255, 0.1)',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                color: '#00ccff'
+              }}>
+                TXN: {editingOrder.orderId}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Item/Product Name</label>
+                <input
+                  type="text"
+                  className="add-item-input"
+                  value={editForm.item}
+                  onChange={e => setEditForm({ ...editForm, item: e.target.value })}
+                  style={{ width: '100%', padding: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="add-item-input"
+                    value={editForm.quantity}
+                    onChange={e => setEditForm({ ...editForm, quantity: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Price (e.g., $24.99)</label>
+                  <input
+                    type="text"
+                    className="add-item-input"
+                    value={editForm.price}
+                    onChange={e => setEditForm({ ...editForm, price: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Color</label>
+                  <input
+                    type="text"
+                    className="add-item-input"
+                    value={editForm.color}
+                    onChange={e => setEditForm({ ...editForm, color: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Extra/Variations</label>
+                  <input
+                    type="text"
+                    className="add-item-input"
+                    value={editForm.extra}
+                    onChange={e => setEditForm({ ...editForm, extra: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Shipping Cost ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="add-item-input"
+                    placeholder="0.00"
+                    value={editForm.shippingCost}
+                    onChange={e => setEditForm({ ...editForm, shippingCost: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Sales Tax ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="add-item-input"
+                    placeholder="0.00"
+                    value={editForm.salesTax}
+                    onChange={e => setEditForm({ ...editForm, salesTax: e.target.value })}
+                    style={{ width: '100%', padding: '12px' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Store</label>
+                <select
+                  value={editForm.storeId}
+                  onChange={e => setEditForm({ ...editForm, storeId: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '1rem'
+                  }}
+                >
+                  {stores.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button className="btn btn-primary" onClick={saveEditOrder} style={{ width: '100%', padding: '14px' }}>
+                <Save size={20} /> Save Changes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>
@@ -4716,6 +9384,733 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
           </div>
         );
       })}
+    </>
+  );
+}
+
+// Schedule Tab Component
+function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
+  const [selectedMember, setSelectedMember] = useState('all');
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [newStartTime, setNewStartTime] = useState('');
+  const [showQueueOptimizer, setShowQueueOptimizer] = useState(false);
+
+  // Helper to format duration
+  const formatDuration = (minutes) => {
+    if (!minutes) return 'N/A';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  // Helper to format date/time
+  const formatDateTime = (date) => {
+    if (!date) return 'Not scheduled';
+    const d = new Date(date);
+    return d.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Get printer name by id
+  const getPrinterName = (printerId) => {
+    const printer = printers?.find(p => p.id === printerId);
+    return printer?.name || 'Not assigned';
+  };
+
+  // Helper to find model by name or alias
+  const findModelByNameOrAlias = (itemName) => {
+    if (!itemName) return null;
+    const lowerItem = itemName.toLowerCase();
+    return models.find(m => {
+      // Check main name
+      if (m.name.toLowerCase() === lowerItem) return true;
+      if (m.name.toLowerCase().includes(lowerItem) || lowerItem.includes(m.name.toLowerCase())) return true;
+      // Check aliases
+      if (m.aliases && m.aliases.length > 0) {
+        return m.aliases.some(alias => {
+          const lowerAlias = alias.toLowerCase();
+          return lowerAlias === lowerItem ||
+                 lowerAlias.includes(lowerItem) ||
+                 lowerItem.includes(lowerAlias);
+        });
+      }
+      return false;
+    });
+  };
+
+  // Get print duration for an order by matching to model and printer (sums all plates)
+  const getPrintDuration = (order) => {
+    // For extra prints, use the specified time directly
+    if (order.isExtraPrint && order.extraPrintMinutes > 0) {
+      return order.extraPrintMinutes;
+    }
+
+    const model = findModelByNameOrAlias(order.item);
+    if (!model) return null;
+
+    // Look up printer-specific duration, fallback to first printer's settings
+    const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+    if (printerSettings?.plates?.length > 0) {
+      // Sum duration from all plates
+      return printerSettings.plates.reduce((sum, plate) =>
+        sum + ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0), 0);
+    }
+    return null;
+  };
+
+  // Get plates for an order (for detailed schedule display)
+  const getOrderPlates = (order) => {
+    const model = findModelByNameOrAlias(order.item);
+    if (!model) return [];
+    const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+    return printerSettings?.plates || [];
+  };
+
+  // Calculate schedule for a team member
+  const calculateSchedule = (memberId) => {
+    const memberOrders = orders
+      .filter(o => o.assignedTo === memberId && o.status === 'received')
+      .map(o => ({
+        ...o,
+        printDuration: getPrintDuration(o),
+        plates: getOrderPlates(o),
+        scheduledStart: o.scheduledStart ? new Date(o.scheduledStart) : null
+      }))
+      .sort((a, b) => {
+        // Sort by scheduled start if available, otherwise by created date
+        const aTime = a.scheduledStart || new Date(a.createdAt);
+        const bTime = b.scheduledStart || new Date(b.createdAt);
+        return aTime - bTime;
+      });
+
+    // Calculate end times and chain prints together
+    let lastEndTime = null;
+    return memberOrders.map((order, idx) => {
+      let startTime = order.scheduledStart;
+
+      // If no scheduled start, use last end time or now
+      if (!startTime) {
+        startTime = lastEndTime || new Date();
+      } else if (lastEndTime && startTime < lastEndTime) {
+        // If scheduled start is before last end, push it to after last end
+        startTime = lastEndTime;
+      }
+
+      const duration = order.printDuration || 60; // Default 1 hour if no duration
+      const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
+      lastEndTime = endTime;
+
+      return {
+        ...order,
+        calculatedStart: startTime,
+        calculatedEnd: endTime,
+        position: idx
+      };
+    });
+  };
+
+  // Update start time for an order and cascade to future orders
+  const updateStartTime = (orderId, newTime) => {
+    const updatedOrders = orders.map(o => {
+      if (o.id === orderId || o.orderId === orderId) {
+        return { ...o, scheduledStart: newTime };
+      }
+      return o;
+    });
+    setOrders(updatedOrders);
+    setEditingOrderId(null);
+    setNewStartTime('');
+  };
+
+  // Get all scheduled orders grouped by member
+  const getScheduleByMember = () => {
+    const schedule = {};
+    teamMembers.forEach(member => {
+      schedule[member.id] = calculateSchedule(member.id);
+    });
+    return schedule;
+  };
+
+  const scheduleByMember = getScheduleByMember();
+  const displayMembers = selectedMember === 'all'
+    ? teamMembers
+    : teamMembers.filter(m => m.id === selectedMember);
+
+  // Smart Print Queue Optimizer - batch orders by color
+  const getOptimizedQueue = () => {
+    // Get all received orders
+    const receivedOrders = orders.filter(o => o.status === 'received');
+
+    // Group by color
+    const colorGroups = {};
+    receivedOrders.forEach(order => {
+      const color = (order.color || 'Unknown').toLowerCase().trim();
+      if (!colorGroups[color]) {
+        colorGroups[color] = [];
+      }
+      colorGroups[color].push(order);
+    });
+
+    // Sort groups by number of orders (descending) to prioritize batches
+    const sortedGroups = Object.entries(colorGroups)
+      .map(([color, orders]) => ({
+        color,
+        orders,
+        count: orders.length,
+        totalQuantity: orders.reduce((sum, o) => sum + o.quantity, 0)
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Calculate potential time saved
+    const FILAMENT_CHANGE_TIME = 15; // minutes to change filament
+    const currentChanges = receivedOrders.length - 1; // worst case: change every order
+    const optimizedChanges = sortedGroups.length - 1;
+    const timeSaved = (currentChanges - optimizedChanges) * FILAMENT_CHANGE_TIME;
+
+    return {
+      groups: sortedGroups,
+      timeSaved,
+      totalOrders: receivedOrders.length,
+      uniqueColors: sortedGroups.length
+    };
+  };
+
+  const optimizedQueue = getOptimizedQueue();
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="page-title"><Clock size={28} /> Print Schedule</h2>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            className={`btn ${showQueueOptimizer ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setShowQueueOptimizer(!showQueueOptimizer)}
+          >
+            <Zap size={16} /> Queue Optimizer
+          </button>
+          <select
+            className="form-input"
+            value={selectedMember}
+            onChange={e => setSelectedMember(e.target.value)}
+            style={{ width: '200px' }}
+          >
+            <option value="all">All Team Members</option>
+            {teamMembers.map(m => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Smart Print Queue Optimizer Panel */}
+      {showQueueOptimizer && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 204, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%)',
+          border: '1px solid rgba(0, 204, 255, 0.3)',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ color: '#00ccff', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+              <Zap size={24} /> Smart Queue Optimizer
+            </h3>
+            {optimizedQueue.timeSaved > 0 && (
+              <div style={{
+                background: 'rgba(0, 255, 136, 0.2)',
+                border: '1px solid rgba(0, 255, 136, 0.4)',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                color: '#00ff88',
+                fontWeight: '600'
+              }}>
+                Save ~{optimizedQueue.timeSaved} min by batching colors
+              </div>
+            )}
+          </div>
+
+          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '16px' }}>
+            Group {optimizedQueue.totalOrders} orders into {optimizedQueue.uniqueColors} color batches to minimize filament changes.
+          </p>
+
+          {optimizedQueue.groups.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+              No orders in queue to optimize
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {optimizedQueue.groups.map((group, idx) => (
+                <div key={group.color} style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        background: 'rgba(0,204,255,0.2)',
+                        color: '#00ccff',
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600'
+                      }}>
+                        Batch {idx + 1}
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '4px',
+                          background: '#888',
+                          border: '1px solid rgba(255,255,255,0.2)'
+                        }} />
+                        <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{group.color}</span>
+                      </div>
+                    </div>
+                    <span style={{ color: '#888', fontSize: '0.85rem' }}>
+                      {group.count} order{group.count !== 1 ? 's' : ''} • {group.totalQuantity} total items
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {group.orders.map(order => (
+                      <div key={order.orderId} style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <span style={{ color: '#00ff88' }}>#{order.orderId.slice(-4)}</span>
+                        <span style={{ color: '#666' }}>•</span>
+                        <span style={{ color: '#fff', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {order.item?.slice(0, 25)}{order.item?.length > 25 ? '...' : ''}
+                        </span>
+                        <span style={{ color: '#00ccff' }}>x{order.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {displayMembers.map(member => {
+        const memberSchedule = scheduleByMember[member.id] || [];
+
+        return (
+          <div key={member.id} style={{ marginBottom: '2rem' }}>
+            <h3 style={{
+              color: '#00ff88',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <Users size={20} />
+              {member.name}
+              <span style={{
+                fontSize: '0.8rem',
+                color: '#888',
+                fontWeight: 'normal'
+              }}>
+                ({memberSchedule.length} prints queued)
+              </span>
+            </h3>
+
+            {memberSchedule.length === 0 ? (
+              <div style={{
+                padding: '2rem',
+                textAlign: 'center',
+                color: '#666',
+                background: 'rgba(255,255,255,0.02)',
+                borderRadius: '12px',
+                border: '1px dashed rgba(255,255,255,0.1)'
+              }}>
+                No prints scheduled
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {memberSchedule.map((order, idx) => (
+                  <div
+                    key={order.id || order.orderId}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(0,255,136,0.05) 0%, rgba(0,204,255,0.05) 100%)',
+                      border: '1px solid rgba(0,255,136,0.2)',
+                      borderRadius: '12px',
+                      padding: '1rem',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Position indicator */}
+                    <div style={{
+                      position: 'absolute',
+                      left: '-12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#00ff88',
+                      color: '#0a0a0f',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem'
+                    }}>
+                      {idx + 1}
+                    </div>
+
+                    <div style={{ marginLeft: '12px' }}>
+                      {/* Header row */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>
+                            {order.item}
+                            {order.extra && (
+                              <span style={{ color: '#00ccff', marginLeft: '8px', fontWeight: 'normal' }}>
+                                {order.extra}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                            {order.buyerName} • {order.color || 'No color specified'}
+                            {order.quantity > 1 && ` • Qty: ${order.quantity}`}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {order.printerId && (
+                            <div style={{
+                              background: 'rgba(0,204,255,0.1)',
+                              padding: '4px 12px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              color: '#00ccff',
+                              marginBottom: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <Printer size={12} />
+                              {getPrinterName(order.printerId)}
+                            </div>
+                          )}
+                          <div style={{
+                            background: 'rgba(0,255,136,0.1)',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem',
+                            color: '#00ff88'
+                          }}>
+                            {formatDuration(order.printDuration)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Plates breakdown */}
+                      {order.plates?.length > 0 && (
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '6px',
+                          marginBottom: '8px'
+                        }}>
+                          {order.plates.map((plate, pIdx) => {
+                            const plateDuration = ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0);
+                            return (
+                              <span key={pIdx} style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '0.8rem',
+                                color: '#aaa',
+                                border: '1px solid rgba(255,255,255,0.1)'
+                              }}>
+                                {plate.name}: {formatDuration(plateDuration)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Time row */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '8px 12px',
+                        background: 'rgba(0,0,0,0.2)',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ color: '#888' }}>Start:</span>
+                          <span style={{ color: '#00ff88' }}>{formatDateTime(order.calculatedStart)}</span>
+                        </div>
+                        <ChevronRight size={16} style={{ color: '#444' }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ color: '#888' }}>End:</span>
+                          <span style={{ color: '#00ccff' }}>{formatDateTime(order.calculatedEnd)}</span>
+                        </div>
+                      </div>
+
+                      {/* Edit start time */}
+                      {editingOrderId === (order.id || order.orderId) ? (
+                        <div style={{
+                          marginTop: '12px',
+                          display: 'flex',
+                          gap: '8px',
+                          alignItems: 'center'
+                        }}>
+                          <input
+                            type="datetime-local"
+                            className="form-input"
+                            value={newStartTime}
+                            onChange={e => setNewStartTime(e.target.value)}
+                            style={{ flex: 1 }}
+                          />
+                          <button
+                            className="btn btn-primary btn-small"
+                            onClick={() => updateStartTime(order.id || order.orderId, new Date(newStartTime).toISOString())}
+                          >
+                            <Check size={14} /> Save
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => { setEditingOrderId(null); setNewStartTime(''); }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                          {(() => {
+                            const matchedModel = findModelByNameOrAlias(order.item);
+                            if (!matchedModel?.file3mfUrl) return null;
+                            const isUrl = matchedModel.file3mfUrl.startsWith('http');
+                            return (
+                              <button
+                                className="btn btn-primary btn-small"
+                                title={isUrl ? 'Open file' : 'Copy path to clipboard'}
+                                onClick={() => {
+                                  if (isUrl) {
+                                    window.open(matchedModel.file3mfUrl, '_blank');
+                                  } else {
+                                    navigator.clipboard.writeText(matchedModel.file3mfUrl);
+                                    alert('Path copied! Use ⌘+Shift+G in Finder to open.');
+                                  }
+                                }}
+                              >
+                                <Printer size={14} /> {isUrl ? 'Open 3MF' : 'Copy Path'}
+                              </button>
+                            );
+                          })()}
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => {
+                              setEditingOrderId(order.id || order.orderId);
+                              const date = order.calculatedStart || new Date();
+                              setNewStartTime(date.toISOString().slice(0, 16));
+                            }}
+                          >
+                            <Edit2 size={14} /> Adjust Start Time
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// Printers Tab Component
+function PrintersTab({ printers, savePrinters, orders, showNotification }) {
+  const [showAddPrinter, setShowAddPrinter] = useState(false);
+  const [newPrinterName, setNewPrinterName] = useState('');
+  const [editingPrinter, setEditingPrinter] = useState(null);
+
+  const addPrinter = () => {
+    if (!newPrinterName.trim()) {
+      showNotification('Please enter a printer name', 'error');
+      return;
+    }
+
+    const printer = {
+      id: `printer-${Date.now()}`,
+      name: newPrinterName.trim()
+    };
+
+    savePrinters([...printers, printer]);
+    setNewPrinterName('');
+    setShowAddPrinter(false);
+    showNotification('Printer added');
+  };
+
+  const updatePrinterName = (printerId, newName) => {
+    if (!newName.trim()) return;
+    const updated = printers.map(p =>
+      p.id === printerId ? { ...p, name: newName.trim() } : p
+    );
+    savePrinters(updated);
+    setEditingPrinter(null);
+    showNotification('Printer updated');
+  };
+
+  const deletePrinter = (printerId) => {
+    // Check if printer is assigned to any orders
+    const assignedOrders = orders.filter(o => o.printerId === printerId);
+    if (assignedOrders.length > 0) {
+      showNotification(`Cannot delete: ${assignedOrders.length} orders assigned to this printer`, 'error');
+      return;
+    }
+
+    if (printers.length <= 1) {
+      showNotification('Cannot delete the last printer', 'error');
+      return;
+    }
+
+    savePrinters(printers.filter(p => p.id !== printerId));
+    showNotification('Printer deleted');
+  };
+
+  const getOrderCount = (printerId) => {
+    return orders.filter(o => o.printerId === printerId && o.status === 'received').length;
+  };
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="page-title"><Printer size={28} /> Printers</h2>
+        <button className="btn btn-primary" onClick={() => setShowAddPrinter(true)}>
+          <Plus size={18} /> Add Printer
+        </button>
+      </div>
+
+      {printers.length === 0 ? (
+        <div className="empty-state">
+          <Printer />
+          <p>No printers added yet</p>
+          <p style={{ fontSize: '0.85rem' }}>Add your 3D printers to track print times and filament usage per printer</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {printers.map(printer => (
+            <div
+              key={printer.id}
+              style={{
+                background: 'linear-gradient(135deg, rgba(0,255,136,0.05) 0%, rgba(0,204,255,0.05) 100%)',
+                border: '1px solid rgba(0,255,136,0.2)',
+                borderRadius: '12px',
+                padding: '1rem 1.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Printer size={24} style={{ color: '#00ff88' }} />
+                {editingPrinter === printer.id ? (
+                  <input
+                    type="text"
+                    className="form-input"
+                    defaultValue={printer.name}
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') updatePrinterName(printer.id, e.target.value);
+                      if (e.key === 'Escape') setEditingPrinter(null);
+                    }}
+                    onBlur={e => updatePrinterName(printer.id, e.target.value)}
+                    style={{ width: '200px' }}
+                  />
+                ) : (
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>{printer.name}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                      {getOrderCount(printer.id)} active prints
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn-secondary btn-small"
+                  onClick={() => setEditingPrinter(printer.id)}
+                >
+                  <Edit2 size={14} /> Edit
+                </button>
+                <button
+                  className="btn btn-danger btn-small"
+                  onClick={() => deletePrinter(printer.id)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Printer Modal */}
+      {showAddPrinter && (
+        <div className="modal-overlay" onClick={() => setShowAddPrinter(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add New Printer</h2>
+              <button className="modal-close" onClick={() => setShowAddPrinter(false)}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Printer Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newPrinterName}
+                onChange={e => setNewPrinterName(e.target.value)}
+                placeholder="e.g., Bambu X1 Carbon"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && addPrinter()}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowAddPrinter(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={addPrinter}>
+                <Save size={18} /> Add Printer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
