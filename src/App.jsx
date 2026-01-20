@@ -1559,13 +1559,23 @@ export default function EtsyOrderManager() {
         const filamentsObj = {};
         filamentsData.forEach(f => {
           if (!filamentsObj[f.member_id]) filamentsObj[f.member_id] = [];
+          // Handle migration from old structure (rolls count) to new (backupRolls array)
+          let backupRolls = f.backup_rolls || [];
+          // If old rolls count exists but no backupRolls, create placeholder entries
+          if (f.rolls > 0 && (!backupRolls || backupRolls.length === 0)) {
+            backupRolls = Array.from({ length: f.rolls }, (_, i) => ({
+              id: `migrated-${f.id}-${i}`,
+              cost: f.cost_per_roll || 0,
+              addedAt: Date.now()
+            }));
+          }
           filamentsObj[f.member_id].push({
             id: f.id,
             color: f.color,
             colorHex: f.color_hex,
             amount: f.amount,
-            rolls: f.rolls,
-            costPerRoll: f.cost_per_roll || 0,
+            currentRollCost: f.current_roll_cost ?? f.cost_per_roll ?? 0,
+            backupRolls: backupRolls,
             reorderAt: f.reorder_at ?? 250
           });
         });
@@ -1851,8 +1861,10 @@ export default function EtsyOrderManager() {
             color: f.color,
             color_hex: f.colorHex,
             amount: f.amount,
-            rolls: f.rolls,
-            cost_per_roll: f.costPerRoll || 0,
+            current_roll_cost: f.currentRollCost || 0,
+            backup_rolls: f.backupRolls || [],
+            rolls: (f.backupRolls || []).length, // Keep for backwards compatibility
+            cost_per_roll: f.currentRollCost || 0, // Keep for backwards compatibility
             reorder_at: f.reorderAt ?? 250
           });
         });
@@ -2215,8 +2227,10 @@ export default function EtsyOrderManager() {
       memberFilaments.forEach(fil => {
         const filColor = fil.color.toLowerCase();
         if (filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor)) {
-          if (fil.costPerRoll && fil.costPerRoll > 0) {
-            costPerGram = fil.costPerRoll / 1000; // Cost per gram (assuming 1kg rolls)
+          // Use currentRollCost (new structure) or fall back to costPerRoll (old structure)
+          const rollCost = fil.currentRollCost || fil.costPerRoll || 0;
+          if (rollCost > 0) {
+            costPerGram = rollCost / 1000; // Cost per gram (assuming 1kg rolls)
           }
         }
       });
@@ -2815,18 +2829,21 @@ export default function EtsyOrderManager() {
             if (filamentIdx >= 0) {
               const totalUsed = o.extraPrintFilament;
               let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
-              let rolls = memberFilaments[filamentIdx].rolls || 0;
+              let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+              let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
 
-              if (newAmount <= 0 && rolls > 0) {
+              if (newAmount <= 0 && backupRolls.length > 0) {
+                const nextRoll = backupRolls.shift();
+                currentRollCost = nextRoll.cost;
                 newAmount = ROLL_SIZE + newAmount;
-                rolls -= 1;
-                showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}! ${rolls} backup roll${rolls !== 1 ? 's' : ''} remaining.`);
+                showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color} ($${currentRollCost.toFixed(2)})! ${backupRolls.length} backup roll${backupRolls.length !== 1 ? 's' : ''} remaining.`);
               }
 
               memberFilaments[filamentIdx] = {
                 ...memberFilaments[filamentIdx],
                 amount: Math.max(0, newAmount),
-                rolls: rolls
+                backupRolls: backupRolls,
+                currentRollCost: currentRollCost
               };
               saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
 
@@ -2839,7 +2856,8 @@ export default function EtsyOrderManager() {
                   date: Date.now(),
                   orderId: o.orderId,
                   memberId: o.assignedTo,
-                  modelName: o.item
+                  modelName: o.item,
+                  costPerGram: currentRollCost / 1000
                 };
                 setFilamentUsageHistory(prev => [...prev, usageEvent]);
               }
@@ -2865,19 +2883,22 @@ export default function EtsyOrderManager() {
                   sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
                 const totalUsed = filamentUsage * o.quantity;
                 let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
-                let rolls = memberFilaments[filamentIdx].rolls || 0;
+                let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+                let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
 
                 // If amount goes to 0 or below and we have backup rolls, switch to new roll
-                if (newAmount <= 0 && rolls > 0) {
+                if (newAmount <= 0 && backupRolls.length > 0) {
+                  const nextRoll = backupRolls.shift();
+                  currentRollCost = nextRoll.cost;
                   newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll
-                  rolls -= 1;
-                  showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}! ${rolls} backup roll${rolls !== 1 ? 's' : ''} remaining.`);
+                  showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color} ($${currentRollCost.toFixed(2)})! ${backupRolls.length} backup roll${backupRolls.length !== 1 ? 's' : ''} remaining.`);
                 }
 
                 memberFilaments[filamentIdx] = {
                   ...memberFilaments[filamentIdx],
                   amount: Math.max(0, newAmount),
-                  rolls: rolls
+                  backupRolls: backupRolls,
+                  currentRollCost: currentRollCost
                 };
                 saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
 
@@ -4656,12 +4677,13 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                orderColor.includes(filColor);
       });
 
-      if (matchedFilament && matchedFilament.costPerRoll > 0) {
+      const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
+      if (rollCost > 0) {
         // Get filament usage from printer settings or fall back
         const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
         const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
           sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
-        const costPerGram = matchedFilament.costPerRoll / 1000;
+        const costPerGram = rollCost / 1000;
         filamentCost = filamentUsage * costPerGram * order.quantity;
       }
     }
@@ -5518,14 +5540,16 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
 
 // Filament Tab Component
 function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }) {
-  const [newFilament, setNewFilament] = useState({ color: '', amount: '', colorHex: '#ffffff', rolls: '0', costPerRoll: '', reorderAt: '250' });
+  const [newFilament, setNewFilament] = useState({ color: '', amount: '', colorHex: '#ffffff', rollCost: '', reorderAt: '250' });
   const [editingFilament, setEditingFilament] = useState(null);
   const [editingMemberId, setEditingMemberId] = useState(null);
+  const [addingRollTo, setAddingRollTo] = useState(null); // {memberId, filamentId}
+  const [newRollCost, setNewRollCost] = useState('');
   const ROLL_SIZE = 1000; // grams per roll
 
   const needsRestock = (fil) => {
     const threshold = fil.reorderAt ?? 250;
-    return fil.amount <= threshold && (fil.rolls || 0) === 0;
+    return fil.amount <= threshold && (fil.backupRolls || []).length === 0;
   };
 
   const addFilament = (memberId) => {
@@ -5533,35 +5557,44 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
       showNotification('Please enter color and amount', 'error');
       return;
     }
-    
+
     const memberFilaments = [...(filaments[memberId] || [])];
-    const existing = memberFilaments.findIndex(f => 
+    const existing = memberFilaments.findIndex(f =>
       f.color.toLowerCase() === newFilament.color.toLowerCase()
     );
-    
+
     if (existing >= 0) {
-      memberFilaments[existing].amount += parseFloat(newFilament.amount);
-      memberFilaments[existing].rolls = (memberFilaments[existing].rolls || 0) + parseInt(newFilament.rolls || 0);
-      if (newFilament.costPerRoll) {
-        memberFilaments[existing].costPerRoll = parseFloat(newFilament.costPerRoll);
-      }
+      // Adding to existing color - add as a backup roll with cost
+      const cost = parseFloat(newFilament.rollCost) || 0;
+      const backupRolls = [...(memberFilaments[existing].backupRolls || [])];
+      backupRolls.push({
+        id: `roll-${Date.now()}`,
+        cost: cost,
+        addedAt: Date.now()
+      });
+      memberFilaments[existing] = {
+        ...memberFilaments[existing],
+        amount: memberFilaments[existing].amount + parseFloat(newFilament.amount),
+        backupRolls: backupRolls
+      };
       if (newFilament.reorderAt) {
         memberFilaments[existing].reorderAt = parseInt(newFilament.reorderAt);
       }
     } else {
+      // New filament color
       memberFilaments.push({
         id: Date.now().toString(),
         color: newFilament.color,
         colorHex: newFilament.colorHex,
         amount: parseFloat(newFilament.amount),
-        rolls: parseInt(newFilament.rolls || 0),
-        costPerRoll: parseFloat(newFilament.costPerRoll) || 0,
+        currentRollCost: parseFloat(newFilament.rollCost) || 0,
+        backupRolls: [],
         reorderAt: parseInt(newFilament.reorderAt) || 250
       });
     }
 
     saveFilaments({ ...filaments, [memberId]: memberFilaments });
-    setNewFilament({ color: '', amount: '', colorHex: '#ffffff', rolls: '0', costPerRoll: '', reorderAt: '250' });
+    setNewFilament({ color: '', amount: '', colorHex: '#ffffff', rollCost: '', reorderAt: '250' });
     showNotification('Filament added successfully');
   };
 
@@ -5570,47 +5603,59 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
     const idx = memberFilaments.findIndex(f => f.id === filamentId);
     if (idx >= 0) {
       let newAmount = memberFilaments[idx].amount + delta;
-      let rolls = memberFilaments[idx].rolls || 0;
-      
+      let backupRolls = [...(memberFilaments[idx].backupRolls || [])];
+      let currentRollCost = memberFilaments[idx].currentRollCost || 0;
+
       // If amount goes to 0 or below and we have backup rolls, switch to new roll
-      if (newAmount <= 0 && rolls > 0) {
+      if (newAmount <= 0 && backupRolls.length > 0) {
+        const nextRoll = backupRolls.shift(); // Get first backup roll
+        currentRollCost = nextRoll.cost;
         newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll (newAmount is negative or 0)
-        rolls -= 1;
-        showNotification(`Switched to new roll of ${memberFilaments[idx].color}! ${rolls} backup roll${rolls !== 1 ? 's' : ''} remaining.`);
+        showNotification(`Switched to new roll of ${memberFilaments[idx].color} ($${currentRollCost.toFixed(2)})! ${backupRolls.length} backup roll${backupRolls.length !== 1 ? 's' : ''} remaining.`);
       }
-      
+
       memberFilaments[idx] = {
         ...memberFilaments[idx],
         amount: Math.max(0, newAmount),
-        rolls: rolls
+        backupRolls: backupRolls,
+        currentRollCost: currentRollCost
       };
       saveFilaments({ ...filaments, [memberId]: memberFilaments });
     }
   };
 
-  const addRoll = (memberId, filamentId) => {
+  const addRoll = (memberId, filamentId, cost) => {
     const memberFilaments = [...(filaments[memberId] || [])];
     const idx = memberFilaments.findIndex(f => f.id === filamentId);
     if (idx >= 0) {
+      const backupRolls = [...(memberFilaments[idx].backupRolls || [])];
+      backupRolls.push({
+        id: `roll-${Date.now()}`,
+        cost: parseFloat(cost) || 0,
+        addedAt: Date.now()
+      });
       memberFilaments[idx] = {
         ...memberFilaments[idx],
-        rolls: (memberFilaments[idx].rolls || 0) + 1
+        backupRolls: backupRolls
       };
       saveFilaments({ ...filaments, [memberId]: memberFilaments });
-      showNotification('Added 1 backup roll');
+      showNotification(`Added backup roll ($${parseFloat(cost).toFixed(2)})`);
     }
+    setAddingRollTo(null);
+    setNewRollCost('');
   };
 
-  const removeRoll = (memberId, filamentId) => {
+  const removeRoll = (memberId, filamentId, rollId) => {
     const memberFilaments = [...(filaments[memberId] || [])];
     const idx = memberFilaments.findIndex(f => f.id === filamentId);
-    if (idx >= 0 && (memberFilaments[idx].rolls || 0) > 0) {
+    if (idx >= 0) {
+      const backupRolls = (memberFilaments[idx].backupRolls || []).filter(r => r.id !== rollId);
       memberFilaments[idx] = {
         ...memberFilaments[idx],
-        rolls: memberFilaments[idx].rolls - 1
+        backupRolls: backupRolls
       };
       saveFilaments({ ...filaments, [memberId]: memberFilaments });
-      showNotification('Removed 1 backup roll');
+      showNotification('Removed backup roll');
     }
   };
 
@@ -5636,8 +5681,8 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
       memberFilaments[idx] = {
         ...editingFilament,
         amount: parseFloat(editingFilament.amount) || 0,
-        rolls: parseInt(editingFilament.rolls) || 0,
-        costPerRoll: parseFloat(editingFilament.costPerRoll) || 0,
+        currentRollCost: parseFloat(editingFilament.currentRollCost) || 0,
+        backupRolls: editingFilament.backupRolls || [],
         reorderAt: parseInt(editingFilament.reorderAt) || 250
       };
       saveFilaments({ ...filaments, [editingMemberId]: memberFilaments });
@@ -5689,20 +5734,45 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         </div>
                         <div className="inventory-item-meta">
                           {fil.amount.toFixed(0)}g remaining
-                          {(fil.rolls || 0) > 0 && (
-                            <span style={{ color: '#00ccff', marginLeft: '8px' }}>
-                              + {fil.rolls} backup roll{fil.rolls !== 1 ? 's' : ''} ({fil.rolls * ROLL_SIZE}g)
+                          {fil.currentRollCost > 0 && (
+                            <span style={{ color: '#00ff88', marginLeft: '8px' }}>
+                              (${fil.currentRollCost.toFixed(2)} roll)
                             </span>
                           )}
                           <span style={{ color: '#888', marginLeft: '8px' }}>
-                            (reorder at {fil.reorderAt ?? 250}g)
+                            | reorder at {fil.reorderAt ?? 250}g
                           </span>
-                          {fil.costPerRoll > 0 && (
-                            <span style={{ color: '#00ff88', marginLeft: '8px' }}>
-                              ${fil.costPerRoll}/roll
-                            </span>
-                          )}
                         </div>
+                        {(fil.backupRolls || []).length > 0 && (
+                          <div style={{ marginTop: '4px', fontSize: '0.8rem' }}>
+                            <span style={{ color: '#00ccff' }}>
+                              {fil.backupRolls.length} backup roll{fil.backupRolls.length !== 1 ? 's' : ''}:
+                            </span>
+                            <span style={{ color: '#888', marginLeft: '6px' }}>
+                              {fil.backupRolls.map((r, i) => (
+                                <span key={r.id} style={{ marginRight: '8px' }}>
+                                  ${r.cost.toFixed(2)}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeRoll(member.id, fil.id, r.id); }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#ff6b6b',
+                                      cursor: 'pointer',
+                                      padding: '0 2px',
+                                      fontSize: '0.7rem',
+                                      marginLeft: '2px'
+                                    }}
+                                    title="Remove this roll"
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                  {i < fil.backupRolls.length - 1 ? ',' : ''}
+                                </span>
+                              ))}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button className="qty-btn" onClick={() => startEdit(member.id, fil)} title="Edit filament">
@@ -5713,7 +5783,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         </button>
                       </div>
                     </div>
-                    <div className="inventory-item-controls" style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <div className="inventory-item-controls" style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '0.75rem', color: '#888', minWidth: '55px' }}>Amount:</span>
                         <button className="qty-btn" onClick={() => updateAmount(member.id, fil.id, -50)}>
@@ -5725,14 +5795,62 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         </button>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#888', minWidth: '40px' }}>Rolls:</span>
-                        <button className="qty-btn" onClick={() => removeRoll(member.id, fil.id)} disabled={(fil.rolls || 0) === 0}>
-                          <Minus size={14} />
-                        </button>
-                        <span className="qty-value" style={{ minWidth: '30px', textAlign: 'center' }}>{fil.rolls || 0}</span>
-                        <button className="qty-btn" onClick={() => addRoll(member.id, fil.id)}>
-                          <Plus size={14} />
-                        </button>
+                        {addingRollTo?.memberId === member.id && addingRollTo?.filamentId === fil.id ? (
+                          <>
+                            <span style={{ fontSize: '0.75rem', color: '#888' }}>$</span>
+                            <input
+                              type="number"
+                              placeholder="Cost"
+                              value={newRollCost}
+                              onChange={e => setNewRollCost(e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '4px 8px',
+                                background: 'rgba(255,255,255,0.1)',
+                                border: '1px solid rgba(0, 204, 255, 0.4)',
+                                borderRadius: '4px',
+                                color: '#fff',
+                                fontSize: '0.85rem'
+                              }}
+                              autoFocus
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') addRoll(member.id, fil.id, newRollCost);
+                                if (e.key === 'Escape') { setAddingRollTo(null); setNewRollCost(''); }
+                              }}
+                            />
+                            <button
+                              className="qty-btn"
+                              onClick={() => addRoll(member.id, fil.id, newRollCost)}
+                              style={{ background: 'rgba(0, 255, 136, 0.2)' }}
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              className="qty-btn"
+                              onClick={() => { setAddingRollTo(null); setNewRollCost(''); }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setAddingRollTo({ memberId: member.id, filamentId: fil.id })}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '6px 10px',
+                              background: 'rgba(0, 204, 255, 0.15)',
+                              border: '1px solid rgba(0, 204, 255, 0.3)',
+                              borderRadius: '6px',
+                              color: '#00ccff',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            <Plus size={12} /> Add Roll
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5774,7 +5892,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               </div>
 
               {/* Other fields in a grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Amount (grams)</label>
                   <input
@@ -5787,15 +5905,16 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Backup Rolls</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Roll Cost ($)</label>
                   <input
                     type="number"
                     className="add-item-input"
-                    placeholder="e.g., 2"
-                    value={newFilament.rolls}
-                    onChange={e => setNewFilament({ ...newFilament, rolls: e.target.value })}
+                    placeholder="e.g., 22.99"
+                    value={newFilament.rollCost}
+                    onChange={e => setNewFilament({ ...newFilament, rollCost: e.target.value })}
                     style={{ width: '100%', padding: '10px' }}
                     min="0"
+                    step="0.01"
                   />
                 </div>
                 <div>
@@ -5809,19 +5928,6 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                     onChange={e => setNewFilament({ ...newFilament, reorderAt: e.target.value })}
                     style={{ width: '100%', padding: '10px' }}
                     min="0"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Cost/Roll ($)</label>
-                  <input
-                    type="number"
-                    className="add-item-input"
-                    placeholder="e.g., 22.99"
-                    value={newFilament.costPerRoll}
-                    onChange={e => setNewFilament({ ...newFilament, costPerRoll: e.target.value })}
-                    style={{ width: '100%', padding: '10px' }}
-                    min="0"
-                    step="0.01"
                   />
                 </div>
               </div>
@@ -5873,35 +5979,40 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                 onChange={e => setEditingFilament({ ...editingFilament, amount: e.target.value })}
               />
             </div>
-            
-            <div className="form-group">
-              <label className="form-label">Backup Rolls (1000g each)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={editingFilament.rolls || 0}
-                onChange={e => setEditingFilament({ ...editingFilament, rolls: e.target.value })}
-                min="0"
-              />
-            </div>
 
             <div className="form-group">
-              <label className="form-label">Cost Per Roll ($)</label>
+              <label className="form-label">Current Roll Cost ($)</label>
               <input
                 type="number"
                 className="form-input"
-                value={editingFilament.costPerRoll || ''}
-                onChange={e => setEditingFilament({ ...editingFilament, costPerRoll: e.target.value })}
+                value={editingFilament.currentRollCost || ''}
+                onChange={e => setEditingFilament({ ...editingFilament, currentRollCost: e.target.value })}
                 min="0"
                 step="0.01"
-                placeholder="Enter cost per roll"
+                placeholder="Cost of the roll currently in use"
               />
-              {editingFilament.costPerRoll > 0 && (
+              {editingFilament.currentRollCost > 0 && (
                 <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
-                  Cost per gram: ${(editingFilament.costPerRoll / 1000).toFixed(4)}
+                  Cost per gram: ${(editingFilament.currentRollCost / 1000).toFixed(4)}
                 </p>
               )}
             </div>
+
+            {(editingFilament.backupRolls || []).length > 0 && (
+              <div className="form-group">
+                <label className="form-label">Backup Rolls ({editingFilament.backupRolls.length})</label>
+                <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                  {editingFilament.backupRolls.map((r, i) => (
+                    <span key={r.id} style={{ marginRight: '8px' }}>
+                      ${r.cost.toFixed(2)}{i < editingFilament.backupRolls.length - 1 ? ',' : ''}
+                    </span>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+                  Manage backup rolls from the main inventory view
+                </p>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Reorder Threshold (grams)</label>
