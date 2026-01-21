@@ -1246,35 +1246,45 @@ export default function EtsyOrderManager() {
   // Helper function to parse color field
   const parseColorField = (colorField) => {
     const colorValues = ['sage', 'charcoal', 'navy', 'teal', 'cyan', 'magenta', 'beige', 'cream', 'ivory', 'tan', 'maroon', 'burgundy', 'olive', 'lime', 'coral', 'salmon', 'turquoise', 'indigo', 'violet', 'lavender', 'mint', 'peach', 'rose', 'bronze', 'black', 'white', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'gray', 'grey', 'gold', 'silver', 'natural', 'wood', 'clear', 'transparent', 'multicolor', 'rainbow'];
-    const skipLabels = ['color', 'size', 'tray color', 'stand color', 'amount', 'personalization', 'style', 'type', 'quantity', 'power type', 'not requested on this item', 'not requested', 'n/a', 'none'];
-    
+    const skipLabels = ['color', 'size', 'tray color', 'stand color', 'amount', 'personalization', 'style', 'type', 'quantity', 'power type', 'n/a', 'none'];
+
     const parts = colorField.split(',').map(p => p.trim()).filter(p => p);
     let extractedColor = '';
     const extraParts = [];
-    
+
+    console.log('parseColorField input:', colorField);
+    console.log('parseColorField parts:', parts);
+
     for (const part of parts) {
       const lowerPart = part.toLowerCase();
-      
-      if (skipLabels.some(label => lowerPart === label || lowerPart.startsWith('not requested'))) {
+
+      // Skip field labels and "not requested" variations
+      if (skipLabels.some(label => lowerPart === label) ||
+          lowerPart.startsWith('not requested') ||
+          lowerPart === 'not applicable') {
+        console.log('Skipping:', part);
         continue;
       }
-      
+
       let isColor = false;
       if (!extractedColor) {
         for (const color of colorValues) {
           if (lowerPart === color || lowerPart.includes(color)) {
             extractedColor = part;
             isColor = true;
+            console.log('Found color:', part);
             break;
           }
         }
       }
-      
+
       if (!isColor) {
+        console.log('Adding to extra:', part);
         extraParts.push(part);
       }
     }
-    
+
+    console.log('parseColorField result - color:', extractedColor, 'extra:', extraParts);
     return { extractedColor, extractedExtra: extraParts.join(', ') };
   };
 
