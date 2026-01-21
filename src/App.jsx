@@ -1521,6 +1521,7 @@ export default function EtsyOrderManager() {
           extraPrintMinutes: o.extra_print_minutes || 0,
           additionalColors: o.additional_colors || [],
           completedPlates: o.completed_plates || [],
+          buyerMessage: o.buyer_message || '',
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1784,7 +1785,8 @@ export default function EtsyOrderManager() {
           extra_print_filament: o.extraPrintFilament || 0,
           extra_print_minutes: o.extraPrintMinutes || 0,
           additional_colors: o.additionalColors || [],
-          completed_plates: o.completedPlates || []
+          completed_plates: o.completedPlates || [],
+          buyer_message: o.buyerMessage || ''
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -2503,9 +2505,9 @@ export default function EtsyOrderManager() {
       let duplicates = 0;
 
       if (hasTab && firstLineStartsWithTxn) {
-        // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations
+        // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations, Price, Tax, BuyerName, BuyerMessage, Timestamp
         console.log('Format: TAB-separated WITHOUT headers');
-        
+
         for (let i = 0; i < lines.length; i++) {
           const values = lines[i].split('\t').map(v => v.trim());
 
@@ -2517,8 +2519,13 @@ export default function EtsyOrderManager() {
           // Parse tax - remove $ and parse as float
           const taxStr = values[5] || '0';
           const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+          const buyerName = values[6] || 'Unknown';
+          const buyerMessage = values[7] || '';
+          // Parse timestamp - ISO format like 2026-01-20T02:45:34.000Z
+          const timestampStr = values[8] || '';
+          const createdAt = timestampStr ? new Date(timestampStr).getTime() : Date.now();
 
-          console.log(`Row ${i + 1}:`, { transactionId, product: product.substring(0, 40), quantity, colorField, price, salesTax });
+          console.log(`Row ${i + 1}:`, { transactionId, product: product.substring(0, 40), quantity, colorField, price, salesTax, buyerName, timestampStr });
 
           if (!transactionId || !/^\d+$/.test(transactionId)) {
             console.log('Skipping invalid transaction ID');
@@ -2537,7 +2544,7 @@ export default function EtsyOrderManager() {
 
           newOrders.push({
             orderId: transactionId,
-            buyerName: 'Unknown',
+            buyerName: buyerName,
             item: product,
             quantity: quantity,
             color: extractedColor,
@@ -2546,10 +2553,11 @@ export default function EtsyOrderManager() {
             address: '',
             status: 'received',
             assignedTo: null,
-            createdAt: Date.now(),
+            createdAt: createdAt,
             notes: '',
             storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
-            salesTax: salesTax
+            salesTax: salesTax,
+            buyerMessage: buyerMessage
           });
         }
       } else if (hasTab || lines[0]?.includes(',')) {
@@ -2581,6 +2589,9 @@ export default function EtsyOrderManager() {
         const colorIdx = headers.findIndex(h => h.includes('color') || h.includes('variation'));
         const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('total') || h.includes('amount'));
         const taxIdx = headers.findIndex(h => h.includes('tax') || h.includes('sales tax'));
+        const buyerIdx = headers.findIndex(h => h.includes('buyer') || h.includes('customer') || h.includes('name'));
+        const messageIdx = headers.findIndex(h => h.includes('message') || h.includes('note'));
+        const timestampIdx = headers.findIndex(h => h.includes('timestamp') || h.includes('date') || h.includes('time'));
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
@@ -2598,6 +2609,10 @@ export default function EtsyOrderManager() {
           const priceVal = priceIdx >= 0 ? values[priceIdx] : '$0';
           const taxStr = taxIdx >= 0 ? values[taxIdx] : '0';
           const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+          const buyerName = buyerIdx >= 0 ? values[buyerIdx] : 'Unknown';
+          const buyerMessage = messageIdx >= 0 ? values[messageIdx] : '';
+          const timestampStr = timestampIdx >= 0 ? values[timestampIdx] : '';
+          const createdAt = timestampStr ? new Date(timestampStr).getTime() : Date.now();
 
           // Check existing orders, archived orders, AND orders being added in this batch
           if (orders.find(o => o.orderId === transactionId) ||
@@ -2611,7 +2626,7 @@ export default function EtsyOrderManager() {
 
           newOrders.push({
             orderId: transactionId,
-            buyerName: 'Unknown',
+            buyerName: buyerName,
             item: product,
             quantity: quantity,
             color: extractedColor,
@@ -2620,10 +2635,11 @@ export default function EtsyOrderManager() {
             address: '',
             status: 'received',
             assignedTo: null,
-            createdAt: Date.now(),
+            createdAt: createdAt,
             notes: '',
             storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
-            salesTax: salesTax
+            salesTax: salesTax,
+            buyerMessage: buyerMessage
           });
         }
       }
@@ -5168,6 +5184,14 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
 
       <div className="order-details">
         <div className="detail-item">
+          <span className="detail-label">Buyer</span>
+          <span className="detail-value">{order.buyerName || 'Unknown'}</span>
+        </div>
+        <div className="detail-item">
+          <span className="detail-label">Order Date</span>
+          <span className="detail-value">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Unknown'}</span>
+        </div>
+        <div className="detail-item">
           <span className="detail-label">Quantity</span>
           <span className="detail-value">{order.quantity}</span>
         </div>
@@ -5313,6 +5337,24 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           </div>
         )}
       </div>
+
+      {/* Buyer Message */}
+      {order.buyerMessage && (
+        <div style={{
+          marginTop: '12px',
+          padding: '10px',
+          background: 'rgba(255, 193, 7, 0.1)',
+          borderRadius: '8px',
+          border: '1px solid rgba(255, 193, 7, 0.3)'
+        }}>
+          <div style={{ fontSize: '0.7rem', color: '#ffc107', marginBottom: '4px', fontWeight: '600' }}>
+            Message from Buyer
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#e0e0e0', whiteSpace: 'pre-wrap' }}>
+            {order.buyerMessage}
+          </div>
+        </div>
+      )}
 
       {/* Profit Calculator Display */}
       {profitData.hasData && (
