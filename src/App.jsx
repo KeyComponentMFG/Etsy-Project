@@ -1801,8 +1801,7 @@ export default function EtsyOrderManager() {
           completed_plates: o.completedPlates || [],
           plate_colors: o.plateColors || {},
           plate_reprints: o.plateReprints || [],
-          buyer_message: o.buyerMessage || '',
-          assignment_issue: o.assignmentIssue || null
+          buyer_message: o.buyerMessage || ''
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -1948,8 +1947,7 @@ export default function EtsyOrderManager() {
             image_url: m.imageUrl,
             print_duration: m.printDuration,
             printer_settings: m.printerSettings,
-            aliases: m.aliases || [],
-            file_3mf_url: m.file3mfUrl || ''
+            aliases: m.aliases || []
           }));
           const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
           if (upsertError) {
@@ -7275,6 +7273,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     }
 
     // Convert printer settings to proper format with plates and parts
+    console.log('newModel.printerSettings BEFORE transform:', JSON.stringify(newModel.printerSettings, null, 2));
+
     // Keep all plates and parts, just convert values to proper types
     const printerSettings = newModel.printerSettings.map(s => ({
       printerId: s.printerId,
@@ -7288,7 +7288,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
           printMinutes: parseInt(part.printMinutes) || 0
         }))
       }))
-    })).filter(s => s.plates && s.plates.length > 0);
+    }));
 
     console.log('Saving model with printerSettings:', JSON.stringify(printerSettings, null, 2));
 
