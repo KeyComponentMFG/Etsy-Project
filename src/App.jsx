@@ -1520,6 +1520,7 @@ export default function EtsyOrderManager() {
           extraPrintFilament: o.extra_print_filament || 0,
           extraPrintMinutes: o.extra_print_minutes || 0,
           additionalColors: o.additional_colors || [],
+          completedPlates: o.completed_plates || [],
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1782,7 +1783,8 @@ export default function EtsyOrderManager() {
           is_extra_print: o.isExtraPrint || false,
           extra_print_filament: o.extraPrintFilament || 0,
           extra_print_minutes: o.extraPrintMinutes || 0,
-          additional_colors: o.additionalColors || []
+          additional_colors: o.additionalColors || [],
+          completed_plates: o.completedPlates || []
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -2869,54 +2871,61 @@ export default function EtsyOrderManager() {
             // Regular order - look up model for filament usage
             const model = findModelByName(o.item);
             if (model) {
-              // Deduct filament - use printer-specific amount if available
-              const orderColor = (o.color || model.defaultColor || '').toLowerCase().trim();
-              const filamentIdx = memberFilaments.findIndex(f => {
-                const filColor = f.color.toLowerCase().trim();
-                // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
-                return filColor === orderColor ||
-                       filColor.includes(orderColor) ||
-                       orderColor.includes(filColor);
-              });
-              if (filamentIdx >= 0) {
-                // Get printer-specific filament usage from plates, fallback to first printer's settings or 0
-                const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
-                // Sum filament from all plates
-                const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
-                  sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
-                const totalUsed = filamentUsage * o.quantity;
-                let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
-                let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
-                let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
+              // Check if plates were already completed (filament already deducted per-plate)
+              const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
+              const plates = printerSettings?.plates || [];
+              const completedPlates = o.completedPlates || [];
+              const platesWereUsed = plates.length > 0 && completedPlates.length === plates.length;
 
-                // If amount goes to 0 or below and we have backup rolls, switch to new roll
-                if (newAmount <= 0 && backupRolls.length > 0) {
-                  const nextRoll = backupRolls.shift();
-                  currentRollCost = nextRoll.cost;
-                  newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll
-                  showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color} ($${currentRollCost.toFixed(2)})! ${backupRolls.length} backup roll${backupRolls.length !== 1 ? 's' : ''} remaining.`);
-                }
+              // Only deduct main filament if plates weren't used (filament not yet deducted)
+              if (!platesWereUsed) {
+                // Deduct filament - use printer-specific amount if available
+                const orderColor = (o.color || model.defaultColor || '').toLowerCase().trim();
+                const filamentIdx = memberFilaments.findIndex(f => {
+                  const filColor = f.color.toLowerCase().trim();
+                  // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
+                  return filColor === orderColor ||
+                         filColor.includes(orderColor) ||
+                         orderColor.includes(filColor);
+                });
+                if (filamentIdx >= 0) {
+                  // Sum filament from all plates
+                  const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
+                    sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
+                  const totalUsed = filamentUsage * o.quantity;
+                  let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
+                  let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+                  let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
 
-                memberFilaments[filamentIdx] = {
-                  ...memberFilaments[filamentIdx],
-                  amount: Math.max(0, newAmount),
-                  backupRolls: backupRolls,
-                  currentRollCost: currentRollCost
-                };
-                saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
+                  // If amount goes to 0 or below and we have backup rolls, switch to new roll
+                  if (newAmount <= 0 && backupRolls.length > 0) {
+                    const nextRoll = backupRolls.shift();
+                    currentRollCost = nextRoll.cost;
+                    newAmount = ROLL_SIZE + newAmount; // Add remaining to new roll
+                    showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color} ($${currentRollCost.toFixed(2)})! ${backupRolls.length} backup roll${backupRolls.length !== 1 ? 's' : ''} remaining.`);
+                  }
 
-                // Record usage history for analytics
-                if (totalUsed > 0) {
-                  const usageEvent = {
-                    id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    color: memberFilaments[filamentIdx].color,
-                    amount: totalUsed,
-                    date: Date.now(),
-                    orderId: o.orderId,
-                    memberId: o.assignedTo,
-                    modelName: model.name
+                  memberFilaments[filamentIdx] = {
+                    ...memberFilaments[filamentIdx],
+                    amount: Math.max(0, newAmount),
+                    backupRolls: backupRolls,
+                    currentRollCost: currentRollCost
                   };
-                  setFilamentUsageHistory(prev => [...prev, usageEvent]);
+                  saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
+
+                  // Record usage history for analytics
+                  if (totalUsed > 0) {
+                    const usageEvent = {
+                      id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      color: memberFilaments[filamentIdx].color,
+                      amount: totalUsed,
+                      date: Date.now(),
+                      orderId: o.orderId,
+                      memberId: o.assignedTo,
+                      modelName: model.name
+                    };
+                    setFilamentUsageHistory(prev => [...prev, usageEvent]);
+                  }
                 }
               }
 
@@ -2992,6 +3001,97 @@ export default function EtsyOrderManager() {
       return o;
     });
     saveOrders(updated);
+  };
+
+  // Toggle plate completion and deduct/add filament
+  const togglePlateComplete = (orderId, plateIndex, model) => {
+    const ROLL_SIZE = 1000;
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order || !order.assignedTo) return;
+
+    const completedPlates = order.completedPlates || [];
+    const isCompleting = !completedPlates.includes(plateIndex);
+
+    // Get the plate's filament usage
+    const printerSettings = model?.printerSettings?.find(ps => ps.printerId === order.printerId) || model?.printerSettings?.[0];
+    const plate = printerSettings?.plates?.[plateIndex];
+    if (!plate) return;
+
+    const plateFilament = (parseFloat(plate.filamentUsage) || 0) * order.quantity;
+
+    // Handle filament deduction/addition
+    if (plateFilament > 0) {
+      const memberFilaments = [...(filaments[order.assignedTo] || [])];
+      const orderColor = (order.color || model?.defaultColor || '').toLowerCase().trim();
+      const filamentIdx = memberFilaments.findIndex(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === orderColor ||
+               filColor.includes(orderColor) ||
+               orderColor.includes(filColor);
+      });
+
+      if (filamentIdx >= 0) {
+        let newAmount = memberFilaments[filamentIdx].amount;
+        let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+        let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
+
+        if (isCompleting) {
+          // Deduct filament when completing plate
+          newAmount -= plateFilament;
+          if (newAmount <= 0 && backupRolls.length > 0) {
+            const nextRoll = backupRolls.shift();
+            currentRollCost = nextRoll.cost;
+            newAmount = ROLL_SIZE + newAmount;
+            showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}!`);
+          }
+
+          // Record usage history
+          const usageEvent = {
+            id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            color: memberFilaments[filamentIdx].color,
+            amount: plateFilament,
+            date: Date.now(),
+            orderId: order.orderId,
+            memberId: order.assignedTo,
+            modelName: model?.name || order.item,
+            plateName: plate.name
+          };
+          setFilamentUsageHistory(prev => [...prev, usageEvent]);
+        } else {
+          // Add filament back when uncompleting plate
+          newAmount += plateFilament;
+        }
+
+        memberFilaments[filamentIdx] = {
+          ...memberFilaments[filamentIdx],
+          amount: Math.max(0, newAmount),
+          backupRolls: backupRolls,
+          currentRollCost: currentRollCost
+        };
+        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+      }
+    }
+
+    // Update order's completedPlates array
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        let newCompletedPlates;
+        if (isCompleting) {
+          newCompletedPlates = [...completedPlates, plateIndex];
+        } else {
+          newCompletedPlates = completedPlates.filter(idx => idx !== plateIndex);
+        }
+        return { ...o, completedPlates: newCompletedPlates };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    const plateName = plate.name || `Plate ${plateIndex + 1}`;
+    showNotification(isCompleting
+      ? `${plateName} completed! (${plateFilament}g deducted)`
+      : `${plateName} uncompleted (${plateFilament}g added back)`
+    );
   };
 
   // Reassign order
@@ -4610,6 +4710,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
+                  togglePlateComplete={togglePlateComplete}
                 />
               ))
             )}
@@ -4643,6 +4744,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
+                  togglePlateComplete={togglePlateComplete}
                 />
               ))
             )}
@@ -4654,7 +4756,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder, togglePlateComplete }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -5244,6 +5346,83 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
         </div>
       )}
 
+      {/* Plate Completion Tracker */}
+      {(() => {
+        const printerSettings = matchingModel?.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel?.printerSettings?.[0];
+        const plates = printerSettings?.plates || [];
+        if (plates.length === 0 || order.status !== 'received') return null;
+
+        const completedPlates = order.completedPlates || [];
+        const completedCount = completedPlates.length;
+        const totalPlates = plates.length;
+        const allPlatesComplete = completedCount === totalPlates;
+
+        return (
+          <div style={{
+            marginTop: '12px',
+            padding: '10px',
+            background: allPlatesComplete ? 'rgba(0, 255, 136, 0.1)' : 'rgba(0, 204, 255, 0.1)',
+            borderRadius: '8px',
+            border: `1px solid ${allPlatesComplete ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 204, 255, 0.3)'}`
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                <Printer size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                Plates
+              </span>
+              <span style={{
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                color: allPlatesComplete ? '#00ff88' : '#00ccff'
+              }}>
+                {completedCount}/{totalPlates} complete
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {plates.map((plate, idx) => {
+                const isComplete = completedPlates.includes(idx);
+                const plateFilament = (parseFloat(plate.filamentUsage) || 0) * order.quantity;
+                const plateTime = `${plate.printHours || 0}h ${plate.printMinutes || 0}m`;
+                return (
+                  <label
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 8px',
+                      background: isComplete ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isComplete}
+                      onChange={() => togglePlateComplete(order.orderId, idx, matchingModel)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{
+                      flex: 1,
+                      fontSize: '0.8rem',
+                      color: isComplete ? '#00ff88' : '#e0e0e0',
+                      textDecoration: isComplete ? 'line-through' : 'none'
+                    }}>
+                      {plate.name || `Plate ${idx + 1}`}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                      {plateFilament}g • {plateTime}
+                    </span>
+                    {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="order-actions" style={{ marginTop: 'auto' }}>
         {/* Open 3MF Button */}
         {matchingModel?.file3mfUrl && (
@@ -5288,14 +5467,25 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           ))}
         </select>
         
-        {order.status === 'received' && (
-          <button
-            className="btn btn-secondary btn-small"
-            onClick={() => updateOrderStatus(order.orderId, 'fulfilled')}
-          >
-            <Check size={16} /> Mark Fulfilled
-          </button>
-        )}
+        {order.status === 'received' && (() => {
+          const printerSettings = matchingModel?.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel?.printerSettings?.[0];
+          const plates = printerSettings?.plates || [];
+          const hasPlates = plates.length > 0;
+          const completedPlates = order.completedPlates || [];
+          const allPlatesComplete = !hasPlates || completedPlates.length === plates.length;
+
+          return (
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={() => updateOrderStatus(order.orderId, 'fulfilled')}
+              disabled={!allPlatesComplete}
+              title={!allPlatesComplete ? `Complete all ${plates.length} plates to fulfill` : ''}
+              style={!allPlatesComplete ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            >
+              <Check size={16} /> {!allPlatesComplete ? `${completedPlates.length}/${plates.length} Plates` : 'Mark Fulfilled'}
+            </button>
+          );
+        })()}
         {order.status === 'fulfilled' && (
           <button
             className="btn btn-primary btn-small"
