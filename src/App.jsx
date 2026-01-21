@@ -7197,15 +7197,19 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
       return;
     }
 
-    // Convert printer settings to proper format with plates
+    // Convert printer settings to proper format with plates and parts
     const printerSettings = newModel.printerSettings.map(s => ({
       printerId: s.printerId,
       plates: (s.plates || []).map(plate => ({
         name: plate.name || 'Plate',
-        filamentUsage: parseFloat(plate.filamentUsage) || 0,
-        printHours: parseInt(plate.printHours) || 0,
-        printMinutes: parseInt(plate.printMinutes) || 0
-      })).filter(plate => plate.filamentUsage > 0 || plate.printHours > 0 || plate.printMinutes > 0)
+        isMultiColor: plate.isMultiColor || false,
+        parts: (plate.parts || []).map(part => ({
+          name: part.name || 'Part',
+          filamentUsage: parseFloat(part.filamentUsage) || 0,
+          printHours: parseInt(part.printHours) || 0,
+          printMinutes: parseInt(part.printMinutes) || 0
+        })).filter(part => part.filamentUsage > 0 || part.printHours > 0 || part.printMinutes > 0)
+      })).filter(plate => plate.parts && plate.parts.length > 0)
     })).filter(s => s.plates && s.plates.length > 0);
 
     const model = {
