@@ -3288,13 +3288,17 @@ export default function EtsyOrderManager() {
     const plate = printerSettings?.plates?.[plateIndex];
     if (!plate) return;
 
-    const plateFilament = (parseFloat(plate.filamentUsage) || 0) * order.quantity;
-    const isMultiColor = plate.isMultiColor;
+    // Calculate total filament from all parts in the plate
+    const plateFilament = (plate.parts || []).reduce((sum, part) =>
+      sum + (parseFloat(part.filamentUsage) || 0), 0) * order.quantity;
+
+    // Check if any part in the plate is multi-color
+    const hasMultiColorPart = (plate.parts || []).some(part => part.isMultiColor);
 
     // Determine which color to use for filament deduction
-    // For multi-color plates, use selectedColor; otherwise use order color
+    // For plates with multi-color parts, use selectedColor; otherwise use order color
     let colorToUse;
-    if (isMultiColor) {
+    if (hasMultiColorPart) {
       if (isCompleting) {
         colorToUse = selectedColor;
       } else {
@@ -5977,7 +5981,8 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 const plateTotals = getPlateTotals(plate);
                 const plateFilament = plateTotals.totalFilament * order.quantity;
                 const plateTime = `${Math.floor(plateTotals.totalMinutes / 60)}h ${plateTotals.totalMinutes % 60}m`;
-                const isMultiColor = plate.isMultiColor;
+                // Check if any part in this plate is multi-color
+                const hasMultiColorPart = (plate.parts || []).some(part => part.isMultiColor);
                 const completedColor = plateColors[idx];
                 const hasParts = (plate.parts?.length || 0) > 0;
                 const plateReprintsForThis = plateReprints.filter(r => r.plateIndex === idx);
@@ -5992,16 +5997,16 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         padding: '6px 8px',
                         background: isComplete
                           ? 'rgba(0, 255, 136, 0.15)'
-                          : isMultiColor
+                          : hasMultiColorPart
                             ? 'rgba(165, 94, 234, 0.1)'
                             : 'rgba(255, 255, 255, 0.05)',
                         borderRadius: '6px',
-                        border: isMultiColor && !isComplete ? '1px solid rgba(165, 94, 234, 0.3)' : 'none',
+                        border: hasMultiColorPart && !isComplete ? '1px solid rgba(165, 94, 234, 0.3)' : 'none',
                         transition: 'all 0.2s ease'
                       }}
                     >
-                      {isMultiColor ? (
-                        // Multi-color plate: show dropdown to select color
+                      {hasMultiColorPart ? (
+                        // Plate has multi-color part(s): show dropdown to select color
                         isComplete ? (
                           <>
                             <input
@@ -7455,7 +7460,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               const partNum = (plate.parts?.length || 0) + 1;
               return {
                 ...plate,
-                parts: [...(plate.parts || []), { name: `Part ${partNum}`, filamentUsage: '', printHours: '0', printMinutes: '' }]
+                parts: [...(plate.parts || []), { name: `Part ${partNum}`, filamentUsage: '', printHours: '0', printMinutes: '', isMultiColor: false }]
               };
             }
             return plate;
@@ -8096,11 +8101,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       const plateTotals = calculatePlateTotals(plate);
                       return (
                         <div key={plateIdx} style={{
-                          background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                          background: 'rgba(0,0,0,0.2)',
                           padding: '12px',
                           borderRadius: '6px',
                           marginBottom: '10px',
-                          border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : '1px solid rgba(255,255,255,0.05)'
+                          border: '1px solid rgba(255,255,255,0.05)'
                         }}>
                           {/* Plate header */}
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
@@ -8121,30 +8126,6 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
-                            {/* Multi-Color Toggle */}
-                            <label style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              cursor: 'pointer',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
-                              border: `1px solid ${plate.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
-                              fontSize: '0.7rem',
-                              color: plate.isMultiColor ? '#a55eea' : '#888'
-                            }} title="When enabled, you'll choose the color when completing this plate">
-                              <input
-                                type="checkbox"
-                                checked={plate.isMultiColor || false}
-                                onChange={e => {
-                                  const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'isMultiColor', e.target.checked);
-                                  setNewModel({ ...newModel, printerSettings: updated });
-                                }}
-                                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
-                              />
-                              Multi
-                            </label>
                             <button
                               className="qty-btn"
                               onClick={() => {
@@ -8168,7 +8149,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 gap: '8px',
                                 alignItems: 'center',
                                 marginBottom: '8px',
-                                flexWrap: 'wrap'
+                                flexWrap: 'wrap',
+                                background: part.isMultiColor ? 'rgba(165, 94, 234, 0.1)' : 'transparent',
+                                padding: part.isMultiColor ? '6px 8px' : '0',
+                                borderRadius: '6px',
+                                border: part.isMultiColor ? '1px solid rgba(165, 94, 234, 0.2)' : 'none'
                               }}>
                                 <input
                                   type="text"
@@ -8220,6 +8205,29 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
+                                  border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                                  fontSize: '0.7rem',
+                                  color: part.isMultiColor ? '#a55eea' : '#888'
+                                }} title="When enabled, you'll choose the color when completing this part">
+                                  <input
+                                    type="checkbox"
+                                    checked={part.isMultiColor || false}
+                                    onChange={e => {
+                                      const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'isMultiColor', e.target.checked);
+                                      setNewModel({ ...newModel, printerSettings: updated });
+                                    }}
+                                    style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                                  />
+                                  Multi
+                                </label>
                                 <button
                                   className="qty-btn"
                                   onClick={() => {
@@ -8572,11 +8580,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       const plateTotals = calculatePlateTotals(plate);
                       return (
                         <div key={plateIdx} style={{
-                          background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                          background: 'rgba(0,0,0,0.2)',
                           padding: '12px',
                           borderRadius: '6px',
                           marginBottom: '10px',
-                          border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : '1px solid rgba(255,255,255,0.05)'
+                          border: '1px solid rgba(255,255,255,0.05)'
                         }}>
                           {/* Plate header */}
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
@@ -8597,30 +8605,6 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
-                            {/* Multi-Color Toggle */}
-                            <label style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              cursor: 'pointer',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
-                              border: `1px solid ${plate.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
-                              fontSize: '0.7rem',
-                              color: plate.isMultiColor ? '#a55eea' : '#888'
-                            }} title="When enabled, you'll choose the color when completing this plate">
-                              <input
-                                type="checkbox"
-                                checked={plate.isMultiColor || false}
-                                onChange={e => {
-                                  const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'isMultiColor', e.target.checked);
-                                  setEditingModel({ ...editingModel, printerSettings: updated });
-                                }}
-                                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
-                              />
-                              Multi
-                            </label>
                             <button
                               className="qty-btn"
                               onClick={() => {
@@ -8644,7 +8628,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 gap: '8px',
                                 alignItems: 'center',
                                 marginBottom: '8px',
-                                flexWrap: 'wrap'
+                                flexWrap: 'wrap',
+                                background: part.isMultiColor ? 'rgba(165, 94, 234, 0.1)' : 'transparent',
+                                padding: part.isMultiColor ? '6px 8px' : '0',
+                                borderRadius: '6px',
+                                border: part.isMultiColor ? '1px solid rgba(165, 94, 234, 0.2)' : 'none'
                               }}>
                                 <input
                                   type="text"
@@ -8696,6 +8684,29 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
+                                  border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                                  fontSize: '0.7rem',
+                                  color: part.isMultiColor ? '#a55eea' : '#888'
+                                }} title="When enabled, you'll choose the color when completing this part">
+                                  <input
+                                    type="checkbox"
+                                    checked={part.isMultiColor || false}
+                                    onChange={e => {
+                                      const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'isMultiColor', e.target.checked);
+                                      setEditingModel({ ...editingModel, printerSettings: updated });
+                                    }}
+                                    style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                                  />
+                                  Multi
+                                </label>
                                 <button
                                   className="qty-btn"
                                   onClick={() => {
