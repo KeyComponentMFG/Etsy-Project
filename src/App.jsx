@@ -5065,6 +5065,40 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
             </div>
           )}
         </div>
+
+        {/* Delete All Orders Button */}
+        <button
+          onClick={() => {
+            const activeOrders = orders.filter(o => o.status !== 'shipped' && o.status !== 'received');
+            if (activeOrders.length === 0) {
+              showNotification('No orders to delete', 'error');
+              return;
+            }
+            if (confirm(`Are you sure you want to delete ALL ${activeOrders.length} orders from the queue?\n\nThis action cannot be undone!`)) {
+              // Keep only shipped/received orders (already completed)
+              const completedOrders = orders.filter(o => o.status === 'shipped' || o.status === 'received');
+              setOrders(completedOrders);
+              showNotification(`Deleted ${activeOrders.length} orders from queue`);
+            }
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            background: 'rgba(255, 71, 87, 0.1)',
+            border: '1px solid rgba(255, 71, 87, 0.4)',
+            borderRadius: '8px',
+            color: '#ff4757',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontWeight: '500',
+            marginLeft: 'auto'
+          }}
+        >
+          <Trash2 size={16} />
+          Clear Queue
+        </button>
       </div>
       
       <div className="stats-grid">
