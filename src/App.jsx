@@ -7463,8 +7463,24 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
   const [renamingFolder, setRenamingFolder] = useState(null);
   const [renameFolderValue, setRenameFolderValue] = useState('');
 
-  // Get unique folders from all models, always include 'Uncategorized'
-  const allFolders = ['Uncategorized', ...new Set(models.map(m => m.folder).filter(f => f && f !== 'Uncategorized'))].sort((a, b) => {
+  // Persist custom folders to localStorage
+  const [customFolders, setCustomFolders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('modelFolders');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Save custom folders to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('modelFolders', JSON.stringify(customFolders));
+  }, [customFolders]);
+
+  // Get unique folders: combine custom folders + folders from models, always include 'Uncategorized'
+  const modelFolders = models.map(m => m.folder).filter(f => f && f !== 'Uncategorized');
+  const allFolders = ['Uncategorized', ...new Set([...customFolders, ...modelFolders])].sort((a, b) => {
     if (a === 'Uncategorized') return 1;
     if (b === 'Uncategorized') return -1;
     return a.localeCompare(b);
@@ -7478,12 +7494,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     return acc;
   }, {});
 
-  // Sort folder keys
-  const sortedFolders = Object.keys(groupedModels).sort((a, b) => {
-    if (a === 'Uncategorized') return 1;
-    if (b === 'Uncategorized') return -1;
-    return a.localeCompare(b);
-  });
+  // Sort all folders (including empty ones)
+  const sortedFolders = allFolders;
 
   const toggleModelExpanded = (modelId) => {
     setExpandedModels(prev => ({ ...prev, [modelId]: !prev[modelId] }));
@@ -7509,35 +7521,40 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
   const createFolder = () => {
     if (!newFolderName.trim()) return;
-    if (allFolders.includes(newFolderName.trim())) {
+    const folderName = newFolderName.trim();
+    if (allFolders.includes(folderName)) {
       showNotification('Folder already exists', 'error');
       return;
     }
-    // Create an empty placeholder - folder will exist once a model is assigned to it
-    // For now, just set the newModel's folder to this new folder
-    setNewModel(prev => ({ ...prev, folder: newFolderName.trim() }));
+    // Add to custom folders list (persisted to localStorage)
+    setCustomFolders(prev => [...prev, folderName]);
     setNewFolderName('');
     setShowFolderInput(false);
-    showNotification(`Folder "${newFolderName.trim()}" created. Assign models to it.`);
+    showNotification(`Folder "${folderName}" created`);
   };
 
   const renameFolder = (oldName, newName) => {
     if (!newName.trim() || oldName === 'Uncategorized') return;
-    if (allFolders.includes(newName.trim()) && newName.trim() !== oldName) {
+    const trimmedNew = newName.trim();
+    if (allFolders.includes(trimmedNew) && trimmedNew !== oldName) {
       showNotification('Folder name already exists', 'error');
       return;
     }
+    // Update custom folders list
+    setCustomFolders(prev => prev.map(f => f === oldName ? trimmedNew : f));
     // Update all models in this folder
     const updated = models.map(m =>
-      m.folder === oldName ? { ...m, folder: newName.trim() } : m
+      m.folder === oldName ? { ...m, folder: trimmedNew } : m
     );
     saveModels(updated);
     setRenamingFolder(null);
-    showNotification(`Folder renamed to "${newName.trim()}"`);
+    showNotification(`Folder renamed to "${trimmedNew}"`);
   };
 
   const deleteFolder = (folderName) => {
     if (folderName === 'Uncategorized') return;
+    // Remove from custom folders list
+    setCustomFolders(prev => prev.filter(f => f !== folderName));
     // Move all models in this folder to Uncategorized
     const updated = models.map(m =>
       m.folder === folderName ? { ...m, folder: 'Uncategorized' } : m
