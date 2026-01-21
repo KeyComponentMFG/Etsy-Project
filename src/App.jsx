@@ -4058,6 +4058,7 @@ export default function EtsyOrderManager() {
               reassignOrder={reassignOrder}
               showNotification={showNotification}
               saveFilaments={saveFilaments}
+              togglePlateComplete={togglePlateComplete}
             />
           )}
 
@@ -4353,7 +4354,7 @@ export default function EtsyOrderManager() {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments, togglePlateComplete }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
   const [extraPrint, setExtraPrint] = useState({
