@@ -1241,6 +1241,7 @@ export default function EtsyOrderManager() {
   const [modelsLoadedSuccessfully, setModelsLoadedSuccessfully] = useState(false);
   const [purchases, setPurchases] = useState([]);
   const [filamentUsageHistory, setFilamentUsageHistory] = useState([]);
+  const [fulfillmentPartPrompt, setFulfillmentPartPrompt] = useState(null); // {orderId, modelName, availableParts}
   const [subscriptions, setSubscriptions] = useState([]);
 
   // Helper function to parse color field
@@ -1535,6 +1536,7 @@ export default function EtsyOrderManager() {
           plateReprints: o.plate_reprints || [],
           buyerMessage: o.buyer_message || '',
           assignmentIssue: o.assignment_issue || null,
+          usedExternalPart: o.used_external_part || null,
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -2470,6 +2472,49 @@ export default function EtsyOrderManager() {
     });
   };
 
+  // Enhanced model matching that considers external parts from order's "extra" field
+  // If extra matches an external part on a model variant, use that variant
+  // Otherwise, use the base model (no external parts)
+  const findBestModelMatch = (itemName, extra) => {
+    if (!itemName) return null;
+    const lowerItem = itemName.toLowerCase();
+    const lowerExtra = (extra || '').toLowerCase().trim();
+
+    // Helper to check if a model matches the item name
+    const matchesName = (m) => {
+      if (m.name.toLowerCase() === lowerItem) return true;
+      if (m.name.toLowerCase().includes(lowerItem) || lowerItem.includes(m.name.toLowerCase())) return true;
+      if (m.aliases && m.aliases.length > 0) {
+        return m.aliases.some(alias => {
+          const lowerAlias = alias.toLowerCase();
+          return lowerAlias === lowerItem || lowerAlias.includes(lowerItem) || lowerItem.includes(lowerAlias);
+        });
+      }
+      return false;
+    };
+
+    // Get all models that match the item name
+    const matchingModels = models.filter(matchesName);
+    if (matchingModels.length === 0) return null;
+    if (matchingModels.length === 1) return matchingModels[0];
+
+    // If there's an extra field, try to find a model variant with matching external part
+    if (lowerExtra) {
+      const variantWithPart = matchingModels.find(m => {
+        if (!m.externalParts || m.externalParts.length === 0) return false;
+        return m.externalParts.some(part => {
+          const partName = part.name.toLowerCase();
+          return partName.includes(lowerExtra) || lowerExtra.includes(partName);
+        });
+      });
+      if (variantWithPart) return variantWithPart;
+    }
+
+    // Fall back to the base model (no external parts) or first match
+    const baseModel = matchingModels.find(m => !m.externalParts || m.externalParts.length === 0);
+    return baseModel || matchingModels[0];
+  };
+
   // Auto-assignment algorithm with external parts matching
   const autoAssignOrder = (order, currentOrders) => {
     const model = findModelByName(order.item);
@@ -3125,6 +3170,97 @@ export default function EtsyOrderManager() {
       return o;
     });
     saveOrders(updated);
+  };
+
+  // Check if order needs external part selection during fulfillment
+  // This happens when the matched model has no external parts (base model)
+  // but other variants of the same model have external parts
+  const needsExternalPartPrompt = (order) => {
+    const model = findBestModelMatch(order.item, order.extra);
+    if (!model) return false;
+
+    // If model already has external parts, no prompt needed
+    if (model.externalParts && model.externalParts.length > 0) return false;
+
+    // Check if there are other models with same name that have external parts
+    const lowerName = model.name.toLowerCase();
+    const variants = models.filter(m =>
+      m.name.toLowerCase() === lowerName &&
+      m.externalParts && m.externalParts.length > 0
+    );
+
+    return variants.length > 0;
+  };
+
+  // Get all external parts from model variants for selection
+  const getAvailableExternalParts = (order) => {
+    const model = findBestModelMatch(order.item, order.extra);
+    if (!model) return [];
+
+    const lowerName = model.name.toLowerCase();
+    const variants = models.filter(m =>
+      m.name.toLowerCase() === lowerName &&
+      m.externalParts && m.externalParts.length > 0
+    );
+
+    // Collect unique external part names from all variants
+    const partsSet = new Set();
+    variants.forEach(v => {
+      v.externalParts.forEach(p => partsSet.add(p.name));
+    });
+
+    return Array.from(partsSet);
+  };
+
+  // Initiate fulfillment - check if we need to prompt for external part
+  const initiateFulfillment = (orderId) => {
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order) return;
+
+    if (needsExternalPartPrompt(order)) {
+      // Show prompt to select external part
+      const availableParts = getAvailableExternalParts(order);
+      setFulfillmentPartPrompt({
+        orderId,
+        modelName: order.item,
+        availableParts
+      });
+    } else {
+      // Fulfill directly
+      updateOrderStatus(orderId, 'fulfilled');
+    }
+  };
+
+  // Complete fulfillment with selected external part
+  const completeFulfillmentWithPart = (orderId, selectedPart) => {
+    // Update order with the selected external part for tracking
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        return { ...o, usedExternalPart: selectedPart };
+      }
+      return o;
+    });
+    setOrders(updated);
+
+    // Deduct the selected external part from inventory
+    const order = orders.find(o => o.orderId === orderId);
+    if (order && order.assignedTo && selectedPart) {
+      const memberParts = [...(externalParts[order.assignedTo] || [])];
+      const partIdx = memberParts.findIndex(p =>
+        p.name.toLowerCase() === selectedPart.toLowerCase()
+      );
+      if (partIdx >= 0) {
+        memberParts[partIdx] = {
+          ...memberParts[partIdx],
+          quantity: Math.max(0, memberParts[partIdx].quantity - order.quantity)
+        };
+        saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
+      }
+    }
+
+    // Close prompt and fulfill
+    setFulfillmentPartPrompt(null);
+    updateOrderStatus(orderId, 'fulfilled');
   };
 
   // Toggle plate completion and deduct/add filament
@@ -4288,6 +4424,7 @@ export default function EtsyOrderManager() {
               selectedStoreFilter={selectedStoreFilter}
               setSelectedStoreFilter={setSelectedStoreFilter}
               updateOrderStatus={updateOrderStatus}
+              initiateFulfillment={initiateFulfillment}
               reassignOrder={reassignOrder}
               showNotification={showNotification}
               saveFilaments={saveFilaments}
@@ -4583,12 +4720,53 @@ export default function EtsyOrderManager() {
           </div>
         </div>
       )}
+
+      {/* External Part Selection Modal for Fulfillment */}
+      {fulfillmentPartPrompt && (
+        <div className="modal-overlay" onClick={() => setFulfillmentPartPrompt(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Select External Part Used</h2>
+              <button className="modal-close" onClick={() => setFulfillmentPartPrompt(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <p style={{ marginBottom: '16px', color: '#888' }}>
+              Which external part was used for this order?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+              {fulfillmentPartPrompt.availableParts.map(partName => (
+                <button
+                  key={partName}
+                  className="btn btn-secondary"
+                  onClick={() => completeFulfillmentWithPart(fulfillmentPartPrompt.orderId, partName)}
+                  style={{ justifyContent: 'flex-start', padding: '12px 16px' }}
+                >
+                  {partName}
+                </button>
+              ))}
+              <button
+                className="btn btn-secondary"
+                onClick={() => completeFulfillmentWithPart(fulfillmentPartPrompt.orderId, 'None / Other')}
+                style={{ justifyContent: 'flex-start', padding: '12px 16px', opacity: 0.7 }}
+              >
+                None / Other
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setFulfillmentPartPrompt(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
   const [extraPrint, setExtraPrint] = useState({
@@ -4944,6 +5122,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   filaments={filaments}
                   externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
+                  initiateFulfillment={initiateFulfillment}
                   reassignOrder={reassignOrder}
                   togglePlateComplete={togglePlateComplete}
                   reprintPart={reprintPart}
@@ -4979,6 +5158,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   filaments={filaments}
                   externalParts={externalParts}
                   updateOrderStatus={updateOrderStatus}
+                  initiateFulfillment={initiateFulfillment}
                   reassignOrder={reassignOrder}
                   togglePlateComplete={togglePlateComplete}
                   reprintPart={reprintPart}
@@ -4993,7 +5173,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder, togglePlateComplete, reprintPart }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -5945,7 +6125,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           return (
             <button
               className="btn btn-secondary btn-small"
-              onClick={() => updateOrderStatus(order.orderId, 'fulfilled')}
+              onClick={() => initiateFulfillment(order.orderId)}
               disabled={!allPlatesComplete}
               title={!allPlatesComplete ? `Complete all ${plates.length} plates to fulfill` : ''}
               style={!allPlatesComplete ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
