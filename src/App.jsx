@@ -1754,56 +1754,72 @@ export default function EtsyOrderManager() {
 
     // Sync orders to Supabase
     const syncOrders = async () => {
-      // Get current DB orders
-      const { data: dbOrders } = await supabase.from('orders').select('id');
-      const dbIds = new Set(dbOrders?.map(o => o.id) || []);
-      const currentIds = new Set(orders.map(o => o.id || o.orderId));
+      try {
+        // Get current DB orders
+        const { data: dbOrders, error: fetchError } = await supabase.from('orders').select('id');
+        if (fetchError) {
+          console.error('Error fetching orders:', fetchError);
+          return;
+        }
+        const dbIds = new Set(dbOrders?.map(o => o.id) || []);
+        const currentIds = new Set(orders.map(o => o.id || o.orderId));
 
-      // Delete removed orders
-      const toDelete = [...dbIds].filter(id => !currentIds.has(id));
-      if (toDelete.length > 0) {
-        await supabase.from('orders').delete().in('id', toDelete);
-      }
+        // Delete removed orders
+        const toDelete = [...dbIds].filter(id => !currentIds.has(id));
+        if (toDelete.length > 0) {
+          const { error: deleteError } = await supabase.from('orders').delete().in('id', toDelete);
+          if (deleteError) console.error('Error deleting orders:', deleteError);
+        }
 
-      // Upsert current orders
-      if (orders.length > 0) {
-        const dbFormat = orders.map(o => ({
-          id: o.id || o.orderId,
-          order_id: o.orderId,
-          buyer_name: o.buyerName,
-          item: o.item,
-          quantity: o.quantity,
-          color: o.color,
-          extra: o.extra,
-          price: o.price,
-          address: o.address,
-          status: o.status,
-          assigned_to: o.assignedTo,
-          notes: o.notes,
-          store_id: o.storeId,
-          shipped_at: o.shippedAt,
-          fulfilled_at: o.fulfilledAt,
-          created_at: o.createdAt,
-          scheduled_start: o.scheduledStart,
-          printer_id: o.printerId,
-          shipping_cost: o.shippingCost,
-          production_stage: o.productionStage,
-          sales_tax: o.salesTax,
-          is_replacement: o.isReplacement || false,
-          original_order_id: o.originalOrderId,
-          material_cost: o.materialCost || 0,
-          filament_used: o.filamentUsed || 0,
-          model_id: o.modelId,
-          is_extra_print: o.isExtraPrint || false,
-          extra_print_filament: o.extraPrintFilament || 0,
-          extra_print_minutes: o.extraPrintMinutes || 0,
-          additional_colors: o.additionalColors || [],
-          completed_plates: o.completedPlates || [],
-          plate_colors: o.plateColors || {},
-          plate_reprints: o.plateReprints || [],
-          buyer_message: o.buyerMessage || ''
-        }));
-        await supabase.from('orders').upsert(dbFormat);
+        // Upsert current orders
+        if (orders.length > 0) {
+          const dbFormat = orders.map(o => ({
+            id: o.id || o.orderId,
+            order_id: o.orderId,
+            buyer_name: o.buyerName,
+            item: o.item,
+            quantity: o.quantity,
+            color: o.color,
+            extra: o.extra,
+            price: o.price,
+            address: o.address,
+            status: o.status,
+            assigned_to: o.assignedTo,
+            notes: o.notes,
+            store_id: o.storeId,
+            shipped_at: o.shippedAt,
+            fulfilled_at: o.fulfilledAt,
+            created_at: o.createdAt,
+            scheduled_start: o.scheduledStart,
+            printer_id: o.printerId,
+            shipping_cost: o.shippingCost,
+            production_stage: o.productionStage,
+            sales_tax: o.salesTax,
+            is_replacement: o.isReplacement || false,
+            original_order_id: o.originalOrderId,
+            material_cost: o.materialCost || 0,
+            filament_used: o.filamentUsed || 0,
+            model_id: o.modelId,
+            is_extra_print: o.isExtraPrint || false,
+            extra_print_filament: o.extraPrintFilament || 0,
+            extra_print_minutes: o.extraPrintMinutes || 0,
+            additional_colors: o.additionalColors || [],
+            completed_plates: o.completedPlates || [],
+            plate_colors: o.plateColors || {}
+          }));
+          const { error: upsertError } = await supabase.from('orders').upsert(dbFormat);
+          if (upsertError) {
+            console.error('Error saving orders:', upsertError);
+            // Show user-visible error
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff4444;color:white;padding:12px 20px;border-radius:8px;z-index:99999;font-weight:500;';
+            errorDiv.textContent = `Save failed: ${upsertError.message}`;
+            document.body.appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+          }
+        }
+      } catch (e) {
+        console.error('Sync orders error:', e);
       }
     };
     syncOrders();
@@ -1952,6 +1968,12 @@ export default function EtsyOrderManager() {
           const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
           if (upsertError) {
             console.error('Error saving models:', upsertError);
+            // Show user-visible error
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff4444;color:white;padding:12px 20px;border-radius:8px;z-index:99999;font-weight:500;max-width:400px;';
+            errorDiv.textContent = `Model save failed: ${upsertError.message}`;
+            document.body.appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
           } else {
             console.log('Models saved successfully:', models.length);
           }
