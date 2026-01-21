@@ -1531,6 +1531,8 @@ export default function EtsyOrderManager() {
           extraPrintMinutes: o.extra_print_minutes || 0,
           additionalColors: o.additional_colors || [],
           completedPlates: o.completed_plates || [],
+          plateColors: o.plate_colors || {},
+          plateReprints: o.plate_reprints || [],
           buyerMessage: o.buyer_message || '',
           id: o.id
         }));
@@ -1796,6 +1798,8 @@ export default function EtsyOrderManager() {
           extra_print_minutes: o.extraPrintMinutes || 0,
           additional_colors: o.additionalColors || [],
           completed_plates: o.completedPlates || [],
+          plate_colors: o.plateColors || {},
+          plate_reprints: o.plateReprints || [],
           buyer_message: o.buyerMessage || ''
         }));
         await supabase.from('orders').upsert(dbFormat);
@@ -3030,12 +3034,14 @@ export default function EtsyOrderManager() {
   };
 
   // Toggle plate completion and deduct/add filament
-  const togglePlateComplete = (orderId, plateIndex, model) => {
+  // selectedColor is used for multi-color plates to specify which color filament was used
+  const togglePlateComplete = (orderId, plateIndex, model, selectedColor) => {
     const ROLL_SIZE = 1000;
     const order = orders.find(o => o.orderId === orderId);
     if (!order || !order.assignedTo) return;
 
     const completedPlates = order.completedPlates || [];
+    const plateColors = order.plateColors || {};
     const isCompleting = !completedPlates.includes(plateIndex);
 
     // Get the plate's filament usage
@@ -3044,16 +3050,31 @@ export default function EtsyOrderManager() {
     if (!plate) return;
 
     const plateFilament = (parseFloat(plate.filamentUsage) || 0) * order.quantity;
+    const isMultiColor = plate.isMultiColor;
+
+    // Determine which color to use for filament deduction
+    // For multi-color plates, use selectedColor; otherwise use order color
+    let colorToUse;
+    if (isMultiColor) {
+      if (isCompleting) {
+        colorToUse = selectedColor;
+      } else {
+        // When uncompleting, use the stored color
+        colorToUse = plateColors[plateIndex];
+      }
+    } else {
+      colorToUse = order.color || model?.defaultColor || '';
+    }
 
     // Handle filament deduction/addition
-    if (plateFilament > 0) {
+    if (plateFilament > 0 && colorToUse) {
       const memberFilaments = [...(filaments[order.assignedTo] || [])];
-      const orderColor = (order.color || model?.defaultColor || '').toLowerCase().trim();
+      const colorLower = colorToUse.toLowerCase().trim();
       const filamentIdx = memberFilaments.findIndex(f => {
         const filColor = f.color.toLowerCase().trim();
-        return filColor === orderColor ||
-               filColor.includes(orderColor) ||
-               orderColor.includes(filColor);
+        return filColor === colorLower ||
+               filColor.includes(colorLower) ||
+               colorLower.includes(filColor);
       });
 
       if (filamentIdx >= 0) {
@@ -3098,26 +3119,118 @@ export default function EtsyOrderManager() {
       }
     }
 
-    // Update order's completedPlates array
+    // Update order's completedPlates array and plateColors
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
         let newCompletedPlates;
+        let newPlateColors = { ...(o.plateColors || {}) };
+
         if (isCompleting) {
           newCompletedPlates = [...completedPlates, plateIndex];
+          // Store the color used for multi-color plates
+          if (isMultiColor && selectedColor) {
+            newPlateColors[plateIndex] = selectedColor;
+          }
         } else {
           newCompletedPlates = completedPlates.filter(idx => idx !== plateIndex);
+          // Remove the stored color when uncompleting
+          delete newPlateColors[plateIndex];
         }
-        return { ...o, completedPlates: newCompletedPlates };
+        return { ...o, completedPlates: newCompletedPlates, plateColors: newPlateColors };
       }
       return o;
     });
     saveOrders(updated);
 
     const plateName = plate.name || `Plate ${plateIndex + 1}`;
+    const colorInfo = isMultiColor && selectedColor ? ` in ${selectedColor}` : '';
     showNotification(isCompleting
-      ? `${plateName} completed! (${plateFilament}g deducted)`
+      ? `${plateName} completed${colorInfo}! (${plateFilament}g deducted)`
       : `${plateName} uncompleted (${plateFilament}g added back)`
     );
+  };
+
+  // Reprint a specific part from a plate with color selection
+  const reprintPart = (orderId, plateIndex, partIndex, selectedColor, model) => {
+    const ROLL_SIZE = 1000;
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order || !order.assignedTo || !selectedColor) return;
+
+    // Get the plate and part
+    const printerSettings = model?.printerSettings?.find(ps => ps.printerId === order.printerId) || model?.printerSettings?.[0];
+    const plate = printerSettings?.plates?.[plateIndex];
+    const part = plate?.parts?.[partIndex];
+    if (!plate || !part) return;
+
+    const partFilament = (parseFloat(part.filamentUsage) || 0);
+
+    // Deduct filament from the selected color
+    if (partFilament > 0) {
+      const memberFilaments = [...(filaments[order.assignedTo] || [])];
+      const colorLower = selectedColor.toLowerCase().trim();
+      const filamentIdx = memberFilaments.findIndex(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === colorLower ||
+               filColor.includes(colorLower) ||
+               colorLower.includes(filColor);
+      });
+
+      if (filamentIdx >= 0) {
+        let newAmount = memberFilaments[filamentIdx].amount - partFilament;
+        let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+        let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
+
+        if (newAmount <= 0 && backupRolls.length > 0) {
+          const nextRoll = backupRolls.shift();
+          currentRollCost = nextRoll.cost;
+          newAmount = ROLL_SIZE + newAmount;
+          showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}!`);
+        }
+
+        memberFilaments[filamentIdx] = {
+          ...memberFilaments[filamentIdx],
+          amount: Math.max(0, newAmount),
+          backupRolls: backupRolls,
+          currentRollCost: currentRollCost
+        };
+        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+
+        // Record usage history for the reprint
+        const usageEvent = {
+          id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          color: memberFilaments[filamentIdx].color,
+          amount: partFilament,
+          date: Date.now(),
+          orderId: order.orderId,
+          memberId: order.assignedTo,
+          modelName: model?.name || order.item,
+          plateName: plate.name,
+          partName: part.name,
+          isReprint: true
+        };
+        setFilamentUsageHistory(prev => [...prev, usageEvent]);
+      }
+    }
+
+    // Add reprint to order's plateReprints array
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        const newReprints = [...(o.plateReprints || []), {
+          id: `reprint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          plateIndex,
+          partIndex,
+          partName: part.name,
+          color: selectedColor,
+          filamentUsage: partFilament,
+          timestamp: Date.now()
+        }];
+        return { ...o, plateReprints: newReprints };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    showNotification(`Reprinted ${part.name} in ${selectedColor} (${partFilament}g deducted)`);
   };
 
   // Reassign order
@@ -4085,6 +4198,7 @@ export default function EtsyOrderManager() {
               showNotification={showNotification}
               saveFilaments={saveFilaments}
               togglePlateComplete={togglePlateComplete}
+              reprintPart={reprintPart}
             />
           )}
 
@@ -4380,7 +4494,7 @@ export default function EtsyOrderManager() {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments, togglePlateComplete }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
   const [extraPrint, setExtraPrint] = useState({
@@ -4738,6 +4852,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
                   togglePlateComplete={togglePlateComplete}
+                  reprintPart={reprintPart}
                 />
               ))
             )}
@@ -4772,6 +4887,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   updateOrderStatus={updateOrderStatus}
                   reassignOrder={reassignOrder}
                   togglePlateComplete={togglePlateComplete}
+                  reprintPart={reprintPart}
                 />
               ))
             )}
@@ -4783,7 +4899,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder, togglePlateComplete }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, reassignOrder, togglePlateComplete, reprintPart }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -5436,9 +5552,30 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
         if (plates.length === 0 || order.status !== 'received') return null;
 
         const completedPlates = order.completedPlates || [];
+        const plateColors = order.plateColors || {};
+        const plateReprints = order.plateReprints || [];
         const completedCount = completedPlates.length;
         const totalPlates = plates.length;
         const allPlatesComplete = completedCount === totalPlates;
+
+        // Get available colors from assigned member's filament inventory
+        const memberFilaments = filaments[order.assignedTo] || [];
+        const availableColors = memberFilaments.map(f => f.color);
+
+        // Calculate plate totals from parts
+        const getPlateTotals = (plate) => {
+          if (!plate?.parts?.length) {
+            // Fallback for legacy plates without parts
+            return {
+              totalFilament: parseFloat(plate.filamentUsage) || 0,
+              totalMinutes: ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0)
+            };
+          }
+          return plate.parts.reduce((acc, part) => ({
+            totalFilament: acc.totalFilament + (parseFloat(part.filamentUsage) || 0),
+            totalMinutes: acc.totalMinutes + ((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)
+          }), { totalFilament: 0, totalMinutes: 0 });
+        };
 
         return (
           <div style={{
@@ -5464,41 +5601,192 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {plates.map((plate, idx) => {
                 const isComplete = completedPlates.includes(idx);
-                const plateFilament = (parseFloat(plate.filamentUsage) || 0) * order.quantity;
-                const plateTime = `${plate.printHours || 0}h ${plate.printMinutes || 0}m`;
+                const plateTotals = getPlateTotals(plate);
+                const plateFilament = plateTotals.totalFilament * order.quantity;
+                const plateTime = `${Math.floor(plateTotals.totalMinutes / 60)}h ${plateTotals.totalMinutes % 60}m`;
+                const isMultiColor = plate.isMultiColor;
+                const completedColor = plateColors[idx];
+                const hasParts = (plate.parts?.length || 0) > 0;
+                const plateReprintsForThis = plateReprints.filter(r => r.plateIndex === idx);
+
                 return (
-                  <label
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 8px',
-                      background: isComplete ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isComplete}
-                      onChange={() => togglePlateComplete(order.orderId, idx, matchingModel)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <span style={{
-                      flex: 1,
-                      fontSize: '0.8rem',
-                      color: isComplete ? '#00ff88' : '#e0e0e0',
-                      textDecoration: isComplete ? 'line-through' : 'none'
-                    }}>
-                      {plate.name || `Plate ${idx + 1}`}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: '#888' }}>
-                      {plateFilament}g • {plateTime}
-                    </span>
-                    {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
-                  </label>
+                  <div key={idx}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        background: isComplete
+                          ? 'rgba(0, 255, 136, 0.15)'
+                          : isMultiColor
+                            ? 'rgba(165, 94, 234, 0.1)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '6px',
+                        border: isMultiColor && !isComplete ? '1px solid rgba(165, 94, 234, 0.3)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {isMultiColor ? (
+                        // Multi-color plate: show dropdown to select color
+                        isComplete ? (
+                          <>
+                            <input
+                              type="checkbox"
+                              checked={true}
+                              onChange={() => togglePlateComplete(order.orderId, idx, matchingModel, null)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span style={{
+                              flex: 1,
+                              fontSize: '0.8rem',
+                              color: '#00ff88',
+                              textDecoration: 'line-through'
+                            }}>
+                              {plate.name || `Plate ${idx + 1}`}
+                            </span>
+                            <span style={{
+                              fontSize: '0.7rem',
+                              padding: '2px 6px',
+                              background: 'rgba(165, 94, 234, 0.2)',
+                              border: '1px solid rgba(165, 94, 234, 0.3)',
+                              borderRadius: '4px',
+                              color: '#a55eea'
+                            }}>
+                              {completedColor || 'Unknown'}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                              {plateFilament}g
+                            </span>
+                            <Check size={14} style={{ color: '#00ff88' }} />
+                          </>
+                        ) : (
+                          <>
+                            <Palette size={14} style={{ color: '#a55eea', flexShrink: 0 }} />
+                            <span style={{
+                              fontSize: '0.8rem',
+                              color: '#e0e0e0'
+                            }}>
+                              {plate.name || `Plate ${idx + 1}`}
+                            </span>
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  togglePlateComplete(order.orderId, idx, matchingModel, e.target.value);
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '4px 8px',
+                                fontSize: '0.75rem',
+                                background: 'rgba(165, 94, 234, 0.2)',
+                                border: '1px solid rgba(165, 94, 234, 0.4)',
+                                borderRadius: '4px',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                minWidth: '100px'
+                              }}
+                            >
+                              <option value="">Select color...</option>
+                              {availableColors.map(color => (
+                                <option key={color} value={color}>{color}</option>
+                              ))}
+                            </select>
+                            <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                              {plateFilament}g • {plateTime}
+                            </span>
+                          </>
+                        )
+                      ) : (
+                        // Regular plate: checkbox only
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={isComplete}
+                            onChange={() => togglePlateComplete(order.orderId, idx, matchingModel, null)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <span style={{
+                            flex: 1,
+                            fontSize: '0.8rem',
+                            color: isComplete ? '#00ff88' : '#e0e0e0',
+                            textDecoration: isComplete ? 'line-through' : 'none'
+                          }}>
+                            {plate.name || `Plate ${idx + 1}`}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                            {plateFilament}g • {plateTime}
+                          </span>
+                          {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
+                        </label>
+                      )}
+                    </div>
+
+                    {/* Reprint Part Section - only show for completed plates with parts */}
+                    {isComplete && hasParts && (
+                      <div style={{
+                        marginLeft: '24px',
+                        marginTop: '4px',
+                        padding: '6px 8px',
+                        background: 'rgba(255, 159, 67, 0.1)',
+                        borderRadius: '4px',
+                        border: '1px solid rgba(255, 159, 67, 0.2)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <RefreshCw size={12} style={{ color: '#ff9f43' }} />
+                          <span style={{ fontSize: '0.7rem', color: '#ff9f43' }}>Reprint:</span>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const [partIdx, color] = e.target.value.split('|');
+                              if (partIdx && color) {
+                                reprintPart(order.orderId, idx, parseInt(partIdx), color, matchingModel);
+                                e.target.value = '';
+                              }
+                            }}
+                            style={{
+                              padding: '3px 6px',
+                              fontSize: '0.7rem',
+                              background: 'rgba(255, 159, 67, 0.2)',
+                              border: '1px solid rgba(255, 159, 67, 0.4)',
+                              borderRadius: '4px',
+                              color: '#fff',
+                              cursor: 'pointer',
+                              flex: 1,
+                              minWidth: '120px'
+                            }}
+                          >
+                            <option value="">Select part & color...</option>
+                            {plate.parts.map((part, partIdx) => (
+                              <optgroup key={partIdx} label={`${part.name} (${part.filamentUsage}g)`}>
+                                {availableColors.map(color => (
+                                  <option key={`${partIdx}-${color}`} value={`${partIdx}|${color}`}>
+                                    {part.name} → {color}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                        {/* Show reprint history for this plate */}
+                        {plateReprintsForThis.length > 0 && (
+                          <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#888' }}>
+                            Reprints: {plateReprintsForThis.map((r, i) => (
+                              <span key={i} style={{
+                                background: 'rgba(255, 159, 67, 0.15)',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                marginLeft: i > 0 ? '4px' : '2px'
+                              }}>
+                                {r.partName} ({r.color})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -6733,11 +7021,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
   });
   const [newAlias, setNewAlias] = useState('');
 
-  // Initialize printer settings for a model (now with plates)
+  // Initialize printer settings for a model (now with plates containing parts)
   const initPrinterSettings = () => {
     return printers.map(p => ({
       printerId: p.id,
-      plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+      plates: [{ name: 'Plate 1', isMultiColor: false, parts: [] }]
     }));
   };
 
@@ -6748,7 +7036,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
         const plateNum = (s.plates?.length || 0) + 1;
         return {
           ...s,
-          plates: [...(s.plates || []), { name: `Plate ${plateNum}`, filamentUsage: '', printHours: '', printMinutes: '' }]
+          plates: [...(s.plates || []), { name: `Plate ${plateNum}`, isMultiColor: false, parts: [] }]
         };
       }
       return s;
@@ -6783,13 +7071,91 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     });
   };
 
-  // Calculate totals for a printer setting
+  // Add a part to a plate
+  const addPart = (settings, printerId, plateIdx) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        return {
+          ...s,
+          plates: s.plates.map((plate, i) => {
+            if (i === plateIdx) {
+              const partNum = (plate.parts?.length || 0) + 1;
+              return {
+                ...plate,
+                parts: [...(plate.parts || []), { name: `Part ${partNum}`, filamentUsage: '', printHours: '0', printMinutes: '' }]
+              };
+            }
+            return plate;
+          })
+        };
+      }
+      return s;
+    });
+  };
+
+  // Remove a part from a plate
+  const removePart = (settings, printerId, plateIdx, partIdx) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        return {
+          ...s,
+          plates: s.plates.map((plate, i) => {
+            if (i === plateIdx) {
+              return {
+                ...plate,
+                parts: plate.parts.filter((_, pi) => pi !== partIdx)
+              };
+            }
+            return plate;
+          })
+        };
+      }
+      return s;
+    });
+  };
+
+  // Update a specific part in a plate
+  const updatePart = (settings, printerId, plateIdx, partIdx, field, value) => {
+    return settings.map(s => {
+      if (s.printerId === printerId) {
+        return {
+          ...s,
+          plates: s.plates.map((plate, i) => {
+            if (i === plateIdx) {
+              return {
+                ...plate,
+                parts: plate.parts.map((part, pi) =>
+                  pi === partIdx ? { ...part, [field]: value } : part
+                )
+              };
+            }
+            return plate;
+          })
+        };
+      }
+      return s;
+    });
+  };
+
+  // Calculate totals for a plate (sum of its parts)
+  const calculatePlateTotals = (plate) => {
+    if (!plate?.parts?.length) return { totalFilament: 0, totalMinutes: 0 };
+    return plate.parts.reduce((acc, part) => ({
+      totalFilament: acc.totalFilament + (parseFloat(part.filamentUsage) || 0),
+      totalMinutes: acc.totalMinutes + ((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)
+    }), { totalFilament: 0, totalMinutes: 0 });
+  };
+
+  // Calculate totals for a printer setting (sum of all plates)
   const calculatePrinterTotals = (printerSetting) => {
     if (!printerSetting?.plates?.length) return { totalFilament: 0, totalMinutes: 0 };
-    return printerSetting.plates.reduce((acc, plate) => ({
-      totalFilament: acc.totalFilament + (parseFloat(plate.filamentUsage) || 0),
-      totalMinutes: acc.totalMinutes + ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0)
-    }), { totalFilament: 0, totalMinutes: 0 });
+    return printerSetting.plates.reduce((acc, plate) => {
+      const plateTotals = calculatePlateTotals(plate);
+      return {
+        totalFilament: acc.totalFilament + plateTotals.totalFilament,
+        totalMinutes: acc.totalMinutes + plateTotals.totalMinutes
+      };
+    }, { totalFilament: 0, totalMinutes: 0 });
   };
 
   const [newPart, setNewPart] = useState({ name: '', quantity: 1 });
@@ -7041,18 +7407,44 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           </div>
                         </div>
                         {setting.plates?.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {setting.plates.map((plate, idx) => (
-                              <span key={idx} style={{
-                                background: 'rgba(0,0,0,0.3)',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                color: '#ccc'
-                              }}>
-                                {plate.name}: {plate.filamentUsage}g, {plate.printHours || 0}h {plate.printMinutes || 0}m
-                              </span>
-                            ))}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {setting.plates.map((plate, idx) => {
+                              const plateTotals = calculatePlateTotals(plate);
+                              return (
+                                <div key={idx} style={{
+                                  background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : 'none'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: (plate.parts?.length || 0) > 0 ? '6px' : 0 }}>
+                                    {plate.isMultiColor && <Palette size={12} style={{ color: '#a55eea' }} />}
+                                    <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#a55eea' : '#ccc', fontSize: '0.8rem' }}>
+                                      {plate.name}
+                                    </span>
+                                    <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
+                                      {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                                    </span>
+                                  </div>
+                                  {(plate.parts?.length || 0) > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '18px' }}>
+                                      {plate.parts.map((part, partIdx) => (
+                                        <span key={partIdx} style={{
+                                          background: 'rgba(0, 204, 255, 0.1)',
+                                          border: '1px solid rgba(0, 204, 255, 0.2)',
+                                          padding: '2px 6px',
+                                          borderRadius: '3px',
+                                          fontSize: '0.65rem',
+                                          color: '#00ccff'
+                                        }}>
+                                          {part.name} ({part.filamentUsage}g)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -7709,78 +8101,162 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       )}
                     </div>
 
-                    {/* Plates list */}
-                    {(setting.plates || []).map((plate, plateIdx) => (
-                      <div key={plateIdx} style={{
-                        background: 'rgba(0,0,0,0.2)',
-                        padding: '10px',
-                        borderRadius: '6px',
-                        marginBottom: '8px'
-                      }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={plate.name || ''}
-                            onChange={e => {
-                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'name', e.target.value);
-                              setEditingModel({ ...editingModel, printerSettings: updated });
-                            }}
-                            placeholder="Plate name"
-                            style={{ width: '120px' }}
-                          />
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.filamentUsage || ''}
-                            onChange={e => {
-                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'filamentUsage', e.target.value);
-                              setEditingModel({ ...editingModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            style={{ width: '70px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>g</span>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.printHours || ''}
-                            onChange={e => {
-                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'printHours', e.target.value);
-                              setEditingModel({ ...editingModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            min="0"
-                            style={{ width: '50px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>h</span>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.printMinutes || ''}
-                            onChange={e => {
-                              const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'printMinutes', e.target.value);
-                              setEditingModel({ ...editingModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            min="0"
-                            max="59"
-                            style={{ width: '50px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>m</span>
-                          <button
-                            className="qty-btn"
-                            onClick={() => {
-                              const updated = removePlate(editingModel.printerSettings || [], printer.id, plateIdx);
-                              setEditingModel({ ...editingModel, printerSettings: updated });
-                            }}
-                            title="Remove plate"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                    {/* Plates list with parts */}
+                    {(setting.plates || []).map((plate, plateIdx) => {
+                      const plateTotals = calculatePlateTotals(plate);
+                      return (
+                        <div key={plateIdx} style={{
+                          background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          marginBottom: '10px',
+                          border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : '1px solid rgba(255,255,255,0.05)'
+                        }}>
+                          {/* Plate header */}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={plate.name || ''}
+                              onChange={e => {
+                                const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'name', e.target.value);
+                                setEditingModel({ ...editingModel, printerSettings: updated });
+                              }}
+                              placeholder="Plate name"
+                              style={{ width: '140px', fontWeight: '500' }}
+                            />
+                            {/* Plate totals */}
+                            {(plate.parts?.length || 0) > 0 && (
+                              <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
+                                {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                              </span>
+                            )}
+                            {/* Multi-Color Toggle */}
+                            <label style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
+                              border: `1px solid ${plate.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                              fontSize: '0.7rem',
+                              color: plate.isMultiColor ? '#a55eea' : '#888'
+                            }} title="When enabled, you'll choose the color when completing this plate">
+                              <input
+                                type="checkbox"
+                                checked={plate.isMultiColor || false}
+                                onChange={e => {
+                                  const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'isMultiColor', e.target.checked);
+                                  setEditingModel({ ...editingModel, printerSettings: updated });
+                                }}
+                                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                              />
+                              Multi
+                            </label>
+                            <button
+                              className="qty-btn"
+                              onClick={() => {
+                                const updated = removePlate(editingModel.printerSettings || [], printer.id, plateIdx);
+                                setEditingModel({ ...editingModel, printerSettings: updated });
+                              }}
+                              title="Remove plate"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+
+                          {/* Parts list */}
+                          <div style={{ marginLeft: '12px', borderLeft: '2px solid rgba(0, 204, 255, 0.3)', paddingLeft: '12px' }}>
+                            {(plate.parts || []).length === 0 && (
+                              <p style={{ fontSize: '0.75rem', color: '#666', margin: '8px 0' }}>No parts added yet</p>
+                            )}
+                            {(plate.parts || []).map((part, partIdx) => (
+                              <div key={partIdx} style={{
+                                display: 'flex',
+                                gap: '6px',
+                                alignItems: 'center',
+                                marginBottom: '6px',
+                                flexWrap: 'wrap'
+                              }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={part.name || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'name', e.target.value);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  placeholder="Part name"
+                                  style={{ width: '100px', fontSize: '0.85rem' }}
+                                />
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.filamentUsage || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'filamentUsage', e.target.value);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  style={{ width: '55px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>g</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.printHours || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'printHours', e.target.value);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  min="0"
+                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.printMinutes || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'printMinutes', e.target.value);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  min="0"
+                                  max="59"
+                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                                <button
+                                  className="qty-btn"
+                                  onClick={() => {
+                                    const updated = removePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  title="Remove part"
+                                  style={{ padding: '2px' }}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => {
+                                const updated = addPart(editingModel.printerSettings || [], printer.id, plateIdx);
+                                setEditingModel({ ...editingModel, printerSettings: updated });
+                              }}
+                              style={{ marginTop: '4px', padding: '4px 8px', fontSize: '0.7rem' }}
+                            >
+                              <Plus size={12} /> Add Part
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <button
                       className="btn btn-secondary btn-small"
@@ -7792,7 +8268,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         } else {
                           updated = [...(editingModel.printerSettings || []), {
                             printerId: printer.id,
-                            plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+                            plates: [{ name: 'Plate 1', isMultiColor: false, parts: [] }]
                           }];
                         }
                         setEditingModel({ ...editingModel, printerSettings: updated });
