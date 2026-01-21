@@ -53,7 +53,7 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, setActiveTab })
     const memberFilaments = filaments[member.id] || [];
     memberFilaments.forEach(fil => {
       const threshold = fil.reorderAt ?? 250;
-      if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
+      if (fil.amount <= threshold && (fil.backupRolls?.length || 0) === 0) {
         lowStockItems.push({
           type: 'filament',
           name: fil.color,
