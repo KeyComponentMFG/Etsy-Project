@@ -1242,6 +1242,7 @@ export default function EtsyOrderManager() {
   const [purchases, setPurchases] = useState([]);
   const [filamentUsageHistory, setFilamentUsageHistory] = useState([]);
   const [fulfillmentPartPrompt, setFulfillmentPartPrompt] = useState(null); // {orderId, modelName, availableParts}
+  const [selectedFulfillmentParts, setSelectedFulfillmentParts] = useState({}); // {partName: quantity}
   const [subscriptions, setSubscriptions] = useState([]);
 
   // Helper function to parse color field
@@ -3231,35 +3232,43 @@ export default function EtsyOrderManager() {
     }
   };
 
-  // Complete fulfillment with selected external part
-  const completeFulfillmentWithPart = (orderId, selectedPart) => {
-    // Update order with the selected external part for tracking
+  // Complete fulfillment with selected external parts (multiple with quantities)
+  const completeFulfillmentWithParts = (orderId, partsWithQuantities) => {
+    // partsWithQuantities is an object: {partName: quantity, ...}
+    const partsArray = Object.entries(partsWithQuantities).filter(([_, qty]) => qty > 0);
+
+    // Update order with the selected external parts for tracking
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
-        return { ...o, usedExternalPart: selectedPart };
+        return { ...o, usedExternalParts: partsWithQuantities };
       }
       return o;
     });
     setOrders(updated);
 
-    // Deduct the selected external part from inventory
+    // Deduct the selected external parts from inventory
     const order = orders.find(o => o.orderId === orderId);
-    if (order && order.assignedTo && selectedPart) {
+    if (order && order.assignedTo && partsArray.length > 0) {
       const memberParts = [...(externalParts[order.assignedTo] || [])];
-      const partIdx = memberParts.findIndex(p =>
-        p.name.toLowerCase() === selectedPart.toLowerCase()
-      );
-      if (partIdx >= 0) {
-        memberParts[partIdx] = {
-          ...memberParts[partIdx],
-          quantity: Math.max(0, memberParts[partIdx].quantity - order.quantity)
-        };
-        saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
-      }
+
+      partsArray.forEach(([partName, qty]) => {
+        const partIdx = memberParts.findIndex(p =>
+          p.name.toLowerCase() === partName.toLowerCase()
+        );
+        if (partIdx >= 0) {
+          memberParts[partIdx] = {
+            ...memberParts[partIdx],
+            quantity: Math.max(0, memberParts[partIdx].quantity - qty)
+          };
+        }
+      });
+
+      saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
     }
 
-    // Close prompt and fulfill
+    // Close prompt, reset selection, and fulfill
     setFulfillmentPartPrompt(null);
+    setSelectedFulfillmentParts({});
     updateOrderStatus(orderId, 'fulfilled');
   };
 
@@ -4723,39 +4732,95 @@ export default function EtsyOrderManager() {
 
       {/* External Part Selection Modal for Fulfillment */}
       {fulfillmentPartPrompt && (
-        <div className="modal-overlay" onClick={() => setFulfillmentPartPrompt(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+        <div className="modal-overlay" onClick={() => { setFulfillmentPartPrompt(null); setSelectedFulfillmentParts({}); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
             <div className="modal-header">
-              <h2 className="modal-title">Select External Part Used</h2>
-              <button className="modal-close" onClick={() => setFulfillmentPartPrompt(null)}>
+              <h2 className="modal-title">Select External Parts Used</h2>
+              <button className="modal-close" onClick={() => { setFulfillmentPartPrompt(null); setSelectedFulfillmentParts({}); }}>
                 <X size={24} />
               </button>
             </div>
             <p style={{ marginBottom: '16px', color: '#888' }}>
-              Which external part was used for this order?
+              Which external parts were used for this order? Select parts and quantities.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
               {fulfillmentPartPrompt.availableParts.map(partName => (
-                <button
+                <div
                   key={partName}
-                  className="btn btn-secondary"
-                  onClick={() => completeFulfillmentWithPart(fulfillmentPartPrompt.orderId, partName)}
-                  style={{ justifyContent: 'flex-start', padding: '12px 16px' }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    background: selectedFulfillmentParts[partName] > 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255,255,255,0.05)',
+                    border: selectedFulfillmentParts[partName] > 0 ? '1px solid rgba(0, 255, 136, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px'
+                  }}
                 >
-                  {partName}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={selectedFulfillmentParts[partName] > 0}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: 1 });
+                      } else {
+                        const { [partName]: _, ...rest } = selectedFulfillmentParts;
+                        setSelectedFulfillmentParts(rest);
+                      }
+                    }}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ flex: 1, fontWeight: selectedFulfillmentParts[partName] > 0 ? '500' : '400' }}>
+                    {partName}
+                  </span>
+                  {selectedFulfillmentParts[partName] > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#888', fontSize: '0.85rem' }}>Qty:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={selectedFulfillmentParts[partName] || 1}
+                        onChange={e => {
+                          const qty = parseInt(e.target.value) || 1;
+                          setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: qty });
+                        }}
+                        style={{
+                          width: '60px',
+                          padding: '6px 10px',
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          fontSize: '1rem',
+                          textAlign: 'center'
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
-              <button
-                className="btn btn-secondary"
-                onClick={() => completeFulfillmentWithPart(fulfillmentPartPrompt.orderId, 'None / Other')}
-                style={{ justifyContent: 'flex-start', padding: '12px 16px', opacity: 0.7 }}
-              >
-                None / Other
-              </button>
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setFulfillmentPartPrompt(null)}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setFulfillmentPartPrompt(null); setSelectedFulfillmentParts({}); }}
+              >
                 Cancel
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, {})}
+                style={{ opacity: 0.7 }}
+              >
+                No Parts Used
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, selectedFulfillmentParts)}
+                disabled={Object.keys(selectedFulfillmentParts).length === 0}
+                style={Object.keys(selectedFulfillmentParts).length === 0 ? { opacity: 0.5 } : {}}
+              >
+                Confirm & Fulfill
               </button>
             </div>
           </div>
