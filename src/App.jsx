@@ -7275,6 +7275,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     }
 
     // Convert printer settings to proper format with plates and parts
+    // Keep all plates and parts, just convert values to proper types
     const printerSettings = newModel.printerSettings.map(s => ({
       printerId: s.printerId,
       plates: (s.plates || []).map(plate => ({
@@ -7285,9 +7286,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
           filamentUsage: parseFloat(part.filamentUsage) || 0,
           printHours: parseInt(part.printHours) || 0,
           printMinutes: parseInt(part.printMinutes) || 0
-        })).filter(part => part.filamentUsage > 0 || part.printHours > 0 || part.printMinutes > 0)
-      })).filter(plate => plate.parts && plate.parts.length > 0)
+        }))
+      }))
     })).filter(s => s.plates && s.plates.length > 0);
+
+    console.log('Saving model with printerSettings:', JSON.stringify(printerSettings, null, 2));
 
     const model = {
       id: Date.now().toString(),
