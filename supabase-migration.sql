@@ -74,6 +74,7 @@ ALTER TABLE models ADD COLUMN IF NOT EXISTS print_duration integer;
 ALTER TABLE models ADD COLUMN IF NOT EXISTS printer_settings jsonb DEFAULT '[]';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS aliases jsonb DEFAULT '[]';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS file_3mf_url text DEFAULT '';
+ALTER TABLE models ADD COLUMN IF NOT EXISTS folder text DEFAULT 'Uncategorized';
 
 -- FILAMENTS TABLE
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS color text;

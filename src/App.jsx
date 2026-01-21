@@ -1616,7 +1616,8 @@ export default function EtsyOrderManager() {
           printDuration: m.print_duration || null,
           printerSettings: m.printer_settings || [],
           aliases: m.aliases || [],
-          file3mfUrl: m.file_3mf_url || ''
+          file3mfUrl: m.file_3mf_url || '',
+          folder: m.folder || 'Uncategorized'
         }));
         console.log('Transformed models:', transformedModels.length, transformedModels);
         setModels(transformedModels);
@@ -1971,7 +1972,8 @@ export default function EtsyOrderManager() {
             image_url: m.imageUrl,
             print_duration: m.printDuration,
             printer_settings: m.printerSettings,
-            aliases: m.aliases || []
+            aliases: m.aliases || [],
+            folder: m.folder || 'Uncategorized'
           }));
           const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
           if (upsertError) {
@@ -3299,9 +3301,11 @@ export default function EtsyOrderManager() {
     const plate = printerSettings?.plates?.[plateIndex];
     if (!plate) return;
 
-    // Calculate total filament from all parts in the plate
-    const plateFilament = (plate.parts || []).reduce((sum, part) =>
-      sum + (parseFloat(part.filamentUsage) || 0), 0) * order.quantity;
+    // Calculate total filament from all parts in the plate (accounting for part quantity)
+    const plateFilament = (plate.parts || []).reduce((sum, part) => {
+      const partQty = parseInt(part.quantity) || 1;
+      return sum + ((parseFloat(part.filamentUsage) || 0) * partQty);
+    }, 0) * order.quantity;
 
     // Check if any part in the plate is multi-color
     const hasMultiColorPart = (plate.parts || []).some(part => part.isMultiColor);
@@ -3373,11 +3377,12 @@ export default function EtsyOrderManager() {
       }
     }
 
-    // Calculate plate print time from all parts (in hours)
+    // Calculate plate print time from all parts (in hours, accounting for part quantity)
     const platePrintHours = (plate.parts || []).reduce((sum, part) => {
       const hours = parseFloat(part.printHours) || 0;
       const minutes = parseFloat(part.printMinutes) || 0;
-      return sum + hours + (minutes / 60);
+      const partQty = parseInt(part.quantity) || 1;
+      return sum + (hours + (minutes / 60)) * partQty;
     }, 0) * order.quantity;
 
     // Update printer hours when completing/uncompleting a plate
@@ -7447,9 +7452,106 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     imageUrl: '',
     printerSettings: [],
     aliases: [],
-    file3mfUrl: ''
+    file3mfUrl: '',
+    folder: 'Uncategorized'
   });
   const [newAlias, setNewAlias] = useState('');
+  const [expandedModels, setExpandedModels] = useState({});
+  const [collapsedFolders, setCollapsedFolders] = useState({});
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showFolderInput, setShowFolderInput] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState(null);
+  const [renameFolderValue, setRenameFolderValue] = useState('');
+
+  // Get unique folders from all models, always include 'Uncategorized'
+  const allFolders = ['Uncategorized', ...new Set(models.map(m => m.folder).filter(f => f && f !== 'Uncategorized'))].sort((a, b) => {
+    if (a === 'Uncategorized') return 1;
+    if (b === 'Uncategorized') return -1;
+    return a.localeCompare(b);
+  });
+
+  // Group models by folder
+  const groupedModels = models.reduce((acc, model) => {
+    const folder = model.folder || 'Uncategorized';
+    if (!acc[folder]) acc[folder] = [];
+    acc[folder].push(model);
+    return acc;
+  }, {});
+
+  // Sort folder keys
+  const sortedFolders = Object.keys(groupedModels).sort((a, b) => {
+    if (a === 'Uncategorized') return 1;
+    if (b === 'Uncategorized') return -1;
+    return a.localeCompare(b);
+  });
+
+  const toggleModelExpanded = (modelId) => {
+    setExpandedModels(prev => ({ ...prev, [modelId]: !prev[modelId] }));
+  };
+
+  const toggleFolderCollapsed = (folder) => {
+    setCollapsedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
+  };
+
+  const expandAllInFolder = (folder) => {
+    const folderModels = groupedModels[folder] || [];
+    const newExpanded = { ...expandedModels };
+    folderModels.forEach(m => { newExpanded[m.id] = true; });
+    setExpandedModels(newExpanded);
+  };
+
+  const collapseAllInFolder = (folder) => {
+    const folderModels = groupedModels[folder] || [];
+    const newExpanded = { ...expandedModels };
+    folderModels.forEach(m => { newExpanded[m.id] = false; });
+    setExpandedModels(newExpanded);
+  };
+
+  const createFolder = () => {
+    if (!newFolderName.trim()) return;
+    if (allFolders.includes(newFolderName.trim())) {
+      showNotification('Folder already exists', 'error');
+      return;
+    }
+    // Create an empty placeholder - folder will exist once a model is assigned to it
+    // For now, just set the newModel's folder to this new folder
+    setNewModel(prev => ({ ...prev, folder: newFolderName.trim() }));
+    setNewFolderName('');
+    setShowFolderInput(false);
+    showNotification(`Folder "${newFolderName.trim()}" created. Assign models to it.`);
+  };
+
+  const renameFolder = (oldName, newName) => {
+    if (!newName.trim() || oldName === 'Uncategorized') return;
+    if (allFolders.includes(newName.trim()) && newName.trim() !== oldName) {
+      showNotification('Folder name already exists', 'error');
+      return;
+    }
+    // Update all models in this folder
+    const updated = models.map(m =>
+      m.folder === oldName ? { ...m, folder: newName.trim() } : m
+    );
+    saveModels(updated);
+    setRenamingFolder(null);
+    showNotification(`Folder renamed to "${newName.trim()}"`);
+  };
+
+  const deleteFolder = (folderName) => {
+    if (folderName === 'Uncategorized') return;
+    // Move all models in this folder to Uncategorized
+    const updated = models.map(m =>
+      m.folder === folderName ? { ...m, folder: 'Uncategorized' } : m
+    );
+    saveModels(updated);
+    showNotification(`Folder "${folderName}" deleted. Models moved to Uncategorized.`);
+  };
+
+  const moveModelToFolder = (modelId, newFolder) => {
+    const updated = models.map(m =>
+      m.id === modelId ? { ...m, folder: newFolder } : m
+    );
+    saveModels(updated);
+  };
 
   // Initialize printer settings for a model (now with plates containing parts)
   const initPrinterSettings = () => {
@@ -7512,7 +7614,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               const partNum = (plate.parts?.length || 0) + 1;
               return {
                 ...plate,
-                parts: [...(plate.parts || []), { name: `Part ${partNum}`, filamentUsage: '', printHours: '0', printMinutes: '', isMultiColor: false }]
+                parts: [...(plate.parts || []), { name: `Part ${partNum}`, filamentUsage: '', printHours: '0', printMinutes: '', quantity: 1, isMultiColor: false }]
               };
             }
             return plate;
@@ -7567,13 +7669,16 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     });
   };
 
-  // Calculate totals for a plate (sum of its parts)
+  // Calculate totals for a plate (sum of its parts, accounting for quantity)
   const calculatePlateTotals = (plate) => {
     if (!plate?.parts?.length) return { totalFilament: 0, totalMinutes: 0 };
-    return plate.parts.reduce((acc, part) => ({
-      totalFilament: acc.totalFilament + (parseFloat(part.filamentUsage) || 0),
-      totalMinutes: acc.totalMinutes + ((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)
-    }), { totalFilament: 0, totalMinutes: 0 });
+    return plate.parts.reduce((acc, part) => {
+      const qty = parseInt(part.quantity) || 1;
+      return {
+        totalFilament: acc.totalFilament + ((parseFloat(part.filamentUsage) || 0) * qty),
+        totalMinutes: acc.totalMinutes + (((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)) * qty
+      };
+    }, { totalFilament: 0, totalMinutes: 0 });
   };
 
   // Calculate totals for a printer setting (sum of all plates)
@@ -7640,7 +7745,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
           name: part.name || 'Part',
           filamentUsage: parseFloat(part.filamentUsage) || 0,
           printHours: parseInt(part.printHours) || 0,
-          printMinutes: parseInt(part.printMinutes) || 0
+          printMinutes: parseInt(part.printMinutes) || 0,
+          quantity: parseInt(part.quantity) || 1,
+          isMultiColor: part.isMultiColor || false
         }))
       }))
     }));
@@ -7657,11 +7764,12 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
       imageUrl: newModel.imageUrl || '',
       printerSettings: printerSettings,
       aliases: newModel.aliases || [],
-      file3mfUrl: newModel.file3mfUrl || ''
+      file3mfUrl: newModel.file3mfUrl || '',
+      folder: newModel.folder || 'Uncategorized'
     };
 
     saveModels([...models, model]);
-    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '' });
+    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '', folder: 'Uncategorized' });
     setShowAddModel(false);
     showNotification('Model added successfully');
   };
@@ -7725,9 +7833,38 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     <>
       <div className="section-header">
         <h2 className="page-title"><Printer size={28} /> Models</h2>
-        <button className="btn btn-primary" onClick={() => setShowAddModel(true)}>
-          <Plus size={18} /> Add Model
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {showFolderInput ? (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') createFolder();
+                  if (e.key === 'Escape') { setShowFolderInput(false); setNewFolderName(''); }
+                }}
+                autoFocus
+                style={{ width: '150px', padding: '6px 10px' }}
+              />
+              <button className="btn btn-primary btn-small" onClick={createFolder}>
+                <Check size={14} />
+              </button>
+              <button className="btn btn-secondary btn-small" onClick={() => { setShowFolderInput(false); setNewFolderName(''); }}>
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-secondary" onClick={() => setShowFolderInput(true)}>
+              <Box size={18} /> New Folder
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setShowAddModel(true)}>
+            <Plus size={18} /> Add Model
+          </button>
+        </div>
       </div>
 
       {models.length === 0 ? (
@@ -7737,178 +7874,343 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
           <p style={{ fontSize: '0.85rem' }}>Add your 3D models to track filament usage and required parts</p>
         </div>
       ) : (
-        models.map(model => (
-          <div key={model.id} className="model-card">
-            <div style={{ display: 'flex', gap: '16px' }}>
-              {/* Model Image */}
-              {model.imageUrl && (
-                <div style={{ flexShrink: 0 }}>
-                  <img 
-                    src={model.imageUrl} 
-                    alt={model.name}
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.1)'
-                    }}
-                  />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {sortedFolders.map(folder => (
+            <div key={folder} style={{
+              background: 'linear-gradient(135deg, rgba(0,255,136,0.03) 0%, rgba(0,204,255,0.03) 100%)',
+              border: '1px solid rgba(0,255,136,0.15)',
+              borderRadius: '12px',
+              overflow: 'hidden'
+            }}>
+              {/* Folder Header */}
+              <div
+                onClick={() => !renamingFolder && toggleFolderCollapsed(folder)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: 'rgba(0,255,136,0.08)',
+                  cursor: renamingFolder === folder ? 'default' : 'pointer',
+                  borderBottom: collapsedFolders[folder] ? 'none' : '1px solid rgba(0,255,136,0.1)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {collapsedFolders[folder] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                  <Box size={18} style={{ color: '#00ff88' }} />
+                  {renamingFolder === folder ? (
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={renameFolderValue}
+                      onChange={e => setRenameFolderValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') renameFolder(folder, renameFolderValue);
+                        if (e.key === 'Escape') setRenamingFolder(null);
+                      }}
+                      onBlur={() => renameFolder(folder, renameFolderValue)}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                      style={{ width: '150px', padding: '4px 8px', fontSize: '0.9rem' }}
+                    />
+                  ) : (
+                    <span style={{ fontWeight: '600', fontSize: '1rem' }}>
+                      {folder}
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize: '0.75rem',
+                    color: '#888',
+                    background: 'rgba(0,0,0,0.3)',
+                    padding: '2px 8px',
+                    borderRadius: '10px'
+                  }}>
+                    {groupedModels[folder].length} model{groupedModels[folder].length !== 1 ? 's' : ''}
+                  </span>
                 </div>
-              )}
-              
-              <div style={{ flex: 1 }}>
-                <div className="model-header">
-                  <div>
-                    <div className="model-name">
-                      {model.name}
-                      {model.variantName && (
-                        <span style={{
-                          color: '#00ccff',
-                          fontWeight: 'normal',
-                          marginLeft: '8px'
-                        }}>
-                          — {model.variantName}
-                        </span>
-                      )}
-                    </div>
-                    {model.storeId && (
-                      <span style={{ 
-                        fontSize: '0.7rem', 
-                        padding: '3px 8px', 
-                        borderRadius: '10px', 
-                        backgroundColor: getStoreColor(model.storeId) + '20',
-                        color: getStoreColor(model.storeId),
-                        border: `1px solid ${getStoreColor(model.storeId)}40`,
-                        marginTop: '4px',
-                        display: 'inline-block'
-                      }}>
-                        {getStoreName(model.storeId)}
-                      </span>
-                    )}
-                  </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {model.file3mfUrl && (
+                <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
                   <button
-                    className="btn btn-primary btn-small"
-                    title={model.file3mfUrl.startsWith('http') ? 'Open file' : 'Copy path to clipboard'}
-                    onClick={() => {
-                      if (model.file3mfUrl.startsWith('http')) {
-                        window.open(model.file3mfUrl, '_blank');
-                      } else {
-                        navigator.clipboard.writeText(model.file3mfUrl);
-                        showNotification('Path copied! Use ⌘+Shift+G in Finder to open');
-                      }
-                    }}
+                    className="btn btn-secondary btn-small"
+                    onClick={() => expandAllInFolder(folder)}
+                    style={{ padding: '4px 8px', fontSize: '0.7rem' }}
                   >
-                    <Printer size={14} /> {model.file3mfUrl.startsWith('http') ? 'Open 3MF' : 'Copy Path'}
+                    Expand All
                   </button>
-                )}
-                <button className="btn btn-secondary btn-small" onClick={() => setEditingModel(model)}>
-                  <Edit2 size={14} /> Edit
-                </button>
-                <button className="btn btn-secondary btn-small" onClick={() => duplicateModel(model)} title="Create variant">
-                  <Plus size={14} /> Variant
-                </button>
-                <button className="btn btn-danger btn-small" onClick={() => deleteModel(model.id)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-
-            {model.defaultColor && (
-              <div className="model-meta">
-                <div className="model-meta-item">
-                  Default Color: <span>{model.defaultColor}</span>
+                  <button
+                    className="btn btn-secondary btn-small"
+                    onClick={() => collapseAllInFolder(folder)}
+                    style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                  >
+                    Collapse All
+                  </button>
+                  {folder !== 'Uncategorized' && (
+                    <>
+                      <button
+                        className="btn btn-secondary btn-small"
+                        onClick={() => { setRenamingFolder(folder); setRenameFolderValue(folder); }}
+                        style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                        title="Rename folder"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button
+                        className="btn btn-danger btn-small"
+                        onClick={() => deleteFolder(folder)}
+                        style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                        title="Delete folder (moves models to Uncategorized)"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-            )}
 
-            {/* Printer Settings with Plates */}
-            {model.printerSettings?.length > 0 && (
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Printer Settings:</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {model.printerSettings.map(setting => {
-                    const printer = printers.find(p => p.id === setting.printerId);
-                    const totals = calculatePrinterTotals(setting);
-                    return printer ? (
-                      <div key={setting.printerId} style={{
-                        background: 'rgba(0,255,136,0.1)',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        fontSize: '0.85rem'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
-                          <div style={{ color: '#00ccff', fontSize: '0.8rem' }}>
-                            Total: {totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+              {/* Folder Contents */}
+              {!collapsedFolders[folder] && (
+                <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {groupedModels[folder].map(model => {
+                    const isExpanded = expandedModels[model.id];
+                    return (
+                      <div key={model.id} className="model-card" style={{ margin: 0 }}>
+                        {/* Collapsed Header - Always Visible */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => toggleModelExpanded(model.id)}
+                        >
+                          {isExpanded ? <ChevronDown size={16} style={{ color: '#00ff88' }} /> : <ChevronRight size={16} style={{ color: '#888' }} />}
+
+                          {/* Model Image Thumbnail */}
+                          {model.imageUrl && (
+                            <img
+                              src={model.imageUrl}
+                              alt={model.name}
+                              style={{
+                                width: '40px',
+                                height: '40px',
+                                objectFit: 'cover',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255,255,255,0.1)'
+                              }}
+                            />
+                          )}
+
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                              {model.name}
+                              {model.variantName && (
+                                <span style={{ color: '#00ccff', fontWeight: 'normal', marginLeft: '8px' }}>
+                                  — {model.variantName}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', gap: '12px', marginTop: '2px' }}>
+                              {model.defaultColor && <span>Color: {model.defaultColor}</span>}
+                              {model.printerSettings?.[0] && (() => {
+                                const totals = calculatePrinterTotals(model.printerSettings[0]);
+                                return <span>{totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m</span>;
+                              })()}
+                              {model.externalParts?.length > 0 && <span>{model.externalParts.length} part{model.externalParts.length !== 1 ? 's' : ''}</span>}
+                            </div>
+                          </div>
+
+                          {model.storeId && (
+                            <span style={{
+                              fontSize: '0.65rem',
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              backgroundColor: getStoreColor(model.storeId) + '20',
+                              color: getStoreColor(model.storeId),
+                              border: `1px solid ${getStoreColor(model.storeId)}40`
+                            }}>
+                              {getStoreName(model.storeId)}
+                            </span>
+                          )}
+
+                          {/* Quick Actions */}
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                            <select
+                              className="form-input"
+                              value={model.folder || 'Uncategorized'}
+                              onChange={e => moveModelToFolder(model.id, e.target.value)}
+                              style={{ padding: '4px 6px', fontSize: '0.7rem', width: '110px' }}
+                              title="Move to folder"
+                            >
+                              {allFolders.map(f => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </select>
+                            <button className="btn btn-secondary btn-small" onClick={() => setEditingModel(model)} style={{ padding: '4px 8px' }}>
+                              <Edit2 size={12} />
+                            </button>
+                            <button className="btn btn-secondary btn-small" onClick={() => duplicateModel(model)} title="Create variant" style={{ padding: '4px 8px' }}>
+                              <Plus size={12} />
+                            </button>
+                            <button className="btn btn-danger btn-small" onClick={() => deleteModel(model.id)} style={{ padding: '4px 8px' }}>
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         </div>
-                        {setting.plates?.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {setting.plates.map((plate, idx) => {
-                              const plateTotals = calculatePlateTotals(plate);
-                              return (
-                                <div key={idx} style={{
-                                  background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
-                                  padding: '8px 10px',
-                                  borderRadius: '6px',
-                                  border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : 'none'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: (plate.parts?.length || 0) > 0 ? '6px' : 0 }}>
-                                    {plate.isMultiColor && <Palette size={12} style={{ color: '#a55eea' }} />}
-                                    <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#a55eea' : '#ccc', fontSize: '0.8rem' }}>
-                                      {plate.name}
-                                    </span>
-                                    <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
-                                      {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
-                                    </span>
-                                  </div>
-                                  {(plate.parts?.length || 0) > 0 && (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '18px' }}>
-                                      {plate.parts.map((part, partIdx) => (
-                                        <span key={partIdx} style={{
-                                          background: 'rgba(0, 204, 255, 0.1)',
-                                          border: '1px solid rgba(0, 204, 255, 0.2)',
-                                          padding: '2px 6px',
-                                          borderRadius: '3px',
-                                          fontSize: '0.65rem',
-                                          color: '#00ccff'
-                                        }}>
-                                          {part.name} ({part.filamentUsage}g)
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+
+                        {/* Expanded Content */}
+                        {isExpanded && (
+                          <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div style={{ display: 'flex', gap: '16px' }}>
+                              {/* Model Image */}
+                              {model.imageUrl && (
+                                <div style={{ flexShrink: 0 }}>
+                                  <img
+                                    src={model.imageUrl}
+                                    alt={model.name}
+                                    style={{
+                                      width: '80px',
+                                      height: '80px',
+                                      objectFit: 'cover',
+                                      borderRadius: '8px',
+                                      border: '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                  />
                                 </div>
-                              );
-                            })}
+                              )}
+
+                              <div style={{ flex: 1 }}>
+                                {model.file3mfUrl && (
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <button
+                                      className="btn btn-primary btn-small"
+                                      title={model.file3mfUrl.startsWith('http') ? 'Open file' : 'Copy path to clipboard'}
+                                      onClick={() => {
+                                        if (model.file3mfUrl.startsWith('http')) {
+                                          window.open(model.file3mfUrl, '_blank');
+                                        } else {
+                                          navigator.clipboard.writeText(model.file3mfUrl);
+                                          showNotification('Path copied! Use ⌘+Shift+G in Finder to open');
+                                        }
+                                      }}
+                                    >
+                                      <Printer size={14} /> {model.file3mfUrl.startsWith('http') ? 'Open 3MF' : 'Copy Path'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Printer Settings with Plates */}
+                                {model.printerSettings?.length > 0 && (
+                                  <div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Printer Settings:</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {model.printerSettings.map(setting => {
+                                        const printer = printers.find(p => p.id === setting.printerId);
+                                        const totals = calculatePrinterTotals(setting);
+                                        return printer ? (
+                                          <div key={setting.printerId} style={{
+                                            background: 'rgba(0,255,136,0.1)',
+                                            padding: '10px 12px',
+                                            borderRadius: '8px',
+                                            fontSize: '0.85rem'
+                                          }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                              <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                                              <div style={{ color: '#00ccff', fontSize: '0.8rem' }}>
+                                                Total: {totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                                              </div>
+                                            </div>
+                                            {setting.plates?.length > 0 && (
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                {setting.plates.map((plate, idx) => {
+                                                  const plateTotals = calculatePlateTotals(plate);
+                                                  return (
+                                                    <div key={idx} style={{
+                                                      background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                                                      padding: '8px 10px',
+                                                      borderRadius: '6px',
+                                                      border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : 'none'
+                                                    }}>
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: (plate.parts?.length || 0) > 0 ? '6px' : 0 }}>
+                                                        {plate.isMultiColor && <Palette size={12} style={{ color: '#a55eea' }} />}
+                                                        <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#a55eea' : '#ccc', fontSize: '0.8rem' }}>
+                                                          {plate.name}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
+                                                          {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                                                        </span>
+                                                      </div>
+                                                      {(plate.parts?.length || 0) > 0 && (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '18px' }}>
+                                                          {plate.parts.map((part, partIdx) => (
+                                                            <span key={partIdx} style={{
+                                                              background: 'rgba(0, 204, 255, 0.1)',
+                                                              border: '1px solid rgba(0, 204, 255, 0.2)',
+                                                              padding: '2px 6px',
+                                                              borderRadius: '3px',
+                                                              fontSize: '0.65rem',
+                                                              color: '#00ccff'
+                                                            }}>
+                                                              {part.name}{(part.quantity || 1) > 1 ? ` ×${part.quantity}` : ''} ({part.filamentUsage}g)
+                                                            </span>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : null;
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {model.externalParts?.length > 0 && (
+                              <div style={{ marginTop: '12px' }}>
+                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Required Parts:</div>
+                                <div className="parts-list">
+                                  {model.externalParts.map((part, idx) => (
+                                    <span key={idx} className="part-tag">
+                                      {part.name} x{part.quantity}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {model.aliases?.length > 0 && (
+                              <div style={{ marginTop: '12px' }}>
+                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Aliases:</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {model.aliases.map((alias, idx) => (
+                                    <span key={idx} style={{
+                                      background: 'rgba(255,159,67,0.1)',
+                                      border: '1px solid rgba(255,159,67,0.3)',
+                                      padding: '2px 8px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.75rem',
+                                      color: '#ff9f43'
+                                    }}>
+                                      {alias}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    ) : null;
+                    );
                   })}
                 </div>
-              </div>
-            )}
-              </div>
+              )}
             </div>
-
-            {model.externalParts?.length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Required Parts:</div>
-                <div className="parts-list">
-                  {model.externalParts.map((part, idx) => (
-                    <span key={idx} className="part-tag">
-                      {part.name} x{part.quantity}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ))
+          ))}
+        </div>
       )}
 
       {/* Add Model Modal */}
@@ -7944,18 +8246,33 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Store (Optional)</label>
-              <select
-                className="form-input"
-                value={newModel.storeId}
-                onChange={e => setNewModel({ ...newModel, storeId: e.target.value })}
-              >
-                <option value="">All Stores</option>
-                {stores?.map(store => (
-                  <option key={store.id} value={store.id}>{store.name}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Store (Optional)</label>
+                <select
+                  className="form-input"
+                  value={newModel.storeId}
+                  onChange={e => setNewModel({ ...newModel, storeId: e.target.value })}
+                >
+                  <option value="">All Stores</option>
+                  {stores?.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Folder</label>
+                <select
+                  className="form-input"
+                  value={newModel.folder || 'Uncategorized'}
+                  onChange={e => setNewModel({ ...newModel, folder: e.target.value })}
+                >
+                  {allFolders.map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="form-group">
@@ -8216,7 +8533,20 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setNewModel({ ...newModel, printerSettings: updated });
                                   }}
                                   placeholder="Part name"
-                                  style={{ width: '130px', fontSize: '1rem', padding: '8px 10px' }}
+                                  style={{ width: '110px', fontSize: '1rem', padding: '8px 10px' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>×</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.quantity || 1}
+                                  onChange={e => {
+                                    const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'quantity', e.target.value);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  placeholder="1"
+                                  min="1"
+                                  style={{ width: '45px', fontSize: '1rem', padding: '8px 6px', textAlign: 'center' }}
                                 />
                                 <input
                                   type="number"
@@ -8227,7 +8557,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setNewModel({ ...newModel, printerSettings: updated });
                                   }}
                                   placeholder="0"
-                                  style={{ width: '70px', fontSize: '1rem', padding: '8px 10px' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
                                 <input
@@ -8424,20 +8754,35 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Store (Optional)</label>
-              <select
-                className="form-input"
-                value={editingModel.storeId || ''}
-                onChange={e => setEditingModel({ ...editingModel, storeId: e.target.value })}
-              >
-                <option value="">All Stores</option>
-                {stores?.map(store => (
-                  <option key={store.id} value={store.id}>{store.name}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Store (Optional)</label>
+                <select
+                  className="form-input"
+                  value={editingModel.storeId || ''}
+                  onChange={e => setEditingModel({ ...editingModel, storeId: e.target.value })}
+                >
+                  <option value="">All Stores</option>
+                  {stores?.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Folder</label>
+                <select
+                  className="form-input"
+                  value={editingModel.folder || 'Uncategorized'}
+                  onChange={e => setEditingModel({ ...editingModel, folder: e.target.value })}
+                >
+                  {allFolders.map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            
+
             <div className="form-group">
               <label className="form-label">Product Image</label>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -8695,7 +9040,20 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setEditingModel({ ...editingModel, printerSettings: updated });
                                   }}
                                   placeholder="Part name"
-                                  style={{ width: '130px', fontSize: '1rem', padding: '8px 10px' }}
+                                  style={{ width: '110px', fontSize: '1rem', padding: '8px 10px' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>×</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.quantity || 1}
+                                  onChange={e => {
+                                    const updated = updatePart(editingModel.printerSettings || [], printer.id, plateIdx, partIdx, 'quantity', e.target.value);
+                                    setEditingModel({ ...editingModel, printerSettings: updated });
+                                  }}
+                                  placeholder="1"
+                                  min="1"
+                                  style={{ width: '45px', fontSize: '1rem', padding: '8px 6px', textAlign: 'center' }}
                                 />
                                 <input
                                   type="number"
@@ -8706,7 +9064,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setEditingModel({ ...editingModel, printerSettings: updated });
                                   }}
                                   placeholder="0"
-                                  style={{ width: '70px', fontSize: '1rem', padding: '8px 10px' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
                                 <input
@@ -8719,7 +9077,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   }}
                                   placeholder="0"
                                   min="0"
-                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
+                                  style={{ width: '50px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <span style={{ color: '#888', fontSize: '0.9rem' }}>h</span>
                                 <input
