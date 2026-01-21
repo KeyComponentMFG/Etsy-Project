@@ -4779,6 +4779,8 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   const [showAddColor, setShowAddColor] = useState(false);
   const [newColorName, setNewColorName] = useState('');
   const [newColorUsage, setNewColorUsage] = useState('');
+  const [showReprintModal, setShowReprintModal] = useState(false);
+  const [reprintData, setReprintData] = useState({ filamentUsage: '', printHours: '0', printMinutes: '0' });
 
   const addAdditionalColor = () => {
     if (!newColorName || !newColorUsage) return;
@@ -4809,6 +4811,34 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
       return o;
     });
     setOrders(updated);
+  };
+
+  const createReprint = () => {
+    if (!reprintData.filamentUsage) return;
+
+    const newOrder = {
+      id: `reprint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      orderId: `REPRINT-${order.orderId.slice(-6)}-${Date.now().toString().slice(-4)}`,
+      item: `Reprint: ${order.item}`,
+      buyerName: order.buyerName || 'Reprint',
+      quantity: 1,
+      color: order.color,
+      price: '$0.00',
+      status: 'received',
+      assignedTo: order.assignedTo,
+      printerId: order.printerId,
+      isExtraPrint: true,
+      extraPrintFilament: parseFloat(reprintData.filamentUsage) || 0,
+      extraPrintMinutes: (parseInt(reprintData.printHours) || 0) * 60 + (parseInt(reprintData.printMinutes) || 0),
+      createdAt: Date.now(),
+      storeId: order.storeId,
+      originalOrderId: order.orderId,
+      notes: `Reprint for order ${order.orderId}`
+    };
+
+    setOrders([newOrder, ...orders]);
+    setReprintData({ filamentUsage: '', printHours: '0', printMinutes: '0' });
+    setShowReprintModal(false);
   };
 
   const statusIcons = {
@@ -5542,7 +5572,85 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             Will auto-archive in 2 days
           </span>
         )}
+
+        {/* Reprint Button - available for all statuses */}
+        <button
+          className="btn btn-secondary btn-small"
+          onClick={() => setShowReprintModal(true)}
+          style={{ marginLeft: '8px', background: 'rgba(255, 159, 67, 0.15)', borderColor: 'rgba(255, 159, 67, 0.3)', color: '#ff9f43' }}
+          title="Create a reprint for this order"
+        >
+          <RefreshCw size={14} /> Reprint
+        </button>
       </div>
+
+      {/* Reprint Modal */}
+      {showReprintModal && (
+        <div className="modal-overlay" onClick={() => setShowReprintModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3><RefreshCw size={20} /> Create Reprint</h3>
+              <button className="close-btn" onClick={() => setShowReprintModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px', color: '#aaa' }}>
+                Creating reprint for: <strong>{order.item}</strong>
+              </p>
+              <p style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#888' }}>
+                Color: {order.color || 'Not specified'} • Assigned: {teamMembers?.find(m => m.id === order.assignedTo)?.name || 'Unassigned'}
+              </p>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label>Filament Usage (grams) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Enter filament usage"
+                  value={reprintData.filamentUsage}
+                  onChange={e => setReprintData({ ...reprintData, filamentUsage: e.target.value })}
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>Print Time</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Hours"
+                    value={reprintData.printHours}
+                    onChange={e => setReprintData({ ...reprintData, printHours: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    placeholder="Minutes"
+                    value={reprintData.printMinutes}
+                    onChange={e => setReprintData({ ...reprintData, printMinutes: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowReprintModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={createReprint}
+                disabled={!reprintData.filamentUsage}
+                style={{ background: 'linear-gradient(135deg, #ff9f43 0%, #ee5a24 100%)' }}
+              >
+                <RefreshCw size={16} /> Create Reprint
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Shipping Cost Modal */}
       {showShippingModal && (
