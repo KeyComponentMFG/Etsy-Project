@@ -1534,6 +1534,7 @@ export default function EtsyOrderManager() {
           plateColors: o.plate_colors || {},
           plateReprints: o.plate_reprints || [],
           buyerMessage: o.buyer_message || '',
+          assignmentIssue: o.assignment_issue || null,
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1800,7 +1801,8 @@ export default function EtsyOrderManager() {
           completed_plates: o.completedPlates || [],
           plate_colors: o.plateColors || {},
           plate_reprints: o.plateReprints || [],
-          buyer_message: o.buyerMessage || ''
+          buyer_message: o.buyerMessage || '',
+          assignment_issue: o.assignmentIssue || null
         }));
         await supabase.from('orders').upsert(dbFormat);
       }
@@ -2448,52 +2450,112 @@ export default function EtsyOrderManager() {
     });
   };
 
-  // Auto-assignment algorithm
+  // Auto-assignment algorithm with external parts matching
   const autoAssignOrder = (order, currentOrders) => {
     const model = findModelByName(order.item);
-    if (!model) return null;
+    if (!model) return { assignedTo: null, assignmentIssue: null };
+
+    const orderExtra = (order.extra || '').toLowerCase().trim();
+
+    // Find which external part is needed based on the order's "extra" field (partial match)
+    let requiredPart = null;
+    if (orderExtra && model.externalParts?.length > 0) {
+      requiredPart = model.externalParts.find(part => {
+        const partName = part.name.toLowerCase();
+        // Partial match: either extra contains part name or part name contains extra
+        return partName.includes(orderExtra) || orderExtra.includes(partName);
+      });
+    }
 
     const scores = teamMembers.map(member => {
       let score = 0;
-      
-      // Check filament availability
+      const memberParts = externalParts[member.id] || [];
       const memberFilaments = filaments[member.id] || [];
+
+      // Count current workload (fewer orders = higher priority for tie-breaking)
+      const memberOrders = currentOrders.filter(o =>
+        o.assignedTo === member.id && o.status !== 'shipped'
+      ).length;
+
+      // If a specific external part is required, prioritize by stock of that part
+      let partStock = 0;
+      let hasRequiredPart = false;
+      if (requiredPart) {
+        const memberPart = memberParts.find(p => {
+          const pName = p.name.toLowerCase();
+          const rName = requiredPart.name.toLowerCase();
+          return pName === rName || pName.includes(rName) || rName.includes(pName);
+        });
+        if (memberPart && memberPart.quantity >= (requiredPart.quantity || 1)) {
+          hasRequiredPart = true;
+          partStock = memberPart.quantity;
+          // Primary score: stock of the required part (weighted heavily)
+          score += partStock * 10;
+        }
+      } else {
+        // No specific part required, check all model parts
+        let hasAllParts = true;
+        (model.externalParts || []).forEach(needed => {
+          const part = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+          if (!part || part.quantity < needed.quantity) {
+            hasAllParts = false;
+          } else {
+            score += part.quantity;
+          }
+        });
+        hasRequiredPart = hasAllParts || (model.externalParts || []).length === 0;
+      }
+
+      // Check filament availability
       const orderColor = (order.color || model.defaultColor || '').toLowerCase();
       const neededFilament = memberFilaments.find(f => {
         const filColor = f.color.toLowerCase();
-        return filColor === orderColor || 
-               filColor.includes(orderColor) || 
+        return filColor === orderColor ||
+               filColor.includes(orderColor) ||
                orderColor.includes(filColor);
       });
       if (neededFilament) {
-        // Include backup rolls in availability calculation
         const totalAvailable = neededFilament.amount + (neededFilament.backupRolls?.length || 0) * 1000;
-        score += Math.min(totalAvailable / model.filamentUsage, 10) * 3;
+        score += Math.min(totalAvailable / 100, 5); // Small bonus for filament
       }
-      
-      // Check external parts availability
-      const memberParts = externalParts[member.id] || [];
-      let hasAllParts = true;
-      (model.externalParts || []).forEach(needed => {
-        const part = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
-        if (!part || part.quantity < needed.quantity) {
-          hasAllParts = false;
-        } else {
-          score += 2;
-        }
-      });
-      
-      // Penalize for current workload
-      const memberOrders = currentOrders.filter(o => 
-        o.assignedTo === member.id && o.status !== 'shipped'
-      ).length;
-      score -= memberOrders * 2;
-      
-      return { memberId: member.id, score, hasAllParts };
+
+      // Tie-breaker: fewer current orders = higher score
+      score -= memberOrders * 0.5;
+
+      return {
+        memberId: member.id,
+        memberName: member.name,
+        score,
+        hasRequiredPart,
+        partStock,
+        orderCount: memberOrders
+      };
     });
 
-    scores.sort((a, b) => b.score - a.score);
-    return scores[0]?.memberId || teamMembers[0]?.id;
+    // Filter to only members who have the required part (if one is required)
+    const eligibleMembers = requiredPart
+      ? scores.filter(s => s.hasRequiredPart)
+      : scores.filter(s => s.hasRequiredPart);
+
+    // Sort by score (highest first), then by order count (lowest first) as tie-breaker
+    eligibleMembers.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.orderCount - b.orderCount; // Fewer orders wins tie
+    });
+
+    // If no one has the required part, leave unassigned with issue
+    if (eligibleMembers.length === 0 || (requiredPart && !eligibleMembers[0]?.hasRequiredPart)) {
+      const partName = requiredPart?.name || 'required parts';
+      return {
+        assignedTo: null,
+        assignmentIssue: `No stock: ${partName}`
+      };
+    }
+
+    return {
+      assignedTo: eligibleMembers[0]?.memberId || null,
+      assignmentIssue: null
+    };
   };
 
   // Parse CSV and import orders
@@ -2663,14 +2725,26 @@ export default function EtsyOrderManager() {
       console.log('New orders:', newOrders.length);
       console.log('First order storeId:', newOrders[0]?.storeId);
 
-      // Auto-assign orders
+      // Auto-assign orders based on external parts inventory
       const allOrders = [...orders];
+      let unassignedCount = 0;
       newOrders.forEach(order => {
-        order.assignedTo = autoAssignOrder(order, [...allOrders, ...newOrders.filter(o => o !== order)]);
+        const result = autoAssignOrder(order, [...allOrders, ...newOrders.filter(o => o !== order)]);
+        order.assignedTo = result.assignedTo;
+        order.assignmentIssue = result.assignmentIssue;
+        if (result.assignmentIssue) {
+          unassignedCount++;
+        }
         allOrders.push(order);
       });
 
       saveOrders([...orders, ...newOrders]);
+
+      // Show notification with unassigned count if any
+      if (unassignedCount > 0) {
+        showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${unassignedCount} unassigned (no stock). ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
+        return;
+      }
       
       if (newOrders.length > 0) {
         showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
@@ -3233,10 +3307,10 @@ export default function EtsyOrderManager() {
     showNotification(`Reprinted ${part.name} in ${selectedColor} (${partFilament}g deducted)`);
   };
 
-  // Reassign order
+  // Reassign order (also clears any assignment issue)
   const reassignOrder = (orderId, memberId) => {
-    const updated = orders.map(o => 
-      o.orderId === orderId ? { ...o, assignedTo: memberId } : o
+    const updated = orders.map(o =>
+      o.orderId === orderId ? { ...o, assignedTo: memberId, assignmentIssue: null } : o
     );
     saveOrders(updated);
   };
@@ -5126,7 +5200,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   };
 
   return (
-    <div className="order-card">
+    <div className="order-card" style={order.assignmentIssue ? {
+      borderColor: 'rgba(255, 107, 107, 0.5)',
+      boxShadow: '0 0 0 1px rgba(255, 107, 107, 0.3), inset 0 0 20px rgba(255, 107, 107, 0.05)'
+    } : {}}>
       <div style={{ display: 'flex', gap: '12px' }}>
         {/* Model Image */}
         {matchingModel?.imageUrl ? (
@@ -5249,12 +5326,12 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             fontSize: '0.75rem',
             padding: '4px 10px',
             borderRadius: '12px',
-            backgroundColor: 'rgba(255, 193, 7, 0.15)',
-            color: '#ffc107',
-            border: '1px solid rgba(255, 193, 7, 0.3)'
+            backgroundColor: order.assignmentIssue ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 193, 7, 0.15)',
+            color: order.assignmentIssue ? '#ff6b6b' : '#ffc107',
+            border: order.assignmentIssue ? '1px solid rgba(255, 107, 107, 0.4)' : '1px solid rgba(255, 193, 7, 0.3)'
           }}>
             <AlertCircle size={12} />
-            Unassigned
+            {order.assignmentIssue || 'Unassigned'}
           </span>
         )}
 
