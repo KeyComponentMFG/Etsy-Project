@@ -88,6 +88,8 @@ ALTER TABLE filaments ADD COLUMN IF NOT EXISTS reorder_at numeric DEFAULT 200;
 -- PRINTERS TABLE
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS name text;
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS status text DEFAULT 'available';
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS total_hours numeric DEFAULT 0;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS owner_id text;
 
 -- TEAM_MEMBERS TABLE
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS name text;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -29,7 +29,7 @@ const DEFAULT_STORES = [
 
 // Default printers
 const DEFAULT_PRINTERS = [
-  { id: 'printer1', name: 'Printer 1' }
+  { id: 'printer1', name: 'Printer 1', totalHours: 0, ownerId: null }
 ];
 
 // Production stages
@@ -1654,7 +1654,12 @@ export default function EtsyOrderManager() {
         setStores(storesData.map(s => ({ id: s.id, name: s.name, color: s.color })));
       }
       if (printersData && printersData.length > 0) {
-        setPrinters(printersData.map(p => ({ id: p.id, name: p.name })));
+        setPrinters(printersData.map(p => ({
+          id: p.id,
+          name: p.name,
+          totalHours: p.total_hours || 0,
+          ownerId: p.owner_id || null
+        })));
       }
 
       // Transform purchases
@@ -2032,7 +2037,13 @@ export default function EtsyOrderManager() {
       }
 
       if (printers.length > 0) {
-        await supabase.from('printers').upsert(printers);
+        const dbFormat = printers.map(p => ({
+          id: p.id,
+          name: p.name,
+          total_hours: p.totalHours || 0,
+          owner_id: p.ownerId || null
+        }));
+        await supabase.from('printers').upsert(dbFormat);
       }
     };
     syncPrinters();
@@ -3362,6 +3373,28 @@ export default function EtsyOrderManager() {
       }
     }
 
+    // Calculate plate print time from all parts (in hours)
+    const platePrintHours = (plate.parts || []).reduce((sum, part) => {
+      const hours = parseFloat(part.printHours) || 0;
+      const minutes = parseFloat(part.printMinutes) || 0;
+      return sum + hours + (minutes / 60);
+    }, 0) * order.quantity;
+
+    // Update printer hours when completing/uncompleting a plate
+    if (order.printerId && platePrintHours > 0) {
+      const updatedPrinters = printers.map(p => {
+        if (p.id === order.printerId) {
+          const currentHours = p.totalHours || 0;
+          const newHours = isCompleting
+            ? currentHours + platePrintHours
+            : Math.max(0, currentHours - platePrintHours);
+          return { ...p, totalHours: newHours };
+        }
+        return p;
+      });
+      savePrinters(updatedPrinters);
+    }
+
     // Update order's completedPlates array and plateColors
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
@@ -3387,8 +3420,9 @@ export default function EtsyOrderManager() {
 
     const plateName = plate.name || `Plate ${plateIndex + 1}`;
     const colorInfo = isMultiColor && selectedColor ? ` in ${selectedColor}` : '';
+    const timeInfo = platePrintHours > 0 ? `, +${platePrintHours.toFixed(1)}h` : '';
     showNotification(isCompleting
-      ? `${plateName} completed${colorInfo}! (${plateFilament}g deducted)`
+      ? `${plateName} completed${colorInfo}! (${plateFilament}g deducted${timeInfo})`
       : `${plateName} uncompleted (${plateFilament}g added back)`
     );
   };
@@ -3455,6 +3489,21 @@ export default function EtsyOrderManager() {
       }
     }
 
+    // Calculate part print time (in hours)
+    const partPrintHours = (parseFloat(part.printHours) || 0) + ((parseFloat(part.printMinutes) || 0) / 60);
+
+    // Update printer hours for the reprint
+    if (order.printerId && partPrintHours > 0) {
+      const updatedPrinters = printers.map(p => {
+        if (p.id === order.printerId) {
+          const currentHours = p.totalHours || 0;
+          return { ...p, totalHours: currentHours + partPrintHours };
+        }
+        return p;
+      });
+      savePrinters(updatedPrinters);
+    }
+
     // Add reprint to order's plateReprints array
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
@@ -3465,6 +3514,7 @@ export default function EtsyOrderManager() {
           partName: part.name,
           color: selectedColor,
           filamentUsage: partFilament,
+          printHours: partPrintHours,
           timestamp: Date.now()
         }];
         return { ...o, plateReprints: newReprints };
@@ -3473,7 +3523,8 @@ export default function EtsyOrderManager() {
     });
     saveOrders(updated);
 
-    showNotification(`Reprinted ${part.name} in ${selectedColor} (${partFilament}g deducted)`);
+    const timeInfo = partPrintHours > 0 ? `, +${partPrintHours.toFixed(1)}h` : '';
+    showNotification(`Reprinted ${part.name} in ${selectedColor} (${partFilament}g deducted${timeInfo})`);
   };
 
   // Reassign order (also clears any assignment issue)
@@ -4471,6 +4522,7 @@ export default function EtsyOrderManager() {
               printers={printers}
               savePrinters={savePrinters}
               orders={orders}
+              teamMembers={teamMembers}
               showNotification={showNotification}
             />
           )}
@@ -11687,9 +11739,11 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
 }
 
 // Printers Tab Component
-function PrintersTab({ printers, savePrinters, orders, showNotification }) {
+function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotification }) {
   const [showAddPrinter, setShowAddPrinter] = useState(false);
   const [newPrinterName, setNewPrinterName] = useState('');
+  const [newPrinterOwner, setNewPrinterOwner] = useState('');
+  const [newPrinterHours, setNewPrinterHours] = useState('');
   const [editingPrinter, setEditingPrinter] = useState(null);
 
   const addPrinter = () => {
@@ -11700,13 +11754,26 @@ function PrintersTab({ printers, savePrinters, orders, showNotification }) {
 
     const printer = {
       id: `printer-${Date.now()}`,
-      name: newPrinterName.trim()
+      name: newPrinterName.trim(),
+      totalHours: parseFloat(newPrinterHours) || 0,
+      ownerId: newPrinterOwner || null
     };
 
     savePrinters([...printers, printer]);
     setNewPrinterName('');
+    setNewPrinterOwner('');
+    setNewPrinterHours('');
     setShowAddPrinter(false);
     showNotification('Printer added');
+  };
+
+  const updatePrinter = (printerId, updates) => {
+    const updated = printers.map(p =>
+      p.id === printerId ? { ...p, ...updates } : p
+    );
+    savePrinters(updated);
+    setEditingPrinter(null);
+    showNotification('Printer updated');
   };
 
   const updatePrinterName = (printerId, newName) => {
@@ -11717,6 +11784,19 @@ function PrintersTab({ printers, savePrinters, orders, showNotification }) {
     savePrinters(updated);
     setEditingPrinter(null);
     showNotification('Printer updated');
+  };
+
+  const getOwnerName = (ownerId) => {
+    if (!ownerId) return 'Unassigned';
+    const owner = teamMembers.find(m => m.id === ownerId);
+    return owner ? owner.name : 'Unknown';
+  };
+
+  const formatHours = (hours) => {
+    const h = parseFloat(hours) || 0;
+    if (h === 0) return '0h';
+    if (h < 1) return `${Math.round(h * 60)}m`;
+    return `${h.toFixed(1)}h`;
   };
 
   const deletePrinter = (printerId) => {
@@ -11770,26 +11850,74 @@ function PrintersTab({ printers, savePrinters, orders, showNotification }) {
                 alignItems: 'center'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                 <Printer size={24} style={{ color: '#00ff88' }} />
                 {editingPrinter === printer.id ? (
-                  <input
-                    type="text"
-                    className="form-input"
-                    defaultValue={printer.name}
-                    autoFocus
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') updatePrinterName(printer.id, e.target.value);
-                      if (e.key === 'Escape') setEditingPrinter(null);
-                    }}
-                    onBlur={e => updatePrinterName(printer.id, e.target.value)}
-                    style={{ width: '200px' }}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      defaultValue={printer.name}
+                      autoFocus
+                      placeholder="Printer name"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const name = e.target.value.trim();
+                          if (name) updatePrinterName(printer.id, name);
+                        }
+                        if (e.key === 'Escape') setEditingPrinter(null);
+                      }}
+                      style={{ width: '200px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#888' }}>Owner:</span>
+                        <select
+                          className="form-input"
+                          defaultValue={printer.ownerId || ''}
+                          onChange={e => updatePrinter(printer.id, { ownerId: e.target.value || null })}
+                          style={{ width: '150px', padding: '4px 8px' }}
+                        >
+                          <option value="">Unassigned</option>
+                          {teamMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#888' }}>Hours:</span>
+                        <input
+                          type="number"
+                          className="form-input"
+                          defaultValue={printer.totalHours || 0}
+                          step="0.1"
+                          min="0"
+                          onBlur={e => updatePrinter(printer.id, { totalHours: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '80px', padding: '4px 8px' }}
+                        />
+                      </div>
+                      <button
+                        className="btn btn-secondary btn-small"
+                        onClick={() => setEditingPrinter(null)}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>{printer.name}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#888' }}>
-                      {getOrderCount(printer.id)} active prints
+                    <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', gap: '16px', marginTop: '4px' }}>
+                      <span>{getOrderCount(printer.id)} active prints</span>
+                      <span style={{ color: '#00ccff' }}>
+                        <Clock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                        {formatHours(printer.totalHours || 0)} total
+                      </span>
+                      <span style={{ color: '#ff9f43' }}>
+                        <User size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                        {getOwnerName(printer.ownerId)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -11817,7 +11945,7 @@ function PrintersTab({ printers, savePrinters, orders, showNotification }) {
       {/* Add Printer Modal */}
       {showAddPrinter && (
         <div className="modal-overlay" onClick={() => setShowAddPrinter(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
             <div className="modal-header">
               <h2 className="modal-title">Add New Printer</h2>
               <button className="modal-close" onClick={() => setShowAddPrinter(false)}>
@@ -11834,12 +11962,39 @@ function PrintersTab({ printers, savePrinters, orders, showNotification }) {
                 onChange={e => setNewPrinterName(e.target.value)}
                 placeholder="e.g., Bambu X1 Carbon"
                 autoFocus
-                onKeyDown={e => e.key === 'Enter' && addPrinter()}
               />
             </div>
 
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Owner</label>
+                <select
+                  className="form-input"
+                  value={newPrinterOwner}
+                  onChange={e => setNewPrinterOwner(e.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {teamMembers.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ width: '120px' }}>
+                <label className="form-label">Initial Hours</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={newPrinterHours}
+                  onChange={e => setNewPrinterHours(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  step="0.1"
+                />
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-              <button className="btn btn-secondary" onClick={() => setShowAddPrinter(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => { setShowAddPrinter(false); setNewPrinterName(''); setNewPrinterOwner(''); setNewPrinterHours(''); }}>Cancel</button>
               <button className="btn btn-primary" onClick={addPrinter}>
                 <Save size={18} /> Add Printer
               </button>
