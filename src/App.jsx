@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, Archive, Upload, ChevronRight, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
+import { Package, Printer, Users, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -5775,7 +5775,53 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [addingRollTo, setAddingRollTo] = useState(null); // {memberId, filamentId}
   const [newRollCost, setNewRollCost] = useState('');
+  const [sortBy, setSortBy] = useState('custom'); // 'custom', 'alpha', 'most', 'least'
   const ROLL_SIZE = 1000; // grams per roll
+
+  // Sort filaments based on selected sort option
+  const sortFilaments = (filamentList) => {
+    if (!filamentList || filamentList.length === 0) return [];
+    const sorted = [...filamentList];
+    switch (sortBy) {
+      case 'alpha':
+        return sorted.sort((a, b) => a.color.localeCompare(b.color));
+      case 'most':
+        return sorted.sort((a, b) => {
+          const aTotal = a.amount + ((a.backupRolls?.length || 0) * ROLL_SIZE);
+          const bTotal = b.amount + ((b.backupRolls?.length || 0) * ROLL_SIZE);
+          return bTotal - aTotal;
+        });
+      case 'least':
+        return sorted.sort((a, b) => {
+          const aTotal = a.amount + ((a.backupRolls?.length || 0) * ROLL_SIZE);
+          const bTotal = b.amount + ((b.backupRolls?.length || 0) * ROLL_SIZE);
+          return aTotal - bTotal;
+        });
+      case 'custom':
+      default:
+        return sorted.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    }
+  };
+
+  // Move filament up in custom order
+  const moveFilament = (memberId, filamentId, direction) => {
+    const memberFilaments = [...(filaments[memberId] || [])];
+    const idx = memberFilaments.findIndex(f => f.id === filamentId);
+    if (idx < 0) return;
+
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= memberFilaments.length) return;
+
+    // Swap positions
+    [memberFilaments[idx], memberFilaments[newIdx]] = [memberFilaments[newIdx], memberFilaments[idx]];
+
+    // Update sortOrder for all
+    memberFilaments.forEach((f, i) => {
+      f.sortOrder = i;
+    });
+
+    saveFilaments({ ...filaments, [memberId]: memberFilaments });
+  };
 
   const needsRestock = (fil) => {
     const threshold = fil.reorderAt ?? 250;
@@ -5924,8 +5970,31 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 
   return (
     <>
-      <h2 className="page-title"><Palette size={28} /> Filament Inventory</h2>
-      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+        <h2 className="page-title" style={{ margin: 0 }}><Palette size={28} /> Filament Inventory</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ color: '#888', fontSize: '0.85rem' }}>Sort by:</span>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="custom">Custom Order</option>
+            <option value="alpha">Alphabetical</option>
+            <option value="most">Most Stock</option>
+            <option value="least">Least Stock</option>
+          </select>
+        </div>
+      </div>
+
       <div className="inventory-grid">
         {teamMembers.map(member => (
           <div key={member.id} className="inventory-card">
@@ -5935,7 +6004,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               {(filaments[member.id] || []).length === 0 ? (
                 <p style={{ color: '#666', fontSize: '0.9rem' }}>No filament added</p>
               ) : (
-                (filaments[member.id] || []).map(fil => {
+                sortFilaments(filaments[member.id] || []).map((fil, filIdx, sortedList) => {
                   const lowStock = needsRestock(fil);
                   return (
                   <div key={fil.id} className="inventory-item" style={lowStock ? {
@@ -6005,6 +6074,28 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '4px' }}>
+                        {sortBy === 'custom' && (
+                          <>
+                            <button
+                              className="qty-btn"
+                              onClick={() => moveFilament(member.id, fil.id, 'up')}
+                              title="Move up"
+                              disabled={filIdx === 0}
+                              style={{ opacity: filIdx === 0 ? 0.3 : 1 }}
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button
+                              className="qty-btn"
+                              onClick={() => moveFilament(member.id, fil.id, 'down')}
+                              title="Move down"
+                              disabled={filIdx === sortedList.length - 1}
+                              style={{ opacity: filIdx === sortedList.length - 1 ? 0.3 : 1 }}
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                          </>
+                        )}
                         <button className="qty-btn" onClick={() => startEdit(member.id, fil)} title="Edit filament">
                           <Edit2 size={14} />
                         </button>
