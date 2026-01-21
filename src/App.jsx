@@ -7889,9 +7889,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                             {(plate.parts || []).map((part, partIdx) => (
                               <div key={partIdx} style={{
                                 display: 'flex',
-                                gap: '6px',
+                                gap: '8px',
                                 alignItems: 'center',
-                                marginBottom: '6px',
+                                marginBottom: '8px',
                                 flexWrap: 'wrap'
                               }}>
                                 <input
@@ -7903,7 +7903,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setNewModel({ ...newModel, printerSettings: updated });
                                   }}
                                   placeholder="Part name"
-                                  style={{ width: '100px', fontSize: '0.85rem' }}
+                                  style={{ width: '130px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <input
                                   type="number"
@@ -7914,9 +7914,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setNewModel({ ...newModel, printerSettings: updated });
                                   }}
                                   placeholder="0"
-                                  style={{ width: '55px', fontSize: '0.85rem' }}
+                                  style={{ width: '70px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>g</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -7927,9 +7927,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   }}
                                   placeholder="0"
                                   min="0"
-                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>h</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -7941,9 +7941,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="0"
                                   min="0"
                                   max="59"
-                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
                                 <button
                                   className="qty-btn"
                                   onClick={() => {
@@ -7951,9 +7951,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setNewModel({ ...newModel, printerSettings: updated });
                                   }}
                                   title="Remove part"
-                                  style={{ padding: '2px' }}
+                                  style={{ padding: '4px', marginLeft: '4px' }}
                                 >
-                                  <X size={12} />
+                                  <X size={14} />
                                 </button>
                               </div>
                             ))}
@@ -8365,9 +8365,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                             {(plate.parts || []).map((part, partIdx) => (
                               <div key={partIdx} style={{
                                 display: 'flex',
-                                gap: '6px',
+                                gap: '8px',
                                 alignItems: 'center',
-                                marginBottom: '6px',
+                                marginBottom: '8px',
                                 flexWrap: 'wrap'
                               }}>
                                 <input
@@ -8379,7 +8379,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setEditingModel({ ...editingModel, printerSettings: updated });
                                   }}
                                   placeholder="Part name"
-                                  style={{ width: '100px', fontSize: '0.85rem' }}
+                                  style={{ width: '130px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
                                 <input
                                   type="number"
@@ -8390,9 +8390,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setEditingModel({ ...editingModel, printerSettings: updated });
                                   }}
                                   placeholder="0"
-                                  style={{ width: '55px', fontSize: '0.85rem' }}
+                                  style={{ width: '70px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>g</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -8403,9 +8403,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   }}
                                   placeholder="0"
                                   min="0"
-                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>h</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -8417,9 +8417,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="0"
                                   min="0"
                                   max="59"
-                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                  style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                                <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
                                 <button
                                   className="qty-btn"
                                   onClick={() => {
@@ -8427,9 +8427,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                     setEditingModel({ ...editingModel, printerSettings: updated });
                                   }}
                                   title="Remove part"
-                                  style={{ padding: '2px' }}
+                                  style={{ padding: '4px', marginLeft: '4px' }}
                                 >
-                                  <X size={12} />
+                                  <X size={14} />
                                 </button>
                               </div>
                             ))}
