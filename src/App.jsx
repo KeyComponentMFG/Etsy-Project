@@ -7790,78 +7790,162 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       )}
                     </div>
 
-                    {/* Plates list */}
-                    {(setting.plates || []).map((plate, plateIdx) => (
-                      <div key={plateIdx} style={{
-                        background: 'rgba(0,0,0,0.2)',
-                        padding: '10px',
-                        borderRadius: '6px',
-                        marginBottom: '8px'
-                      }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={plate.name}
-                            onChange={e => {
-                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'name', e.target.value);
-                              setNewModel({ ...newModel, printerSettings: updated });
-                            }}
-                            placeholder="Plate name"
-                            style={{ width: '120px' }}
-                          />
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.filamentUsage}
-                            onChange={e => {
-                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'filamentUsage', e.target.value);
-                              setNewModel({ ...newModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            style={{ width: '70px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>g</span>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.printHours}
-                            onChange={e => {
-                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'printHours', e.target.value);
-                              setNewModel({ ...newModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            min="0"
-                            style={{ width: '50px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>h</span>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={plate.printMinutes}
-                            onChange={e => {
-                              const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'printMinutes', e.target.value);
-                              setNewModel({ ...newModel, printerSettings: updated });
-                            }}
-                            placeholder="0"
-                            min="0"
-                            max="59"
-                            style={{ width: '50px' }}
-                          />
-                          <span style={{ color: '#888', fontSize: '0.8rem' }}>m</span>
-                          <button
-                            className="qty-btn"
-                            onClick={() => {
-                              const updated = removePlate(newModel.printerSettings, printer.id, plateIdx);
-                              setNewModel({ ...newModel, printerSettings: updated });
-                            }}
-                            title="Remove plate"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                    {/* Plates list with parts */}
+                    {(setting.plates || []).map((plate, plateIdx) => {
+                      const plateTotals = calculatePlateTotals(plate);
+                      return (
+                        <div key={plateIdx} style={{
+                          background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          marginBottom: '10px',
+                          border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : '1px solid rgba(255,255,255,0.05)'
+                        }}>
+                          {/* Plate header */}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={plate.name || ''}
+                              onChange={e => {
+                                const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'name', e.target.value);
+                                setNewModel({ ...newModel, printerSettings: updated });
+                              }}
+                              placeholder="Plate name"
+                              style={{ width: '140px', fontWeight: '500' }}
+                            />
+                            {/* Plate totals */}
+                            {(plate.parts?.length || 0) > 0 && (
+                              <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
+                                {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                              </span>
+                            )}
+                            {/* Multi-Color Toggle */}
+                            <label style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
+                              border: `1px solid ${plate.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                              fontSize: '0.7rem',
+                              color: plate.isMultiColor ? '#a55eea' : '#888'
+                            }} title="When enabled, you'll choose the color when completing this plate">
+                              <input
+                                type="checkbox"
+                                checked={plate.isMultiColor || false}
+                                onChange={e => {
+                                  const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'isMultiColor', e.target.checked);
+                                  setNewModel({ ...newModel, printerSettings: updated });
+                                }}
+                                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                              />
+                              Multi
+                            </label>
+                            <button
+                              className="qty-btn"
+                              onClick={() => {
+                                const updated = removePlate(newModel.printerSettings, printer.id, plateIdx);
+                                setNewModel({ ...newModel, printerSettings: updated });
+                              }}
+                              title="Remove plate"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+
+                          {/* Parts list */}
+                          <div style={{ marginLeft: '12px', borderLeft: '2px solid rgba(0, 204, 255, 0.3)', paddingLeft: '12px' }}>
+                            {(plate.parts || []).length === 0 && (
+                              <p style={{ fontSize: '0.75rem', color: '#666', margin: '8px 0' }}>No parts added yet</p>
+                            )}
+                            {(plate.parts || []).map((part, partIdx) => (
+                              <div key={partIdx} style={{
+                                display: 'flex',
+                                gap: '6px',
+                                alignItems: 'center',
+                                marginBottom: '6px',
+                                flexWrap: 'wrap'
+                              }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={part.name || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'name', e.target.value);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  placeholder="Part name"
+                                  style={{ width: '100px', fontSize: '0.85rem' }}
+                                />
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.filamentUsage || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'filamentUsage', e.target.value);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  style={{ width: '55px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>g</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.printHours || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'printHours', e.target.value);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  min="0"
+                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={part.printMinutes || ''}
+                                  onChange={e => {
+                                    const updated = updatePart(newModel.printerSettings, printer.id, plateIdx, partIdx, 'printMinutes', e.target.value);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  placeholder="0"
+                                  min="0"
+                                  max="59"
+                                  style={{ width: '40px', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                                <button
+                                  className="qty-btn"
+                                  onClick={() => {
+                                    const updated = removePart(newModel.printerSettings, printer.id, plateIdx, partIdx);
+                                    setNewModel({ ...newModel, printerSettings: updated });
+                                  }}
+                                  title="Remove part"
+                                  style={{ padding: '2px' }}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => {
+                                const updated = addPart(newModel.printerSettings, printer.id, plateIdx);
+                                setNewModel({ ...newModel, printerSettings: updated });
+                              }}
+                              style={{ marginTop: '4px', padding: '4px 8px', fontSize: '0.7rem' }}
+                            >
+                              <Plus size={12} /> Add Part
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <button
                       className="btn btn-secondary btn-small"
@@ -7873,7 +7957,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         } else {
                           updated = [...newModel.printerSettings, {
                             printerId: printer.id,
-                            plates: [{ name: 'Plate 1', filamentUsage: '', printHours: '', printMinutes: '' }]
+                            plates: [{ name: 'Plate 1', isMultiColor: false, parts: [] }]
                           }];
                         }
                         setNewModel({ ...newModel, printerSettings: updated });
