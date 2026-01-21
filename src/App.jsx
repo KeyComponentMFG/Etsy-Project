@@ -2487,8 +2487,8 @@ export default function EtsyOrderManager() {
   };
 
   // Enhanced model matching that considers external parts from order's "extra" field
-  // If extra matches an external part on a model variant, use that variant
-  // Otherwise, use the base model (no external parts)
+  // Match order to best model variant based on Extra field
+  // Priority: 1) variantName match, 2) external part match, 3) base model
   const findBestModelMatch = (itemName, extra) => {
     if (!itemName) return null;
     const lowerItem = itemName.toLowerCase();
@@ -2512,8 +2512,19 @@ export default function EtsyOrderManager() {
     if (matchingModels.length === 0) return null;
     if (matchingModels.length === 1) return matchingModels[0];
 
-    // If there's an extra field, try to find a model variant with matching external part
+    // If there's an extra field, try to find a matching variant
     if (lowerExtra) {
+      // First, try to match by variantName (e.g., "Small", "Large", "LED Plug-In")
+      const variantByName = matchingModels.find(m => {
+        if (!m.variantName) return false;
+        const variantLower = m.variantName.toLowerCase();
+        return variantLower === lowerExtra ||
+               variantLower.includes(lowerExtra) ||
+               lowerExtra.includes(variantLower);
+      });
+      if (variantByName) return variantByName;
+
+      // Then, try to match by external part name
       const variantWithPart = matchingModels.find(m => {
         if (!m.externalParts || m.externalParts.length === 0) return false;
         return m.externalParts.some(part => {
@@ -2524,8 +2535,11 @@ export default function EtsyOrderManager() {
       if (variantWithPart) return variantWithPart;
     }
 
-    // Fall back to the base model (no external parts) or first match
-    const baseModel = matchingModels.find(m => !m.externalParts || m.externalParts.length === 0);
+    // Fall back to the base model (no variant name and no external parts) or first match
+    const baseModel = matchingModels.find(m =>
+      (!m.variantName || m.variantName === '') &&
+      (!m.externalParts || m.externalParts.length === 0)
+    );
     return baseModel || matchingModels[0];
   };
 
