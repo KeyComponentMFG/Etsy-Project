@@ -882,7 +882,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
       const memberFilaments = filaments[member.id] || [];
       memberFilaments.forEach(fil => {
         if (fil.color.toLowerCase() === colorName.toLowerCase()) {
-          total += fil.amount + (fil.rolls || 0) * 1000;
+          total += fil.amount + (fil.backupRolls?.length || 0) * 1000;
         }
       });
     });
@@ -2453,7 +2453,7 @@ export default function EtsyOrderManager() {
       });
       if (neededFilament) {
         // Include backup rolls in availability calculation
-        const totalAvailable = neededFilament.amount + (neededFilament.rolls || 0) * 1000;
+        const totalAvailable = neededFilament.amount + (neededFilament.backupRolls?.length || 0) * 1000;
         score += Math.min(totalAvailable / model.filamentUsage, 10) * 3;
       }
       
@@ -4004,7 +4004,7 @@ export default function EtsyOrderManager() {
                 const memberFilaments = filaments[member.id] || [];
                 memberFilaments.forEach(fil => {
                   const threshold = fil.reorderAt ?? 250;
-                  if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
+                  if (fil.amount <= threshold && (fil.backupRolls?.length || 0) === 0) {
                     restockCount++;
                   }
                 });
@@ -8167,7 +8167,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
     const memberFilaments = filaments[member.id] || [];
     memberFilaments.forEach(fil => {
       const threshold = fil.reorderAt ?? 250;
-      if (fil.amount <= threshold && (fil.rolls || 0) === 0) {
+      if (fil.amount <= threshold && (fil.backupRolls?.length || 0) === 0) {
         restockFilaments.push({
           ...fil,
           type: 'filament',
