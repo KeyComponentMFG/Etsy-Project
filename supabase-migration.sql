@@ -91,6 +91,11 @@ ALTER TABLE printers ADD COLUMN IF NOT EXISTS name text;
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS status text DEFAULT 'available';
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS total_hours numeric DEFAULT 0;
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS owner_id text;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS monthly_payment numeric DEFAULT 0;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS total_price numeric DEFAULT 0;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS remaining_balance numeric DEFAULT 0;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS payment_start_date timestamp with time zone;
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS is_paid_off boolean DEFAULT false;
 
 -- TEAM_MEMBERS TABLE
 ALTER TABLE team_members ADD COLUMN IF NOT EXISTS name text;

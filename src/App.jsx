@@ -1659,7 +1659,12 @@ export default function EtsyOrderManager() {
           id: p.id,
           name: p.name,
           totalHours: p.total_hours || 0,
-          ownerId: p.owner_id || null
+          ownerId: p.owner_id || null,
+          monthlyPayment: p.monthly_payment || 0,
+          totalPrice: p.total_price || 0,
+          remainingBalance: p.remaining_balance || 0,
+          paymentStartDate: p.payment_start_date || null,
+          isPaidOff: p.is_paid_off || false
         })));
       }
 
@@ -2043,7 +2048,12 @@ export default function EtsyOrderManager() {
           id: p.id,
           name: p.name,
           total_hours: p.totalHours || 0,
-          owner_id: p.ownerId || null
+          owner_id: p.ownerId || null,
+          monthly_payment: p.monthlyPayment || 0,
+          total_price: p.totalPrice || 0,
+          remaining_balance: p.remainingBalance || 0,
+          payment_start_date: p.paymentStartDate || null,
+          is_paid_off: p.isPaidOff || false
         }));
         await supabase.from('printers').upsert(dbFormat);
       }
@@ -2549,6 +2559,62 @@ export default function EtsyOrderManager() {
     if (!model) return { assignedTo: null, assignmentIssue: null };
 
     const orderExtra = (order.extra || '').toLowerCase().trim();
+
+    // Check if there are other orders from the same buyer with an existing assignment
+    // If so, prefer assigning to the same team member to keep orders together
+    const buyerName = (order.buyerName || '').toLowerCase().trim();
+    if (buyerName) {
+      const sameBuyerOrder = currentOrders.find(o =>
+        (o.buyerName || '').toLowerCase().trim() === buyerName &&
+        o.assignedTo &&
+        o.status !== 'shipped'
+      );
+      if (sameBuyerOrder) {
+        // Check if the existing assignee can handle this order (has required parts/filament)
+        const existingAssignee = sameBuyerOrder.assignedTo;
+        const memberParts = externalParts[existingAssignee] || [];
+        const memberFilaments = filaments[existingAssignee] || [];
+
+        let canHandle = true;
+
+        // Check external parts if needed
+        if (orderExtra && model.externalParts?.length > 0) {
+          const requiredPart = model.externalParts.find(part => {
+            const partName = part.name.toLowerCase();
+            return partName.includes(orderExtra) || orderExtra.includes(partName);
+          });
+          if (requiredPart) {
+            const memberPart = memberParts.find(p => {
+              const pName = p.name.toLowerCase();
+              const rName = requiredPart.name.toLowerCase();
+              return pName === rName || pName.includes(rName) || rName.includes(pName);
+            });
+            if (!memberPart || memberPart.quantity < (requiredPart.quantity || 1)) {
+              canHandle = false;
+            }
+          }
+        }
+
+        // Check filament availability
+        if (canHandle) {
+          const orderColor = (order.color || model.defaultColor || '').toLowerCase();
+          const neededFilament = memberFilaments.find(f => {
+            const filColor = f.color.toLowerCase();
+            return filColor === orderColor ||
+                   filColor.includes(orderColor) ||
+                   orderColor.includes(filColor);
+          });
+          if (!neededFilament || neededFilament.remaining < (model.filamentUsage || 0)) {
+            // Low filament but don't block - just prefer others
+          }
+        }
+
+        if (canHandle) {
+          // Assign to the same person as other orders from this buyer
+          return { assignedTo: existingAssignee, assignmentIssue: null };
+        }
+      }
+    }
 
     // Find which external part is needed based on the order's "extra" field (partial match)
     let requiredPart = null;
@@ -3423,7 +3489,7 @@ export default function EtsyOrderManager() {
         if (isCompleting) {
           newCompletedPlates = [...completedPlates, plateIndex];
           // Store the color used for multi-color plates
-          if (isMultiColor && selectedColor) {
+          if (hasMultiColorPart && selectedColor) {
             newPlateColors[plateIndex] = selectedColor;
           }
         } else {
@@ -3438,11 +3504,11 @@ export default function EtsyOrderManager() {
     saveOrders(updated);
 
     const plateName = plate.name || `Plate ${plateIndex + 1}`;
-    const colorInfo = isMultiColor && selectedColor ? ` in ${selectedColor}` : '';
+    const colorInfo = hasMultiColorPart && selectedColor ? ` in ${selectedColor}` : '';
     const timeInfo = platePrintHours > 0 ? `, +${platePrintHours.toFixed(1)}h` : '';
     showNotification(isCompleting
-      ? `${plateName} completed${colorInfo}! (${plateFilament}g deducted${timeInfo})`
-      : `${plateName} uncompleted (${plateFilament}g added back)`
+      ? `${plateName} completed${colorInfo}! (${plateFilament.toFixed(2)}g deducted${timeInfo})`
+      : `${plateName} uncompleted (${plateFilament.toFixed(2)}g added back)`
     );
   };
 
@@ -4583,6 +4649,7 @@ export default function EtsyOrderManager() {
               savePurchases={savePurchases}
               subscriptions={subscriptions}
               saveSubscriptions={saveSubscriptions}
+              printers={printers}
               showNotification={showNotification}
             />
           )}
@@ -5595,6 +5662,35 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   const assignedMember = teamMembers?.find(m => m.id === order.assignedTo);
   const assignedPrinter = printers?.find(p => p.id === order.printerId);
 
+  // Calculate buyer group info for orders from the same buyer
+  const buyerGroupInfo = (() => {
+    const buyerName = (order.buyerName || '').toLowerCase().trim();
+    if (!buyerName || !orders) return null;
+
+    // Find all active orders from the same buyer (not shipped)
+    const sameBuyerOrders = orders.filter(o =>
+      (o.buyerName || '').toLowerCase().trim() === buyerName &&
+      o.status !== 'shipped'
+    ).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+    if (sameBuyerOrders.length <= 1) return null;
+
+    const position = sameBuyerOrders.findIndex(o => o.orderId === order.orderId) + 1;
+    const total = sameBuyerOrders.length;
+
+    // Find other orders from this buyer that haven't shipped yet
+    const unshippedSiblings = sameBuyerOrders.filter(o =>
+      o.orderId !== order.orderId && o.status !== 'shipped'
+    );
+
+    return {
+      position,
+      total,
+      isGrouped: true,
+      unshippedSiblings
+    };
+  })();
+
   // Find matching model by name/alias AND variant (using Extra field)
   const matchingModel = (() => {
     if (!models) return null;
@@ -5862,6 +5958,19 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     EXTRA PRINT
                   </span>
                 )}
+                {buyerGroupInfo && (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255, 159, 67, 0.2)',
+                    color: '#ff9f43',
+                    border: '1px solid rgba(255, 159, 67, 0.4)',
+                    fontWeight: '600'
+                  }}>
+                    {buyerGroupInfo.position}/{buyerGroupInfo.total}
+                  </span>
+                )}
               </div>
               <div className="order-item" style={{ fontSize: '0.85rem', lineHeight: '1.3' }}>{order.item}</div>
             </div>
@@ -5953,50 +6062,6 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           </span>
         )}
       </div>
-
-      {/* Production Stage Tracker - only show for received/in-progress orders */}
-      {order.status === 'received' && (
-        <div style={{
-          margin: '12px 0',
-          padding: '10px',
-          background: 'rgba(255,255,255,0.03)',
-          borderRadius: '8px',
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '8px' }}>Production Stage</div>
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-            {PRODUCTION_STAGES.map((stage, idx) => {
-              const isActive = order.productionStage === stage.id;
-              const isPast = PRODUCTION_STAGES.findIndex(s => s.id === order.productionStage) > idx;
-              return (
-                <button
-                  key={stage.id}
-                  onClick={() => {
-                    const updated = orders.map(o =>
-                      (o.id === order.id || o.orderId === order.orderId) ? { ...o, productionStage: stage.id } : o
-                    );
-                    setOrders(updated);
-                  }}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: '0.75rem',
-                    borderRadius: '6px',
-                    border: isActive ? `2px solid ${stage.color}` : '1px solid rgba(255,255,255,0.1)',
-                    background: isActive ? `${stage.color}20` : isPast ? 'rgba(255,255,255,0.05)' : 'transparent',
-                    color: isActive ? stage.color : isPast ? '#666' : '#888',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontWeight: isActive ? '600' : '400'
-                  }}
-                >
-                  {isPast && !isActive && <Check size={10} style={{ marginRight: '4px', color: '#00ff88' }} />}
-                  {stage.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="order-details">
         <div className="detail-item">
@@ -6231,10 +6296,28 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               totalMinutes: ((parseInt(plate.printHours) || 0) * 60) + (parseInt(plate.printMinutes) || 0)
             };
           }
-          return plate.parts.reduce((acc, part) => ({
-            totalFilament: acc.totalFilament + (parseFloat(part.filamentUsage) || 0),
-            totalMinutes: acc.totalMinutes + ((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)
-          }), { totalFilament: 0, totalMinutes: 0 });
+
+          // Calculate filament from parts (always sum)
+          const totalFilament = plate.parts.reduce((sum, part) => {
+            const qty = parseInt(part.quantity) || 1;
+            return sum + ((parseFloat(part.filamentUsage) || 0) * qty);
+          }, 0);
+
+          // Use actual plate time if set, otherwise sum from parts
+          const hasActualTime = (plate.actualPrintHours && parseInt(plate.actualPrintHours) > 0) ||
+                                (plate.actualPrintMinutes && parseInt(plate.actualPrintMinutes) > 0);
+
+          let totalMinutes;
+          if (hasActualTime) {
+            totalMinutes = ((parseInt(plate.actualPrintHours) || 0) * 60) + (parseInt(plate.actualPrintMinutes) || 0);
+          } else {
+            totalMinutes = plate.parts.reduce((sum, part) => {
+              const qty = parseInt(part.quantity) || 1;
+              return sum + (((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)) * qty;
+            }, 0);
+          }
+
+          return { totalFilament, totalMinutes };
         };
 
         return (
@@ -6265,10 +6348,24 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 const plateFilament = plateTotals.totalFilament * order.quantity;
                 const plateTime = `${Math.floor(plateTotals.totalMinutes / 60)}h ${plateTotals.totalMinutes % 60}m`;
                 // Check if any part in this plate is multi-color
-                const hasMultiColorPart = (plate.parts || []).some(part => part.isMultiColor);
+                const multiColorParts = (plate.parts || []).filter(part => part.isMultiColor);
+                const hasMultiColorPart = multiColorParts.length > 0;
                 const completedColor = plateColors[idx];
                 const hasParts = (plate.parts?.length || 0) > 0;
                 const plateReprintsForThis = plateReprints.filter(r => r.plateIndex === idx);
+                // Track expanded state for this plate using order's expandedPlates
+                const isExpanded = (order.expandedPlates || []).includes(idx);
+
+                const toggleExpanded = () => {
+                  const currentExpanded = order.expandedPlates || [];
+                  const newExpanded = currentExpanded.includes(idx)
+                    ? currentExpanded.filter(i => i !== idx)
+                    : [...currentExpanded, idx];
+                  const updatedOrders = orders.map(o =>
+                    o.orderId === order.orderId ? { ...o, expandedPlates: newExpanded } : o
+                  );
+                  setOrders(updatedOrders);
+                };
 
                 return (
                   <div key={idx}>
@@ -6280,73 +6377,128 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         padding: '6px 8px',
                         background: isComplete
                           ? 'rgba(0, 255, 136, 0.15)'
-                          : hasMultiColorPart
-                            ? 'rgba(165, 94, 234, 0.1)'
-                            : 'rgba(255, 255, 255, 0.05)',
+                          : 'rgba(255, 255, 255, 0.05)',
                         borderRadius: '6px',
-                        border: hasMultiColorPart && !isComplete ? '1px solid rgba(165, 94, 234, 0.3)' : 'none',
                         transition: 'all 0.2s ease'
                       }}
                     >
-                      {hasMultiColorPart ? (
-                        // Plate has multi-color part(s): show dropdown to select color
-                        isComplete ? (
-                          <>
-                            <input
-                              type="checkbox"
-                              checked={true}
-                              onChange={() => togglePlateComplete(order.orderId, idx, matchingModel, null)}
-                              style={{ cursor: 'pointer' }}
-                            />
-                            <span style={{
-                              flex: 1,
-                              fontSize: '0.8rem',
-                              color: '#00ff88',
-                              textDecoration: 'line-through'
-                            }}>
-                              {plate.name || `Plate ${idx + 1}`}
-                            </span>
-                            <span style={{
-                              fontSize: '0.7rem',
-                              padding: '2px 6px',
-                              background: 'rgba(165, 94, 234, 0.2)',
-                              border: '1px solid rgba(165, 94, 234, 0.3)',
-                              borderRadius: '4px',
-                              color: '#a55eea'
-                            }}>
-                              {completedColor || 'Unknown'}
-                            </span>
-                            <span style={{ fontSize: '0.7rem', color: '#888' }}>
-                              {plateFilament}g
-                            </span>
-                            <Check size={14} style={{ color: '#00ff88' }} />
-                          </>
-                        ) : (
-                          <>
-                            <Palette size={14} style={{ color: '#a55eea', flexShrink: 0 }} />
-                            <span style={{
-                              fontSize: '0.8rem',
-                              color: '#e0e0e0'
-                            }}>
-                              {plate.name || `Plate ${idx + 1}`}
+                      {/* Checkbox for all plates */}
+                      <input
+                        type="checkbox"
+                        checked={isComplete}
+                        onClick={() => {
+                          if (hasMultiColorPart && !isComplete) {
+                            // For multi-color plates, need to select color first - expand the dropdown
+                            if (!isExpanded) toggleExpanded();
+                          } else {
+                            togglePlateComplete(order.orderId, idx, matchingModel, completedColor || null);
+                          }
+                        }}
+                        readOnly
+                        style={{ cursor: 'pointer' }}
+                      />
+
+                      {/* Plate name */}
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: '0.8rem',
+                          color: isComplete ? '#00ff88' : '#e0e0e0',
+                          textDecoration: isComplete ? 'line-through' : 'none',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          if (hasMultiColorPart && !isComplete) {
+                            if (!isExpanded) toggleExpanded();
+                          } else {
+                            togglePlateComplete(order.orderId, idx, matchingModel, completedColor || null);
+                          }
+                        }}
+                      >
+                        {plate.name || `Plate ${idx + 1}`}
+                      </span>
+
+                      {/* Show completed color badge if multi-color and complete */}
+                      {isComplete && hasMultiColorPart && completedColor && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 6px',
+                          background: 'rgba(165, 94, 234, 0.2)',
+                          border: '1px solid rgba(165, 94, 234, 0.3)',
+                          borderRadius: '4px',
+                          color: '#a55eea'
+                        }}>
+                          {completedColor}
+                        </span>
+                      )}
+
+                      {/* Stats */}
+                      <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                        {plateFilament.toFixed(2)}g{!isComplete && ` • ${plateTime}`}
+                      </span>
+
+                      {/* Expand arrow for plates with multi-color parts */}
+                      {hasMultiColorPart && !isComplete && (
+                        <button
+                          onClick={toggleExpanded}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '2px',
+                            cursor: 'pointer',
+                            color: '#a55eea',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                          title="Expand to select colors"
+                        >
+                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                      )}
+
+                      {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
+                    </div>
+
+                    {/* Expanded section for multi-color parts */}
+                    {hasMultiColorPart && !isComplete && isExpanded && (
+                      <div style={{
+                        marginLeft: '24px',
+                        marginTop: '4px',
+                        padding: '8px',
+                        background: 'rgba(165, 94, 234, 0.1)',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(165, 94, 234, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '8px' }}>
+                          Select color for multi-color part:
+                        </div>
+                        {multiColorParts.map((part, partIdx) => (
+                          <div key={partIdx} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginBottom: '6px'
+                          }}>
+                            <Palette size={12} style={{ color: '#a55eea' }} />
+                            <span style={{ fontSize: '0.8rem', color: '#e0e0e0', flex: 1 }}>
+                              {part.name || `Part ${partIdx + 1}`}
                             </span>
                             <select
-                              value=""
+                              value={completedColor || ''}
                               onChange={(e) => {
                                 if (e.target.value) {
+                                  // Store the selected color and complete the plate
                                   togglePlateComplete(order.orderId, idx, matchingModel, e.target.value);
                                 }
                               }}
                               style={{
-                                flex: 1,
                                 padding: '4px 8px',
                                 fontSize: '0.75rem',
                                 background: 'rgba(165, 94, 234, 0.2)',
                                 border: '1px solid rgba(165, 94, 234, 0.4)',
                                 borderRadius: '4px',
                                 color: '#fff',
-                                cursor: 'pointer',
-                                minWidth: '100px'
+                                cursor: 'pointer'
                               }}
                             >
                               <option value="">Select color...</option>
@@ -6354,35 +6506,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 <option key={color} value={color}>{color}</option>
                               ))}
                             </select>
-                            <span style={{ fontSize: '0.7rem', color: '#888' }}>
-                              {plateFilament}g • {plateTime}
-                            </span>
-                          </>
-                        )
-                      ) : (
-                        // Regular plate: checkbox only
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={isComplete}
-                            onChange={() => togglePlateComplete(order.orderId, idx, matchingModel, null)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          <span style={{
-                            flex: 1,
-                            fontSize: '0.8rem',
-                            color: isComplete ? '#00ff88' : '#e0e0e0',
-                            textDecoration: isComplete ? 'line-through' : 'none'
-                          }}>
-                            {plate.name || `Plate ${idx + 1}`}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: '#888' }}>
-                            {plateFilament}g • {plateTime}
-                          </span>
-                          {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
-                        </label>
-                      )}
-                    </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Reprint Part Section - only show for completed plates with parts */}
                     {isComplete && hasParts && (
@@ -6625,6 +6752,51 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               <p style={{ marginBottom: '16px', color: '#aaa' }}>
                 Order: <strong>{order.orderId}</strong>
               </p>
+              {buyerGroupInfo && buyerGroupInfo.unshippedSiblings.length > 0 && (
+                <div style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  background: 'rgba(255, 159, 67, 0.15)',
+                  border: '1px solid rgba(255, 159, 67, 0.4)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px'
+                }}>
+                  <AlertCircle size={20} style={{ color: '#ff9f43', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontWeight: '600', color: '#ff9f43', marginBottom: '4px' }}>
+                      Group Order Alert
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#ccc' }}>
+                      This buyer has {buyerGroupInfo.unshippedSiblings.length} other order{buyerGroupInfo.unshippedSiblings.length > 1 ? 's' : ''} that should ship together:
+                    </div>
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {buyerGroupInfo.unshippedSiblings.map(sibling => (
+                        <div key={sibling.orderId} style={{
+                          fontSize: '0.8rem',
+                          padding: '4px 8px',
+                          background: 'rgba(0, 0, 0, 0.2)',
+                          borderRadius: '4px',
+                          color: '#fff'
+                        }}>
+                          {sibling.orderId} - {sibling.item?.substring(0, 30)}{sibling.item?.length > 30 ? '...' : ''}
+                          <span style={{
+                            marginLeft: '8px',
+                            fontSize: '0.7rem',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: sibling.status === 'fulfilled' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 193, 7, 0.2)',
+                            color: sibling.status === 'fulfilled' ? '#00ff88' : '#ffc107'
+                          }}>
+                            {sibling.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="form-group">
                 <label>Shipping Cost ($)</label>
                 <input
@@ -7915,13 +8087,28 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
   // Calculate totals for a plate (sum of its parts, accounting for quantity)
   const calculatePlateTotals = (plate) => {
     if (!plate?.parts?.length) return { totalFilament: 0, totalMinutes: 0 };
-    return plate.parts.reduce((acc, part) => {
+
+    // Calculate filament from parts (always sum)
+    const totalFilament = plate.parts.reduce((sum, part) => {
       const qty = parseInt(part.quantity) || 1;
-      return {
-        totalFilament: acc.totalFilament + ((parseFloat(part.filamentUsage) || 0) * qty),
-        totalMinutes: acc.totalMinutes + (((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)) * qty
-      };
-    }, { totalFilament: 0, totalMinutes: 0 });
+      return sum + ((parseFloat(part.filamentUsage) || 0) * qty);
+    }, 0);
+
+    // Use actual plate time if set, otherwise sum from parts
+    const hasActualTime = (plate.actualPrintHours && parseInt(plate.actualPrintHours) > 0) ||
+                          (plate.actualPrintMinutes && parseInt(plate.actualPrintMinutes) > 0);
+
+    let totalMinutes;
+    if (hasActualTime) {
+      totalMinutes = ((parseInt(plate.actualPrintHours) || 0) * 60) + (parseInt(plate.actualPrintMinutes) || 0);
+    } else {
+      totalMinutes = plate.parts.reduce((sum, part) => {
+        const qty = parseInt(part.quantity) || 1;
+        return sum + (((parseInt(part.printHours) || 0) * 60) + (parseInt(part.printMinutes) || 0)) * qty;
+      }, 0);
+    }
+
+    return { totalFilament, totalMinutes };
   };
 
   // Calculate totals for a printer setting (sum of all plates)
@@ -8256,7 +8443,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               {model.defaultColor && <span>Color: {model.defaultColor}</span>}
                               {model.printerSettings?.[0] && (() => {
                                 const totals = calculatePrinterTotals(model.printerSettings[0]);
-                                return <span>{totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m</span>;
+                                return <span>{totals.totalFilament.toFixed(2)}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m</span>;
                               })()}
                               {model.externalParts?.length > 0 && <span>{model.externalParts.length} part{model.externalParts.length !== 1 ? 's' : ''}</span>}
                             </div>
@@ -8359,7 +8546,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                                               <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
                                               <div style={{ color: '#00ccff', fontSize: '0.8rem' }}>
-                                                Total: {totals.totalFilament}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                                                Total: {totals.totalFilament.toFixed(2)}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                                               </div>
                                             </div>
                                             {setting.plates?.length > 0 && (
@@ -8379,7 +8566,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                                           {plate.name}
                                                         </span>
                                                         <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
-                                                          {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                                                          {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                                                         </span>
                                                       </div>
                                                       {(plate.parts?.length || 0) > 0 && (
@@ -8703,7 +8890,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
                         <div style={{ fontSize: '0.8rem', color: '#888' }}>
-                          Total: {totals.totalFilament}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                          Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                         </div>
                       )}
                     </div>
@@ -8720,7 +8907,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           border: '1px solid rgba(255,255,255,0.05)'
                         }}>
                           {/* Plate header */}
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
                             <input
                               type="text"
                               className="form-input"
@@ -8732,10 +8919,50 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               placeholder="Plate name"
                               style={{ width: '140px', fontWeight: '500' }}
                             />
+                            {/* Actual plate print time */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              background: 'rgba(0, 204, 255, 0.1)',
+                              border: '1px solid rgba(0, 204, 255, 0.2)',
+                              borderRadius: '6px'
+                            }}>
+                              <Clock size={12} style={{ color: '#00ccff' }} />
+                              <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={plate.actualPrintHours || ''}
+                                onChange={e => {
+                                  const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'actualPrintHours', e.target.value);
+                                  setNewModel({ ...newModel, printerSettings: updated });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
+                              />
+                              <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={plate.actualPrintMinutes || ''}
+                                onChange={e => {
+                                  const updated = updatePlate(newModel.printerSettings, printer.id, plateIdx, 'actualPrintMinutes', e.target.value);
+                                  setNewModel({ ...newModel, printerSettings: updated });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                max="59"
+                                style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
+                              />
+                              <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                            </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
                               <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
-                                {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                                {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
                             <button
@@ -9210,7 +9437,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
                         <div style={{ fontSize: '0.8rem', color: '#888' }}>
-                          Total: {totals.totalFilament}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
+                          Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                         </div>
                       )}
                     </div>
@@ -9227,7 +9454,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           border: '1px solid rgba(255,255,255,0.05)'
                         }}>
                           {/* Plate header */}
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
                             <input
                               type="text"
                               className="form-input"
@@ -9239,10 +9466,50 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               placeholder="Plate name"
                               style={{ width: '140px', fontWeight: '500' }}
                             />
+                            {/* Actual plate print time */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              background: 'rgba(0, 204, 255, 0.1)',
+                              border: '1px solid rgba(0, 204, 255, 0.2)',
+                              borderRadius: '6px'
+                            }}>
+                              <Clock size={12} style={{ color: '#00ccff' }} />
+                              <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={plate.actualPrintHours || ''}
+                                onChange={e => {
+                                  const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'actualPrintHours', e.target.value);
+                                  setEditingModel({ ...editingModel, printerSettings: updated });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
+                              />
+                              <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={plate.actualPrintMinutes || ''}
+                                onChange={e => {
+                                  const updated = updatePlate(editingModel.printerSettings || [], printer.id, plateIdx, 'actualPrintMinutes', e.target.value);
+                                  setEditingModel({ ...editingModel, printerSettings: updated });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                max="59"
+                                style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
+                              />
+                              <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                            </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
                               <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
-                                {plateTotals.totalFilament}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
+                                {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
                             <button
@@ -10129,7 +10396,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
 }
 
 // Costs Tab Component
-function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, showNotification }) {
+function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, printers, showNotification }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPurchase, setNewPurchase] = useState({
     name: '',
@@ -10595,6 +10862,153 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
           </div>
         )}
       </div>
+
+      {/* Printer Payments Section */}
+      {(() => {
+        const printersWithPayments = (printers || []).filter(p => p.monthlyPayment > 0 && !p.isPaidOff);
+        const totalMonthlyPayments = printersWithPayments.reduce((sum, p) => sum + (p.monthlyPayment || 0), 0);
+        const totalRemainingBalance = printersWithPayments.reduce((sum, p) => sum + (p.remainingBalance || 0), 0);
+        const paidOffPrinters = (printers || []).filter(p => p.isPaidOff && p.totalPrice > 0);
+
+        if (printersWithPayments.length === 0 && paidOffPrinters.length === 0) return null;
+
+        return (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '20px',
+            marginBottom: '24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
+                <Printer size={20} style={{ color: '#ff9f43' }} />
+                Printer Payments
+              </h3>
+              {totalMonthlyPayments > 0 && (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#888' }}>Monthly Total</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
+                    ${totalMonthlyPayments.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Active Payments */}
+            {printersWithPayments.length > 0 && (
+              <>
+                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Active Payments</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                  {printersWithPayments.map(printer => {
+                    const progress = printer.totalPrice > 0
+                      ? ((printer.totalPrice - printer.remainingBalance) / printer.totalPrice) * 100
+                      : 0;
+                    return (
+                      <div
+                        key={printer.id}
+                        style={{
+                          background: 'rgba(255, 159, 67, 0.1)',
+                          border: '1px solid rgba(255, 159, 67, 0.2)',
+                          borderRadius: '8px',
+                          padding: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Printer size={16} style={{ color: '#ff9f43' }} />
+                            <span style={{ fontWeight: '600' }}>{printer.name}</span>
+                          </div>
+                          <span style={{ fontSize: '1rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
+                            ${printer.monthlyPayment.toFixed(2)}/mo
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#888' }}>
+                            Total: ${(printer.totalPrice || 0).toFixed(2)}
+                          </span>
+                          <span style={{ color: '#ff6b6b' }}>
+                            Remaining: ${(printer.remainingBalance || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        {printer.totalPrice > 0 && (
+                          <div style={{
+                            height: '6px',
+                            background: 'rgba(255,255,255,0.1)',
+                            borderRadius: '3px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${progress}%`,
+                              background: 'linear-gradient(90deg, #ff9f43 0%, #00ff88 100%)',
+                              borderRadius: '3px',
+                              transition: 'width 0.3s ease'
+                            }} />
+                          </div>
+                        )}
+                        {printer.totalPrice > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px', textAlign: 'right' }}>
+                            {progress.toFixed(0)}% paid off
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Paid Off Printers */}
+            {paidOffPrinters.length > 0 && (
+              <>
+                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Paid Off</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {paidOffPrinters.map(printer => (
+                    <div
+                      key={printer.id}
+                      style={{
+                        background: 'rgba(0, 255, 136, 0.1)',
+                        border: '1px solid rgba(0, 255, 136, 0.2)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Check size={14} style={{ color: '#00ff88' }} />
+                      <span style={{ fontWeight: '500' }}>{printer.name}</span>
+                      <span style={{ fontSize: '0.85rem', color: '#888' }}>
+                        (${(printer.totalPrice || 0).toFixed(2)})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Summary */}
+            {totalRemainingBalance > 0 && (
+              <div style={{
+                marginTop: '16px',
+                padding: '12px',
+                background: 'rgba(255, 107, 107, 0.1)',
+                border: '1px solid rgba(255, 107, 107, 0.2)',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ color: '#ff6b6b', fontWeight: '500' }}>Total Remaining Balance</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+                  ${totalRemainingBalance.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Add/Edit Subscription Form Modal */}
       {showSubForm && (
@@ -12345,6 +12759,9 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
   const [newPrinterName, setNewPrinterName] = useState('');
   const [newPrinterOwner, setNewPrinterOwner] = useState('');
   const [newPrinterHours, setNewPrinterHours] = useState('');
+  const [newPrinterMonthlyPayment, setNewPrinterMonthlyPayment] = useState('');
+  const [newPrinterTotalPrice, setNewPrinterTotalPrice] = useState('');
+  const [newPrinterRemainingBalance, setNewPrinterRemainingBalance] = useState('');
   const [editingPrinter, setEditingPrinter] = useState(null);
 
   const addPrinter = () => {
@@ -12357,13 +12774,21 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
       id: `printer-${Date.now()}`,
       name: newPrinterName.trim(),
       totalHours: parseFloat(newPrinterHours) || 0,
-      ownerId: newPrinterOwner || null
+      ownerId: newPrinterOwner || null,
+      monthlyPayment: parseFloat(newPrinterMonthlyPayment) || 0,
+      totalPrice: parseFloat(newPrinterTotalPrice) || 0,
+      remainingBalance: parseFloat(newPrinterRemainingBalance) || 0,
+      paymentStartDate: newPrinterMonthlyPayment ? Date.now() : null,
+      isPaidOff: !newPrinterMonthlyPayment || parseFloat(newPrinterRemainingBalance) <= 0
     };
 
     savePrinters([...printers, printer]);
     setNewPrinterName('');
     setNewPrinterOwner('');
     setNewPrinterHours('');
+    setNewPrinterMonthlyPayment('');
+    setNewPrinterTotalPrice('');
+    setNewPrinterRemainingBalance('');
     setShowAddPrinter(false);
     showNotification('Printer added');
   };
@@ -12470,7 +12895,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                       }}
                       style={{ width: '200px' }}
                     />
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '0.85rem', color: '#888' }}>Owner:</span>
                         <select
@@ -12497,19 +12922,120 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                           style={{ width: '80px', padding: '4px 8px' }}
                         />
                       </div>
-                      <button
-                        className="btn btn-secondary btn-small"
-                        onClick={() => setEditingPrinter(null)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        Done
-                      </button>
                     </div>
+                    {/* Payment Fields */}
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '10px',
+                      background: 'rgba(255, 159, 67, 0.1)',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255, 159, 67, 0.2)'
+                    }}>
+                      <div style={{ fontSize: '0.8rem', color: '#ff9f43', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <DollarSign size={14} />
+                        Payment Plan
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Total:</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            defaultValue={printer.totalPrice || ''}
+                            step="0.01"
+                            min="0"
+                            placeholder="$0"
+                            onBlur={e => updatePrinter(printer.id, { totalPrice: parseFloat(e.target.value) || 0 })}
+                            style={{ width: '80px', padding: '4px 6px', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Remaining:</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            defaultValue={printer.remainingBalance || ''}
+                            step="0.01"
+                            min="0"
+                            placeholder="$0"
+                            onBlur={e => {
+                              const remaining = parseFloat(e.target.value) || 0;
+                              updatePrinter(printer.id, {
+                                remainingBalance: remaining,
+                                isPaidOff: remaining <= 0
+                              });
+                            }}
+                            style={{ width: '80px', padding: '4px 6px', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Monthly:</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            defaultValue={printer.monthlyPayment || ''}
+                            step="0.01"
+                            min="0"
+                            placeholder="$0"
+                            onBlur={e => updatePrinter(printer.id, { monthlyPayment: parseFloat(e.target.value) || 0 })}
+                            style={{ width: '80px', padding: '4px 6px', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                        {printer.remainingBalance > 0 && !printer.isPaidOff && (
+                          <button
+                            className="btn btn-small"
+                            onClick={() => updatePrinter(printer.id, { isPaidOff: true, remainingBalance: 0 })}
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '0.75rem',
+                              background: 'rgba(0, 255, 136, 0.2)',
+                              border: '1px solid rgba(0, 255, 136, 0.3)',
+                              color: '#00ff88'
+                            }}
+                          >
+                            Mark Paid Off
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => setEditingPrinter(null)}
+                      style={{ padding: '4px 8px', alignSelf: 'flex-start', marginTop: '4px' }}
+                    >
+                      Done
+                    </button>
                   </div>
                 ) : (
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>{printer.name}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', gap: '16px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>{printer.name}</div>
+                      {printer.monthlyPayment > 0 && !printer.isPaidOff && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: 'rgba(255, 159, 67, 0.2)',
+                          color: '#ff9f43',
+                          border: '1px solid rgba(255, 159, 67, 0.3)'
+                        }}>
+                          ${printer.monthlyPayment}/mo
+                        </span>
+                      )}
+                      {printer.isPaidOff && printer.totalPrice > 0 && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: 'rgba(0, 255, 136, 0.2)',
+                          color: '#00ff88',
+                          border: '1px solid rgba(0, 255, 136, 0.3)'
+                        }}>
+                          PAID OFF
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span>{getOrderCount(printer.id)} active prints</span>
                       <span style={{ color: '#00ccff' }}>
                         <Clock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
@@ -12519,6 +13045,12 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                         <User size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
                         {getOwnerName(printer.ownerId)}
                       </span>
+                      {printer.remainingBalance > 0 && !printer.isPaidOff && (
+                        <span style={{ color: '#ff6b6b' }}>
+                          <DollarSign size={14} style={{ verticalAlign: 'middle', marginRight: '2px' }} />
+                          ${printer.remainingBalance.toFixed(2)} remaining
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -12594,8 +13126,68 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
               </div>
             </div>
 
+            {/* Payment Section */}
+            <div style={{
+              marginTop: '16px',
+              padding: '16px',
+              background: 'rgba(255, 159, 67, 0.1)',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 159, 67, 0.2)'
+            }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ff9f43', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <DollarSign size={16} />
+                Payment Plan (Optional)
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Total Price ($)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newPrinterTotalPrice}
+                    onChange={e => setNewPrinterTotalPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Remaining Balance ($)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newPrinterRemainingBalance}
+                    onChange={e => setNewPrinterRemainingBalance(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Monthly Payment ($)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newPrinterMonthlyPayment}
+                    onChange={e => setNewPrinterMonthlyPayment(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-              <button className="btn btn-secondary" onClick={() => { setShowAddPrinter(false); setNewPrinterName(''); setNewPrinterOwner(''); setNewPrinterHours(''); }}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => {
+                setShowAddPrinter(false);
+                setNewPrinterName('');
+                setNewPrinterOwner('');
+                setNewPrinterHours('');
+                setNewPrinterMonthlyPayment('');
+                setNewPrinterTotalPrice('');
+                setNewPrinterRemainingBalance('');
+              }}>Cancel</button>
               <button className="btn btn-primary" onClick={addPrinter}>
                 <Save size={18} /> Add Printer
               </button>
