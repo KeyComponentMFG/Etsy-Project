@@ -4991,6 +4991,27 @@ export default function EtsyOrderManager() {
   );
 }
 
+// Calculate ship by date adding business days (skipping weekends)
+function calculateShipByDate(orderDate, processingDays) {
+  if (!orderDate || !processingDays) return null;
+
+  const date = new Date(orderDate);
+  if (isNaN(date.getTime())) return null;
+
+  let daysToAdd = processingDays;
+
+  while (daysToAdd > 0) {
+    date.setDate(date.getDate() + 1);
+    const dayOfWeek = date.getDay();
+    // Skip Saturday (6) and Sunday (0)
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      daysToAdd--;
+    }
+  }
+
+  return date;
+}
+
 // Queue Tab Component
 function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
@@ -5065,7 +5086,53 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
   
   console.log('Filtered orders:', filteredOrders?.length);
   
-  const activeOrders = filteredOrders.filter(o => o.status !== 'shipped');
+  // Helper to find matching model for an order
+  const findModelForOrder = (order) => {
+    if (!order.item) return null;
+    const lowerItem = order.item.toLowerCase();
+    const extra = (order.extra || '').toLowerCase().trim();
+
+    return models.find(m => {
+      const nameMatch = m.name.toLowerCase() === lowerItem ||
+        m.name.toLowerCase().includes(lowerItem) ||
+        lowerItem.includes(m.name.toLowerCase()) ||
+        (m.aliases && m.aliases.some(alias => {
+          const lowerAlias = alias.toLowerCase();
+          return lowerAlias === lowerItem || lowerAlias.includes(lowerItem) || lowerItem.includes(lowerAlias);
+        }));
+
+      if (!nameMatch) return false;
+
+      // Check variant match if model has a variant
+      if (m.variantName) {
+        const variantLower = m.variantName.toLowerCase();
+        return extra.includes(variantLower) || variantLower.includes(extra);
+      }
+      return true;
+    });
+  };
+
+  // Sort orders by color (grouped), then by ship by date (earliest first within each color)
+  const activeOrders = filteredOrders.filter(o => o.status !== 'shipped').sort((a, b) => {
+    // Primary sort: by color (alphabetically, so same colors are grouped)
+    const colorA = (a.color || '').toLowerCase();
+    const colorB = (b.color || '').toLowerCase();
+    if (colorA !== colorB) {
+      return colorA.localeCompare(colorB);
+    }
+
+    // Secondary sort: by ship by date (earliest first)
+    const modelA = findModelForOrder(a);
+    const modelB = findModelForOrder(b);
+    const shipByA = calculateShipByDate(a.createdAt, modelA?.processingDays || 3);
+    const shipByB = calculateShipByDate(b.createdAt, modelB?.processingDays || 3);
+
+    if (!shipByA && !shipByB) return 0;
+    if (!shipByA) return 1;
+    if (!shipByB) return -1;
+    return shipByA.getTime() - shipByB.getTime();
+  });
+
   const receivedCount = filteredOrders.filter(o => o.status === 'received').length;
   const fulfilledCount = filteredOrders.filter(o => o.status === 'fulfilled').length;
   const shippedCount = filteredOrders.filter(o => o.status === 'shipped').length;
@@ -5600,27 +5667,6 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
       })()}
     </>
   );
-}
-
-// Calculate ship by date adding business days (skipping weekends)
-function calculateShipByDate(orderDate, processingDays) {
-  if (!orderDate || !processingDays) return null;
-
-  const date = new Date(orderDate);
-  if (isNaN(date.getTime())) return null;
-
-  let daysToAdd = processingDays;
-
-  while (daysToAdd > 0) {
-    date.setDate(date.getDate() + 1);
-    const dayOfWeek = date.getDay();
-    // Skip Saturday (6) and Sunday (0)
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      daysToAdd--;
-    }
-  }
-
-  return date;
 }
 
 // Order Card Component
@@ -6387,6 +6433,15 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           return { totalFilament, totalMinutes };
         };
 
+        const isPlatesCollapsed = order.platesCollapsed || false;
+
+        const togglePlatesCollapsed = () => {
+          const updatedOrders = orders.map(o =>
+            o.orderId === order.orderId ? { ...o, platesCollapsed: !o.platesCollapsed } : o
+          );
+          setOrders(updatedOrders);
+        };
+
         return (
           <div style={{
             marginTop: '12px',
@@ -6395,9 +6450,19 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             borderRadius: '8px',
             border: `1px solid ${allPlatesComplete ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 204, 255, 0.3)'}`
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#888' }}>
-                <Printer size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+            <div
+              onClick={togglePlatesCollapsed}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                marginBottom: isPlatesCollapsed ? '0' : '8px'
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {isPlatesCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                <Printer size={12} />
                 Plates
               </span>
               <span style={{
@@ -6408,7 +6473,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 {completedCount}/{totalPlates} complete
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {!isPlatesCollapsed && <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {plates.map((plate, idx) => {
                 const isComplete = completedPlates.includes(idx);
                 const plateTotals = getPlateTotals(plate);
@@ -6644,7 +6709,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </div>
         );
       })()}
