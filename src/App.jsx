@@ -5422,21 +5422,60 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   const assignedMember = teamMembers?.find(m => m.id === order.assignedTo);
   const assignedPrinter = printers?.find(p => p.id === order.printerId);
 
-  // Find matching model by name or alias (case-insensitive, partial match)
-  const matchingModel = models?.find(m => {
-    const modelName = m.name.toLowerCase();
+  // Find matching model by name/alias AND variant (using Extra field)
+  const matchingModel = (() => {
+    if (!models) return null;
     const orderItem = (order.item || '').toLowerCase();
-    // Check main name
-    if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
-    // Check aliases
-    if (m.aliases && m.aliases.length > 0) {
-      return m.aliases.some(alias => {
-        const lowerAlias = alias.toLowerCase();
-        return orderItem.includes(lowerAlias) || lowerAlias.includes(orderItem);
+    const orderExtra = (order.extra || '').toLowerCase().trim();
+
+    // Helper to check if a model matches the item name
+    const matchesName = (m) => {
+      const modelName = m.name.toLowerCase();
+      if (orderItem.includes(modelName) || modelName.includes(orderItem)) return true;
+      if (m.aliases && m.aliases.length > 0) {
+        return m.aliases.some(alias => {
+          const lowerAlias = alias.toLowerCase();
+          return orderItem.includes(lowerAlias) || lowerAlias.includes(orderItem);
+        });
+      }
+      return false;
+    };
+
+    // Get all models that match the item name
+    const matchingModels = models.filter(matchesName);
+    if (matchingModels.length === 0) return null;
+    if (matchingModels.length === 1) return matchingModels[0];
+
+    // If there's an extra field, find the best variant match
+    if (orderExtra) {
+      // First, try to match by variantName (e.g., "Small", "Large")
+      const variantByName = matchingModels.find(m => {
+        if (!m.variantName) return false;
+        const variantLower = m.variantName.toLowerCase();
+        return variantLower === orderExtra ||
+               variantLower.includes(orderExtra) ||
+               orderExtra.includes(variantLower);
       });
+      if (variantByName) return variantByName;
+
+      // Then, try to match by external part name
+      const variantWithPart = matchingModels.find(m => {
+        if (!m.externalParts || m.externalParts.length === 0) return false;
+        return m.externalParts.some(part => {
+          const partName = part.name.toLowerCase();
+          return partName.includes(orderExtra) || orderExtra.includes(partName);
+        });
+      });
+      if (variantWithPart) return variantWithPart;
     }
-    return false;
-  });
+
+    // Fall back to base model (no variant) or first match
+    const baseModel = matchingModels.find(m =>
+      (!m.variantName || m.variantName === '') &&
+      (!m.externalParts || m.externalParts.length === 0)
+    );
+    return baseModel || matchingModels[0];
+  })();
 
   // Calculate profit for this order
   const calculateProfit = () => {
