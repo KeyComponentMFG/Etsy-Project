@@ -4909,6 +4909,8 @@ export default function EtsyOrderManager() {
 function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
+  const [groupByBuyer, setGroupByBuyer] = useState(false);
+  const [collapsedBuyers, setCollapsedBuyers] = useState({});
   const [extraPrint, setExtraPrint] = useState({
     name: '',
     color: '',
@@ -5206,6 +5208,28 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
           )}
         </div>
 
+        {/* Group by Buyer Toggle */}
+        <button
+          onClick={() => setGroupByBuyer(!groupByBuyer)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            background: groupByBuyer ? 'rgba(0, 204, 255, 0.2)' : 'rgba(0, 204, 255, 0.1)',
+            border: `1px solid ${groupByBuyer ? 'rgba(0, 204, 255, 0.6)' : 'rgba(0, 204, 255, 0.3)'}`,
+            borderRadius: '8px',
+            color: '#00ccff',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontWeight: '500'
+          }}
+        >
+          <Users size={16} />
+          Group by Buyer
+          {groupByBuyer && <Check size={14} />}
+        </button>
+
         {/* Delete All Orders Button */}
         <button
           onClick={() => {
@@ -5257,88 +5281,237 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         </div>
       </div>
 
-      {/* When a specific partner or unassigned is selected, show filtered grid */}
-      {selectedPartnerFilter !== 'all' ? (
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {selectedPartnerFilter === 'unassigned' ? (
-              <>
-                <AlertCircle size={20} style={{ color: '#ffc107' }} />
-                Unassigned Orders ({activeOrders.length})
-              </>
-            ) : (
-              <>
-                <Users size={20} style={{ color: '#00ff88' }} />
-                {teamMembers.find(m => m.id === selectedPartnerFilter)?.name}'s Orders ({activeOrders.length})
-              </>
-            )}
-          </h3>
-          <div className="orders-list">
-            {activeOrders.length === 0 ? (
-              <div className="empty-state">
-                <Package />
-                <p>No orders found</p>
-              </div>
-            ) : (
-              activeOrders.map(order => (
-                <OrderCard
-                  key={order.orderId}
-                  order={order}
-                  orders={orders}
-                  setOrders={setOrders}
-                  teamMembers={teamMembers}
-                  stores={stores}
-                  printers={printers}
-                  models={models}
-                  filaments={filaments}
-                  externalParts={externalParts}
-                  updateOrderStatus={updateOrderStatus}
-                  initiateFulfillment={initiateFulfillment}
-                  reassignOrder={reassignOrder}
-                  togglePlateComplete={togglePlateComplete}
-                  reprintPart={reprintPart}
-                />
-              ))
-            )}
+      {/* Group orders by buyer name when enabled */}
+      {(() => {
+        // Group orders by buyer name (normalized)
+        const ordersByBuyer = activeOrders.reduce((acc, order) => {
+          const buyerName = (order.buyerName || 'Unknown Buyer').trim();
+          if (!acc[buyerName]) acc[buyerName] = [];
+          acc[buyerName].push(order);
+          return acc;
+        }, {});
+
+        // Sort buyers: multi-order buyers first, then by name
+        const sortedBuyers = Object.keys(ordersByBuyer).sort((a, b) => {
+          const aCount = ordersByBuyer[a].length;
+          const bCount = ordersByBuyer[b].length;
+          if (aCount > 1 && bCount === 1) return -1;
+          if (aCount === 1 && bCount > 1) return 1;
+          if (aCount !== bCount) return bCount - aCount;
+          return a.localeCompare(b);
+        });
+
+        // Count buyers with multiple orders
+        const multiBuyerCount = sortedBuyers.filter(b => ordersByBuyer[b].length > 1).length;
+
+        // Render grouped view
+        if (groupByBuyer) {
+          return (
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} style={{ color: '#00ccff' }} />
+                Orders by Buyer ({sortedBuyers.length} buyers, {activeOrders.length} orders)
+                {multiBuyerCount > 0 && (
+                  <span style={{
+                    background: 'rgba(255, 159, 67, 0.2)',
+                    color: '#ff9f43',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontSize: '0.75rem',
+                    marginLeft: '8px'
+                  }}>
+                    {multiBuyerCount} multi-order buyer{multiBuyerCount > 1 ? 's' : ''}
+                  </span>
+                )}
+              </h3>
+              {activeOrders.length === 0 ? (
+                <div className="empty-state">
+                  <Package />
+                  <p>No orders yet</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {sortedBuyers.map(buyerName => {
+                    const buyerOrders = ordersByBuyer[buyerName];
+                    const isMultiOrder = buyerOrders.length > 1;
+                    const isCollapsed = collapsedBuyers[buyerName];
+
+                    return (
+                      <div key={buyerName} style={{
+                        background: isMultiOrder
+                          ? 'linear-gradient(135deg, rgba(255,159,67,0.08) 0%, rgba(255,159,67,0.03) 100%)'
+                          : 'transparent',
+                        border: isMultiOrder ? '1px solid rgba(255,159,67,0.3)' : '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Buyer Header */}
+                        <div
+                          onClick={() => isMultiOrder && setCollapsedBuyers(prev => ({ ...prev, [buyerName]: !prev[buyerName] }))}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            background: isMultiOrder ? 'rgba(255,159,67,0.1)' : 'rgba(255,255,255,0.02)',
+                            cursor: isMultiOrder ? 'pointer' : 'default',
+                            borderBottom: isCollapsed ? 'none' : '1px solid rgba(255,255,255,0.05)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {isMultiOrder && (
+                              isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />
+                            )}
+                            <User size={18} style={{ color: isMultiOrder ? '#ff9f43' : '#888' }} />
+                            <span style={{ fontWeight: isMultiOrder ? '600' : '400', color: isMultiOrder ? '#ff9f43' : '#ccc' }}>
+                              {buyerName}
+                            </span>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              color: '#888',
+                              background: 'rgba(0,0,0,0.3)',
+                              padding: '2px 8px',
+                              borderRadius: '10px'
+                            }}>
+                              {buyerOrders.length} order{buyerOrders.length > 1 ? 's' : ''}
+                            </span>
+                            {isMultiOrder && (
+                              <span style={{
+                                fontSize: '0.7rem',
+                                color: '#ff9f43',
+                                background: 'rgba(255,159,67,0.2)',
+                                padding: '2px 6px',
+                                borderRadius: '4px'
+                              }}>
+                                Ship Together
+                              </span>
+                            )}
+                          </div>
+                          {isMultiOrder && (
+                            <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                              {buyerOrders.filter(o => o.status === 'fulfilled').length}/{buyerOrders.length} fulfilled
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Buyer's Orders */}
+                        {!isCollapsed && (
+                          <div style={{ padding: isMultiOrder ? '12px' : '0' }}>
+                            <div className="orders-list" style={{ gap: isMultiOrder ? '8px' : undefined }}>
+                              {buyerOrders.map(order => (
+                                <OrderCard
+                                  key={order.orderId}
+                                  order={order}
+                                  orders={orders}
+                                  setOrders={setOrders}
+                                  teamMembers={teamMembers}
+                                  stores={stores}
+                                  printers={printers}
+                                  models={models}
+                                  filaments={filaments}
+                                  externalParts={externalParts}
+                                  updateOrderStatus={updateOrderStatus}
+                                  initiateFulfillment={initiateFulfillment}
+                                  reassignOrder={reassignOrder}
+                                  togglePlateComplete={togglePlateComplete}
+                                  reprintPart={reprintPart}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Regular view (not grouped)
+        return selectedPartnerFilter !== 'all' ? (
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {selectedPartnerFilter === 'unassigned' ? (
+                <>
+                  <AlertCircle size={20} style={{ color: '#ffc107' }} />
+                  Unassigned Orders ({activeOrders.length})
+                </>
+              ) : (
+                <>
+                  <Users size={20} style={{ color: '#00ff88' }} />
+                  {teamMembers.find(m => m.id === selectedPartnerFilter)?.name}'s Orders ({activeOrders.length})
+                </>
+              )}
+            </h3>
+            <div className="orders-list">
+              {activeOrders.length === 0 ? (
+                <div className="empty-state">
+                  <Package />
+                  <p>No orders found</p>
+                </div>
+              ) : (
+                activeOrders.map(order => (
+                  <OrderCard
+                    key={order.orderId}
+                    order={order}
+                    orders={orders}
+                    setOrders={setOrders}
+                    teamMembers={teamMembers}
+                    stores={stores}
+                    printers={printers}
+                    models={models}
+                    filaments={filaments}
+                    externalParts={externalParts}
+                    updateOrderStatus={updateOrderStatus}
+                    initiateFulfillment={initiateFulfillment}
+                    reassignOrder={reassignOrder}
+                    togglePlateComplete={togglePlateComplete}
+                    reprintPart={reprintPart}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      ) : (
-        /* Show all orders in a single grid when "All Partners" is selected */
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Package size={20} style={{ color: '#00ff88' }} />
-            All Orders ({activeOrders.length})
-          </h3>
-          <div className="orders-list">
-            {activeOrders.length === 0 ? (
-              <div className="empty-state">
-                <Package />
-                <p>No orders yet</p>
-              </div>
-            ) : (
-              activeOrders.map(order => (
-                <OrderCard
-                  key={order.orderId}
-                  order={order}
-                  orders={orders}
-                  setOrders={setOrders}
-                  teamMembers={teamMembers}
-                  stores={stores}
-                  printers={printers}
-                  models={models}
-                  filaments={filaments}
-                  externalParts={externalParts}
-                  updateOrderStatus={updateOrderStatus}
-                  initiateFulfillment={initiateFulfillment}
-                  reassignOrder={reassignOrder}
-                  togglePlateComplete={togglePlateComplete}
-                  reprintPart={reprintPart}
-                />
-              ))
-            )}
+        ) : (
+          /* Show all orders in a single grid when "All Partners" is selected */
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Package size={20} style={{ color: '#00ff88' }} />
+              All Orders ({activeOrders.length})
+            </h3>
+            <div className="orders-list">
+              {activeOrders.length === 0 ? (
+                <div className="empty-state">
+                  <Package />
+                  <p>No orders yet</p>
+                </div>
+              ) : (
+                activeOrders.map(order => (
+                  <OrderCard
+                    key={order.orderId}
+                    order={order}
+                    orders={orders}
+                    setOrders={setOrders}
+                    teamMembers={teamMembers}
+                    stores={stores}
+                    printers={printers}
+                    models={models}
+                    filaments={filaments}
+                    externalParts={externalParts}
+                    updateOrderStatus={updateOrderStatus}
+                    initiateFulfillment={initiateFulfillment}
+                    reassignOrder={reassignOrder}
+                    togglePlateComplete={togglePlateComplete}
+                    reprintPart={reprintPart}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 }
