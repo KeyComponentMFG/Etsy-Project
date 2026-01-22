@@ -5069,6 +5069,7 @@ function calculateShipByDate(orderDate, processingDays) {
 // Queue Tab Component
 function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
   const [groupByBuyer, setGroupByBuyer] = useState(false);
   const [collapsedBuyers, setCollapsedBuyers] = useState({});
@@ -5166,8 +5167,14 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
     });
   };
 
-  // Sort orders by color (grouped), then by ship by date (earliest first within each color)
-  const activeOrders = filteredOrders.filter(o => o.status !== 'shipped').sort((a, b) => {
+  // Filter by status, then sort by color (grouped), then by ship by date (earliest first within each color)
+  const activeOrders = filteredOrders.filter(o => {
+    if (statusFilter === 'active') return o.status !== 'shipped';
+    if (statusFilter === 'received') return o.status === 'received';
+    if (statusFilter === 'fulfilled') return o.status === 'fulfilled';
+    if (statusFilter === 'shipped') return o.status === 'shipped';
+    return true;
+  }).sort((a, b) => {
     // Primary sort: by color (alphabetically, so same colors are grouped)
     const colorA = (a.color || '').toLowerCase();
     const colorB = (b.color || '').toLowerCase();
@@ -5470,22 +5477,59 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         </button>
       </div>
       
+      {/* Stats - Clickable to filter */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setStatusFilter('received')}
+          style={{
+            cursor: 'pointer',
+            border: statusFilter === 'received' ? '2px solid #ffc107' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Received</div>
-          <div className="stat-value">{receivedCount}</div>
+          <div className="stat-value" style={{ color: statusFilter === 'received' ? '#ffc107' : undefined }}>{receivedCount}</div>
+          {statusFilter === 'received' && <div style={{ fontSize: '0.7rem', color: '#ffc107', marginTop: '4px' }}>Filtered</div>}
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setStatusFilter('fulfilled')}
+          style={{
+            cursor: 'pointer',
+            border: statusFilter === 'fulfilled' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Fulfilled</div>
-          <div className="stat-value">{fulfilledCount}</div>
+          <div className="stat-value" style={{ color: statusFilter === 'fulfilled' ? '#00ff88' : undefined }}>{fulfilledCount}</div>
+          {statusFilter === 'fulfilled' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Filtered</div>}
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setStatusFilter('shipped')}
+          style={{
+            cursor: 'pointer',
+            border: statusFilter === 'shipped' ? '2px solid #00ccff' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Shipped</div>
-          <div className="stat-value">{shippedCount}</div>
+          <div className="stat-value" style={{ color: statusFilter === 'shipped' ? '#00ccff' : undefined }}>{shippedCount}</div>
+          {statusFilter === 'shipped' && <div style={{ fontSize: '0.7rem', color: '#00ccff', marginTop: '4px' }}>Filtered</div>}
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setStatusFilter('active')}
+          style={{
+            cursor: 'pointer',
+            border: statusFilter === 'active' ? '2px solid #a55eea' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Total Active</div>
-          <div className="stat-value">{activeOrders.length}</div>
+          <div className="stat-value" style={{ color: statusFilter === 'active' ? '#a55eea' : undefined }}>{filteredOrders.filter(o => o.status !== 'shipped').length}</div>
+          {statusFilter === 'active' && <div style={{ fontSize: '0.7rem', color: '#a55eea', marginTop: '4px' }}>Showing All Active</div>}
         </div>
       </div>
 
