@@ -83,13 +83,14 @@ ALTER TABLE models ADD COLUMN IF NOT EXISTS stock_count integer;
 
 -- FILAMENTS TABLE
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS color text;
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS material text;
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS remaining numeric DEFAULT 1000;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS color_hex text;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS amount numeric DEFAULT 1000;
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS member_id text;
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS cost_per_gram numeric DEFAULT 0.02;
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS brand text DEFAULT '';
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
-ALTER TABLE filaments ADD COLUMN IF NOT EXISTS reorder_at numeric DEFAULT 200;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS current_roll_cost numeric DEFAULT 0;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS backup_rolls jsonb DEFAULT '[]';
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS rolls integer DEFAULT 0;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS cost_per_roll numeric DEFAULT 0;
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS reorder_at numeric DEFAULT 250;
 
 -- PRINTERS TABLE
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS name text;

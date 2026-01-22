@@ -1951,7 +1951,18 @@ export default function EtsyOrderManager() {
       }
 
       if (allFilaments.length > 0) {
-        await supabase.from('filaments').upsert(allFilaments);
+        const { error } = await supabase.from('filaments').upsert(allFilaments);
+        if (error) {
+          console.error('Error saving filaments:', error);
+          // Show user-visible error
+          const errorDiv = document.createElement('div');
+          errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff4444;color:white;padding:12px 20px;border-radius:8px;z-index:99999;font-weight:500;max-width:400px;';
+          errorDiv.textContent = `Filament save failed: ${error.message}`;
+          document.body.appendChild(errorDiv);
+          setTimeout(() => errorDiv.remove(), 5000);
+        } else {
+          console.log('Filaments saved successfully:', allFilaments.length);
+        }
       }
     };
     syncFilaments();
