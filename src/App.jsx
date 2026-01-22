@@ -1538,6 +1538,7 @@ export default function EtsyOrderManager() {
           buyerMessage: o.buyer_message || '',
           assignmentIssue: o.assignment_issue || null,
           usedExternalPart: o.used_external_part || null,
+          overrideShipByDate: o.override_ship_by_date || null,
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1824,7 +1825,8 @@ export default function EtsyOrderManager() {
             plate_reprints: o.plateReprints || [],
             buyer_message: o.buyerMessage || '',
             assignment_issue: o.assignmentIssue || null,
-            used_external_part: o.usedExternalPart || null
+            used_external_part: o.usedExternalPart || null,
+            override_ship_by_date: o.overrideShipByDate || null
           }));
           const { error: upsertError } = await supabase.from('orders').upsert(dbFormat);
           if (upsertError) {
@@ -5122,10 +5124,11 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
     }
 
     // Secondary sort: by ship by date (earliest first)
+    // Use override if set, otherwise calculate from model
     const modelA = findModelForOrder(a);
     const modelB = findModelForOrder(b);
-    const shipByA = calculateShipByDate(a.createdAt, modelA?.processingDays || 3);
-    const shipByB = calculateShipByDate(b.createdAt, modelB?.processingDays || 3);
+    const shipByA = a.overrideShipByDate ? new Date(a.overrideShipByDate) : calculateShipByDate(a.createdAt, modelA?.processingDays || 3);
+    const shipByB = b.overrideShipByDate ? new Date(b.overrideShipByDate) : calculateShipByDate(b.createdAt, modelB?.processingDays || 3);
 
     if (!shipByA && !shipByB) return 0;
     if (!shipByA) return 1;
@@ -5678,6 +5681,35 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   const [newColorUsage, setNewColorUsage] = useState('');
   const [showReprintModal, setShowReprintModal] = useState(false);
   const [reprintData, setReprintData] = useState({ filamentUsage: '', printHours: '0', printMinutes: '0' });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editData, setEditData] = useState({});
+
+  const openEditModal = () => {
+    setEditData({
+      color: order.color || '',
+      storeId: order.storeId || '',
+      extra: order.extra || '',
+      overrideShipByDate: order.overrideShipByDate || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const saveOrderEdit = () => {
+    const updated = orders.map(o => {
+      if (o.orderId === order.orderId) {
+        return {
+          ...o,
+          color: editData.color,
+          storeId: editData.storeId || null,
+          extra: editData.extra,
+          overrideShipByDate: editData.overrideShipByDate || null
+        };
+      }
+      return o;
+    });
+    setOrders(updated);
+    setShowEditModal(false);
+  };
 
   const addAdditionalColor = () => {
     if (!newColorName || !newColorUsage) return;
@@ -6006,6 +6038,22 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                 <div className="order-id">{order.orderId}</div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); openEditModal(); }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Edit order"
+                >
+                  <Edit2 size={12} />
+                </button>
                 {store && (
                   <span style={{
                     fontSize: '0.65rem',
@@ -6158,33 +6206,40 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           <span className="detail-label">Order Date</span>
           <span className="detail-value">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Unknown'}</span>
         </div>
-        {matchingModel && (
-          <div className="detail-item">
-            <span className="detail-label">Ship By</span>
-            {(() => {
-              const shipByDate = calculateShipByDate(order.createdAt, matchingModel.processingDays || 3);
-              if (!shipByDate) return <span className="detail-value">Unknown</span>;
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const shipByDay = new Date(shipByDate);
-              shipByDay.setHours(0, 0, 0, 0);
-              const isOverdue = shipByDay < today;
-              const isDueToday = shipByDay.getTime() === today.getTime();
-              const isDueTomorrow = shipByDay.getTime() === today.getTime() + 86400000;
-              return (
-                <span className="detail-value" style={{
-                  color: isOverdue ? '#ff6b6b' : isDueToday ? '#ffc107' : isDueTomorrow ? '#ffcc00' : 'inherit',
-                  fontWeight: (isOverdue || isDueToday) ? '600' : 'normal'
-                }}>
-                  {shipByDate.toLocaleDateString()}
-                  {isOverdue && ' (OVERDUE)'}
-                  {isDueToday && ' (TODAY)'}
-                  {isDueTomorrow && ' (Tomorrow)'}
-                </span>
-              );
-            })()}
-          </div>
-        )}
+        <div className="detail-item">
+          <span className="detail-label">Ship By</span>
+          {(() => {
+            // Use override if set, otherwise calculate from model processing time
+            let shipByDate;
+            if (order.overrideShipByDate) {
+              shipByDate = new Date(order.overrideShipByDate);
+            } else if (matchingModel) {
+              shipByDate = calculateShipByDate(order.createdAt, matchingModel.processingDays || 3);
+            } else {
+              shipByDate = calculateShipByDate(order.createdAt, 3); // Default 3 days
+            }
+            if (!shipByDate || isNaN(shipByDate.getTime())) return <span className="detail-value">Unknown</span>;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const shipByDay = new Date(shipByDate);
+            shipByDay.setHours(0, 0, 0, 0);
+            const isOverdue = shipByDay < today;
+            const isDueToday = shipByDay.getTime() === today.getTime();
+            const isDueTomorrow = shipByDay.getTime() === today.getTime() + 86400000;
+            return (
+              <span className="detail-value" style={{
+                color: isOverdue ? '#ff6b6b' : isDueToday ? '#ffc107' : isDueTomorrow ? '#ffcc00' : 'inherit',
+                fontWeight: (isOverdue || isDueToday) ? '600' : 'normal'
+              }}>
+                {shipByDate.toLocaleDateString()}
+                {isOverdue && ' (OVERDUE)'}
+                {isDueToday && ' (TODAY)'}
+                {isDueTomorrow && ' (Tomorrow)'}
+                {order.overrideShipByDate && ' *'}
+              </span>
+            );
+          })()}
+        </div>
         <div className="detail-item">
           <span className="detail-label">Quantity</span>
           <span className="detail-value">{order.quantity}</span>
@@ -6952,6 +7007,82 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               </button>
               <button className="btn btn-primary" onClick={confirmShipping}>
                 <Truck size={16} /> Confirm Shipped
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Order Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h3><Edit2 size={20} /> Edit Order</h3>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px', color: '#aaa' }}>
+                Order: <strong>{order.orderId}</strong> - {order.item}
+              </p>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Color</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editData.color}
+                  onChange={e => setEditData({ ...editData, color: e.target.value })}
+                  placeholder="Enter color"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Store</label>
+                <select
+                  className="form-input"
+                  value={editData.storeId}
+                  onChange={e => setEditData({ ...editData, storeId: e.target.value })}
+                >
+                  <option value="">No Store</option>
+                  {stores?.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Extra/Variant</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editData.extra}
+                  onChange={e => setEditData({ ...editData, extra: e.target.value })}
+                  placeholder="e.g., Small, LED, Rechargeable"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label">Override Ship By Date</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={editData.overrideShipByDate}
+                  onChange={e => setEditData({ ...editData, overrideShipByDate: e.target.value })}
+                />
+                <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                  Leave empty to use calculated date from model processing time
+                </p>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={saveOrderEdit}>
+                <Check size={16} /> Save Changes
               </button>
             </div>
           </div>

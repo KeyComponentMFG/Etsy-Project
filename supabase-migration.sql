@@ -37,6 +37,8 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS plate_reprints jsonb DEFAULT '[]';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_message text DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS assignment_issue text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS used_external_part text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS override_ship_by_date date;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS extra text;
 
 -- ARCHIVED_ORDERS TABLE (same columns as orders plus archived_at)
 ALTER TABLE archived_orders ADD COLUMN IF NOT EXISTS order_id text;
