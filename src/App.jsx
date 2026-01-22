@@ -6024,24 +6024,59 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
       if (!matchedFilament) {
         noFilamentMatch = true;
       } else {
-        const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
-        if (rollCost <= 0) {
-          noRollCost = true;
-        } else {
-          // Get filament usage from printer settings or fall back
-          const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
-          const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
-            sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
-          if (filamentUsage <= 0) {
+        // For multi-color prints, calculate cost for each color separately
+        const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
+
+        if (printerSettings?.plates?.length > 0) {
+          // Collect filament usage by color from all parts
+          const usageByColor = {};
+          printerSettings.plates.forEach(plate => {
+            if (plate.parts?.length > 0) {
+              plate.parts.forEach(part => {
+                const partColor = (part.color || order.color || matchingModel.defaultColor || '').toLowerCase().trim();
+                const partUsage = parseFloat(part.filamentUsage) || 0;
+                if (partColor && partUsage > 0) {
+                  usageByColor[partColor] = (usageByColor[partColor] || 0) + partUsage;
+                }
+              });
+            } else if (plate.filamentUsage) {
+              // Plate has direct filamentUsage (use order color)
+              const plateColor = (order.color || matchingModel.defaultColor || '').toLowerCase().trim();
+              usageByColor[plateColor] = (usageByColor[plateColor] || 0) + (parseFloat(plate.filamentUsage) || 0);
+            }
+          });
+
+          // Calculate cost for each color
+          Object.entries(usageByColor).forEach(([color, usage]) => {
+            const colorFilament = memberFilaments.find(f => {
+              const filColor = f.color.toLowerCase().trim();
+              return filColor === color || filColor.includes(color) || color.includes(filColor);
+            });
+            const colorRollCost = colorFilament?.currentRollCost || colorFilament?.costPerRoll || 0;
+            if (colorRollCost > 0) {
+              const costPerGram = colorRollCost / 1000;
+              filamentCost += usage * costPerGram * order.quantity;
+            }
+          });
+
+          if (filamentCost <= 0 && Object.keys(usageByColor).length === 0) {
             noPlates = true;
-          } else {
-            const costPerGram = rollCost / 1000;
-            filamentCost = filamentUsage * costPerGram * order.quantity;
           }
+        } else if (matchingModel.filamentUsage) {
+          // Fall back to model's direct filamentUsage field with primary color
+          const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
+          if (rollCost > 0) {
+            const costPerGram = rollCost / 1000;
+            filamentCost = parseFloat(matchingModel.filamentUsage) * costPerGram * order.quantity;
+          } else {
+            noRollCost = true;
+          }
+        } else {
+          noPlates = true;
         }
       }
 
-      // Add costs for additional colors
+      // Add costs for additional colors (manually added to order)
       if (order.additionalColors && order.additionalColors.length > 0) {
         order.additionalColors.forEach(addColor => {
           const addColorName = (addColor.color || '').toLowerCase().trim();
@@ -6557,11 +6592,11 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
             <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
               Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
-              {profitData.filamentCost === 0 && !matchingModel && ' (no model)'}
+              {profitData.filamentCost === 0 && !matchingModel && ' (no model match)'}
               {profitData.filamentCost === 0 && matchingModel && !order.assignedTo && ' (unassigned)'}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noFilamentMatch && ' (no color match)'}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (no roll cost)'}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no plates)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noFilamentMatch && ` (no "${order.color}" filament)`}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (filament has no cost)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no filament usage set)'}
             </span>
             {profitData.partsCost > 0 && <span style={{ color: '#00ccff' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>}
             {profitData.shippingCost > 0 && <span>Ship: -${profitData.shippingCost.toFixed(2)}</span>}
