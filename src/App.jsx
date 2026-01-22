@@ -42,7 +42,7 @@ const PRODUCTION_STAGES = [
 ];
 
 // Low Stock Alerts Component
-function LowStockAlerts({ filaments, externalParts, teamMembers, setActiveTab }) {
+function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActiveTab }) {
   const [dismissed, setDismissed] = useState(false);
 
   // Collect all low stock items
@@ -81,6 +81,18 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, setActiveTab })
     });
   });
 
+  // Check model stock (stock count ≤ 3)
+  (models || []).forEach(model => {
+    if (model.stockCount !== null && model.stockCount !== undefined && model.stockCount <= 3) {
+      lowStockItems.push({
+        type: 'model',
+        name: model.name + (model.variantName ? ` (${model.variantName})` : ''),
+        current: model.stockCount.toString(),
+        threshold: '3'
+      });
+    }
+  });
+
   // Don't show if dismissed or no items
   if (dismissed || lowStockItems.length === 0) return null;
 
@@ -117,14 +129,14 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, setActiveTab })
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
           {lowStockItems.slice(0, 5).map((item, idx) => (
             <span key={idx} style={{
-              background: item.type === 'filament' ? 'rgba(0, 204, 255, 0.2)' : 'rgba(0, 255, 136, 0.2)',
-              border: `1px solid ${item.type === 'filament' ? 'rgba(0, 204, 255, 0.4)' : 'rgba(0, 255, 136, 0.4)'}`,
+              background: item.type === 'filament' ? 'rgba(0, 204, 255, 0.2)' : item.type === 'model' ? 'rgba(165, 94, 234, 0.2)' : 'rgba(0, 255, 136, 0.2)',
+              border: `1px solid ${item.type === 'filament' ? 'rgba(0, 204, 255, 0.4)' : item.type === 'model' ? 'rgba(165, 94, 234, 0.4)' : 'rgba(0, 255, 136, 0.4)'}`,
               borderRadius: '6px',
               padding: '4px 10px',
               fontSize: '0.8rem',
-              color: item.type === 'filament' ? '#00ccff' : '#00ff88'
+              color: item.type === 'filament' ? '#00ccff' : item.type === 'model' ? '#a55eea' : '#00ff88'
             }}>
-              {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
+              {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : item.type === 'model' ? <Printer size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
               {item.name} ({item.current})
             </span>
           ))}
@@ -1619,7 +1631,8 @@ export default function EtsyOrderManager() {
           aliases: m.aliases || [],
           file3mfUrl: m.file_3mf_url || '',
           folder: m.folder || 'Uncategorized',
-          processingDays: m.processing_days || 3
+          processingDays: m.processing_days || 3,
+          stockCount: m.stock_count ?? null
         }));
         console.log('Transformed models:', transformedModels.length, transformedModels);
         setModels(transformedModels);
@@ -1986,7 +1999,8 @@ export default function EtsyOrderManager() {
             printer_settings: m.printerSettings,
             aliases: m.aliases || [],
             folder: m.folder || 'Uncategorized',
-            processing_days: m.processingDays || 3
+            processing_days: m.processingDays || 3,
+            stock_count: m.stockCount ?? null
           }));
           const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
           if (upsertError) {
@@ -2907,12 +2921,43 @@ export default function EtsyOrderManager() {
 
       saveOrders([...orders, ...newOrders]);
 
+      // Decrease stock for matching models
+      const stockUpdates = {};
+      newOrders.forEach(order => {
+        const model = findModelForOrder(order, models);
+        if (model && model.stockCount !== null && model.stockCount !== undefined) {
+          if (!stockUpdates[model.id]) {
+            stockUpdates[model.id] = 0;
+          }
+          stockUpdates[model.id] += order.quantity || 1;
+        }
+      });
+
+      // Update models with decreased stock
+      if (Object.keys(stockUpdates).length > 0) {
+        const updatedModels = models.map(m => {
+          if (stockUpdates[m.id]) {
+            const newStock = Math.max(0, (m.stockCount || 0) - stockUpdates[m.id]);
+            return { ...m, stockCount: newStock };
+          }
+          return m;
+        });
+        saveModels(updatedModels);
+
+        // Check for low stock models and notify
+        const lowStockModels = updatedModels.filter(m => m.stockCount !== null && m.stockCount <= 3);
+        if (lowStockModels.length > 0) {
+          const lowStockNames = lowStockModels.map(m => `${m.name}${m.variantName ? ` (${m.variantName})` : ''}: ${m.stockCount}`).join(', ');
+          showNotification(`Low stock alert: ${lowStockNames}`, 'warning');
+        }
+      }
+
       // Show notification with unassigned count if any
       if (unassignedCount > 0) {
         showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${unassignedCount} unassigned (no stock). ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
         return;
       }
-      
+
       if (newOrders.length > 0) {
         showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
       } else {
@@ -4498,7 +4543,7 @@ export default function EtsyOrderManager() {
       <div className="main-content">
         <nav className="sidebar">
           {tabs.map(tab => {
-            // Calculate restock count for badge (supplies + filaments)
+            // Calculate restock count for badge (supplies + filaments + models)
             let restockCount = 0;
             if (tab.id === 'restock') {
               // Count supplies needing restock
@@ -4519,6 +4564,12 @@ export default function EtsyOrderManager() {
                     restockCount++;
                   }
                 });
+              });
+              // Count models needing restock (stock count ≤ 3)
+              models.forEach(model => {
+                if (model.stockCount !== null && model.stockCount !== undefined && model.stockCount <= 3) {
+                  restockCount++;
+                }
               });
             }
 
@@ -4555,6 +4606,7 @@ export default function EtsyOrderManager() {
             filaments={filaments}
             externalParts={externalParts}
             teamMembers={teamMembers}
+            models={models}
             setActiveTab={setActiveTab}
           />
           {activeTab === 'dashboard' && (
@@ -8115,7 +8167,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     aliases: [],
     file3mfUrl: '',
     folder: 'Uncategorized',
-    processingDays: 3
+    processingDays: 3,
+    stockCount: null
   });
   const [newAlias, setNewAlias] = useState('');
   const [expandedModels, setExpandedModels] = useState({});
@@ -8478,11 +8531,12 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
       aliases: newModel.aliases || [],
       file3mfUrl: newModel.file3mfUrl || '',
       folder: newModel.folder || 'Uncategorized',
-      processingDays: newModel.processingDays || 3
+      processingDays: newModel.processingDays || 3,
+      stockCount: newModel.stockCount !== null && newModel.stockCount !== '' ? parseInt(newModel.stockCount) : null
     };
 
     saveModels([...models, model]);
-    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '', folder: 'Uncategorized', processingDays: 3 });
+    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '', folder: 'Uncategorized', processingDays: 3, stockCount: null });
     setShowAddModel(false);
     showNotification('Model added successfully');
   };
@@ -8731,6 +8785,14 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 return <span>{totals.totalFilament.toFixed(2)}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m</span>;
                               })()}
                               {model.externalParts?.length > 0 && <span>{model.externalParts.length} part{model.externalParts.length !== 1 ? 's' : ''}</span>}
+                              {model.stockCount !== null && model.stockCount !== undefined && (
+                                <span style={{
+                                  color: model.stockCount <= 3 ? '#ff6b6b' : model.stockCount <= 10 ? '#ffc107' : '#00ff88',
+                                  fontWeight: model.stockCount <= 3 ? '600' : 'normal'
+                                }}>
+                                  Stock: {model.stockCount}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -9016,6 +9078,19 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   min="1"
                   placeholder="3"
                 />
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Stock Count</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={newModel.stockCount ?? ''}
+                  onChange={e => setNewModel({ ...newModel, stockCount: e.target.value === '' ? null : parseInt(e.target.value) })}
+                  min="0"
+                  placeholder="Optional"
+                />
+                <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>Leave blank if not tracking</p>
               </div>
             </div>
 
@@ -9593,6 +9668,19 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   min="1"
                   placeholder="3"
                 />
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Stock Count</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={editingModel.stockCount ?? ''}
+                  onChange={e => setEditingModel({ ...editingModel, stockCount: e.target.value === '' ? null : parseInt(e.target.value) })}
+                  min="0"
+                  placeholder="Optional"
+                />
+                <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>Leave blank if not tracking</p>
               </div>
             </div>
 

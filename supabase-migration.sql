@@ -79,6 +79,7 @@ ALTER TABLE models ADD COLUMN IF NOT EXISTS aliases jsonb DEFAULT '[]';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS file_3mf_url text DEFAULT '';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS folder text DEFAULT 'Uncategorized';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS processing_days integer DEFAULT 3;
+ALTER TABLE models ADD COLUMN IF NOT EXISTS stock_count integer;
 
 -- FILAMENTS TABLE
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS color text;
