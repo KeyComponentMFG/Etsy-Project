@@ -6488,11 +6488,11 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           return { totalFilament, totalMinutes };
         };
 
-        const isPlatesCollapsed = order.platesCollapsed || false;
+        const isPlatesCollapsed = order.platesCollapsed ?? true;
 
         const togglePlatesCollapsed = () => {
           const updatedOrders = orders.map(o =>
-            o.orderId === order.orderId ? { ...o, platesCollapsed: !o.platesCollapsed } : o
+            o.orderId === order.orderId ? { ...o, platesCollapsed: !(o.platesCollapsed ?? true) } : o
           );
           setOrders(updatedOrders);
         };
