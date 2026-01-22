@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -3639,6 +3639,7 @@ export default function EtsyOrderManager() {
     { id: 'models', label: 'Models', icon: Box },
     { id: 'parts', label: 'Supplies', icon: ShoppingBag },
     { id: 'costs', label: 'Costs', icon: DollarSign },
+    { id: 'finance', label: 'Finance', icon: PieChart },
     { id: 'restock', label: 'Restock', icon: AlertCircle },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'archive', label: 'Archive', icon: Archive },
@@ -4650,6 +4651,18 @@ export default function EtsyOrderManager() {
               subscriptions={subscriptions}
               saveSubscriptions={saveSubscriptions}
               printers={printers}
+              showNotification={showNotification}
+            />
+          )}
+
+          {activeTab === 'finance' && (
+            <FinanceTab
+              orders={orders}
+              archivedOrders={archivedOrders}
+              purchases={purchases}
+              subscriptions={subscriptions}
+              printers={printers}
+              teamMembers={teamMembers}
               showNotification={showNotification}
             />
           )}
@@ -11305,6 +11318,654 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+// Finance Tab Component
+function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers, teamMembers, showNotification }) {
+  const [timePeriod, setTimePeriod] = useState('month');
+  const [allocations, setAllocations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('financeAllocations');
+      return saved ? JSON.parse(saved) : [
+        { id: 'savings', name: 'Savings', percentage: 20, color: '#00ff88' },
+        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#00ccff', isSplit: true }
+      ];
+    } catch {
+      return [
+        { id: 'savings', name: 'Savings', percentage: 20, color: '#00ff88' },
+        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#00ccff', isSplit: true }
+      ];
+    }
+  });
+  const [showAddAllocation, setShowAddAllocation] = useState(false);
+  const [newAllocation, setNewAllocation] = useState({ name: '', percentage: '' });
+  const [editingAllocation, setEditingAllocation] = useState(null);
+
+  // Save allocations to localStorage
+  useEffect(() => {
+    localStorage.setItem('financeAllocations', JSON.stringify(allocations));
+  }, [allocations]);
+
+  // Get date ranges based on time period
+  const getDateRange = (period) => {
+    const now = new Date();
+    const start = new Date();
+    const end = new Date();
+
+    switch (period) {
+      case 'day':
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'week':
+        const dayOfWeek = now.getDay();
+        start.setDate(now.getDate() - dayOfWeek);
+        start.setHours(0, 0, 0, 0);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'month':
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        end.setMonth(end.getMonth() + 1, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'year':
+        start.setMonth(0, 1);
+        start.setHours(0, 0, 0, 0);
+        end.setMonth(11, 31);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'all':
+        start.setFullYear(2000);
+        end.setFullYear(2100);
+        break;
+      default:
+        start.setDate(1);
+        end.setMonth(end.getMonth() + 1, 0);
+    }
+    return { start, end };
+  };
+
+  const { start: periodStart, end: periodEnd } = getDateRange(timePeriod);
+
+  // Calculate revenue from shipped orders (both active and archived)
+  const allShippedOrders = [
+    ...orders.filter(o => o.status === 'shipped'),
+    ...archivedOrders
+  ].filter(o => {
+    const orderDate = new Date(o.shippedAt || o.fulfilledAt || o.createdAt);
+    return orderDate >= periodStart && orderDate <= periodEnd;
+  });
+
+  const totalRevenue = allShippedOrders.reduce((sum, o) => {
+    const price = parseFloat(o.price) || 0;
+    const shippingCost = parseFloat(o.shippingCost) || 0;
+    const salesTax = parseFloat(o.salesTax) || 0;
+    return sum + price + shippingCost - salesTax;
+  }, 0);
+
+  // Calculate costs
+  const periodPurchases = purchases.filter(p => {
+    const purchaseDate = new Date(p.purchaseDate);
+    return purchaseDate >= periodStart && purchaseDate <= periodEnd;
+  });
+  const totalPurchaseCosts = periodPurchases.reduce((sum, p) => sum + (parseFloat(p.totalCost) || 0), 0);
+
+  // Calculate subscription costs for the period
+  const getSubscriptionCostForPeriod = () => {
+    const frequencies = {
+      daily: { day: 1, week: 7, month: 30, year: 365, all: 365 },
+      weekly: { day: 1/7, week: 1, month: 4.33, year: 52, all: 52 },
+      monthly: { day: 1/30, week: 1/4.33, month: 1, year: 12, all: 12 },
+      quarterly: { day: 1/90, week: 1/13, month: 1/3, year: 4, all: 4 },
+      yearly: { day: 1/365, week: 1/52, month: 1/12, year: 1, all: 1 }
+    };
+
+    return subscriptions.reduce((sum, sub) => {
+      const freq = frequencies[sub.frequency] || frequencies.monthly;
+      const multiplier = freq[timePeriod] || 1;
+      return sum + (parseFloat(sub.price) || 0) * multiplier;
+    }, 0);
+  };
+  const totalSubscriptionCosts = getSubscriptionCostForPeriod();
+
+  // Calculate printer payment costs for the period
+  const getPrinterPaymentCostForPeriod = () => {
+    const multipliers = { day: 1/30, week: 1/4.33, month: 1, year: 12, all: 12 };
+    const multiplier = multipliers[timePeriod] || 1;
+
+    return printers.reduce((sum, p) => {
+      if (p.monthlyPayment > 0 && !p.isPaidOff) {
+        return sum + (parseFloat(p.monthlyPayment) || 0) * multiplier;
+      }
+      return sum;
+    }, 0);
+  };
+  const totalPrinterPayments = getPrinterPaymentCostForPeriod();
+
+  // Calculate material costs from orders
+  const totalMaterialCosts = allShippedOrders.reduce((sum, o) => sum + (parseFloat(o.materialCost) || 0), 0);
+
+  // Total costs
+  const totalCosts = totalPurchaseCosts + totalSubscriptionCosts + totalPrinterPayments + totalMaterialCosts;
+
+  // Net profit
+  const netProfit = totalRevenue - totalCosts;
+
+  // Calculate allocations
+  const partnerCount = teamMembers.length || 1;
+  const calculatedAllocations = allocations.map(alloc => {
+    const amount = (netProfit * alloc.percentage) / 100;
+    return {
+      ...alloc,
+      amount: Math.max(0, amount),
+      perPerson: alloc.isSplit ? Math.max(0, amount / partnerCount) : null
+    };
+  });
+
+  // Update allocation percentage
+  const updateAllocation = (id, newPercentage) => {
+    const parsed = parseFloat(newPercentage) || 0;
+    const currentTotal = allocations.reduce((sum, a) => a.id === id ? sum : sum + a.percentage, 0);
+    const maxAllowed = 100 - currentTotal;
+    const clamped = Math.min(Math.max(0, parsed), maxAllowed);
+
+    setAllocations(allocations.map(a =>
+      a.id === id ? { ...a, percentage: clamped } : a
+    ));
+  };
+
+  // Add new allocation
+  const addAllocation = () => {
+    if (!newAllocation.name.trim()) {
+      showNotification('Please enter allocation name', 'error');
+      return;
+    }
+    const currentTotal = allocations.reduce((sum, a) => sum + a.percentage, 0);
+    const percentage = Math.min(parseFloat(newAllocation.percentage) || 0, 100 - currentTotal);
+
+    const colors = ['#ff9f43', '#a55eea', '#ff6b6b', '#ffc107', '#00ff88', '#00ccff'];
+    const usedColors = allocations.map(a => a.color);
+    const availableColor = colors.find(c => !usedColors.includes(c)) || '#888';
+
+    setAllocations([...allocations, {
+      id: `alloc-${Date.now()}`,
+      name: newAllocation.name.trim(),
+      percentage,
+      color: availableColor,
+      isSplit: false
+    }]);
+    setNewAllocation({ name: '', percentage: '' });
+    setShowAddAllocation(false);
+    showNotification('Allocation added');
+  };
+
+  // Delete allocation
+  const deleteAllocation = (id) => {
+    if (allocations.length <= 1) {
+      showNotification('Must have at least one allocation', 'error');
+      return;
+    }
+    setAllocations(allocations.filter(a => a.id !== id));
+    showNotification('Allocation deleted');
+  };
+
+  // Toggle split between partners
+  const toggleSplit = (id) => {
+    setAllocations(allocations.map(a =>
+      a.id === id ? { ...a, isSplit: !a.isSplit } : a
+    ));
+  };
+
+  const totalAllocatedPercentage = allocations.reduce((sum, a) => sum + a.percentage, 0);
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const periodLabels = {
+    day: 'Today',
+    week: 'This Week',
+    month: 'This Month',
+    year: 'This Year',
+    all: 'All Time'
+  };
+
+  return (
+    <>
+      <div className="section-header">
+        <h2 className="page-title"><PieChart size={28} /> Finance</h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {['day', 'week', 'month', 'year', 'all'].map(period => (
+            <button
+              key={period}
+              className={`btn ${timePeriod === period ? 'btn-primary' : 'btn-secondary'} btn-small`}
+              onClick={() => setTimePeriod(period)}
+              style={{ textTransform: 'capitalize' }}
+            >
+              {period === 'all' ? 'All Time' : period}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Profit Overview Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%)',
+          border: '1px solid rgba(0, 255, 136, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue ({periodLabels[timePeriod]})</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+            {formatCurrency(totalRevenue)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+            {allShippedOrders.length} orders
+          </div>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(255, 107, 107, 0.05) 100%)',
+          border: '1px solid rgba(255, 107, 107, 0.3)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Costs ({periodLabels[timePeriod]})</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+            {formatCurrency(totalCosts)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+            Purchases, subs, materials
+          </div>
+        </div>
+
+        <div style={{
+          background: netProfit >= 0
+            ? 'linear-gradient(135deg, rgba(0, 204, 255, 0.1) 0%, rgba(0, 204, 255, 0.05) 100%)'
+            : 'linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(255, 107, 107, 0.05) 100%)',
+          border: `1px solid ${netProfit >= 0 ? 'rgba(0, 204, 255, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`,
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Net Profit ({periodLabels[timePeriod]})</div>
+          <div style={{
+            fontSize: '1.75rem',
+            fontWeight: '700',
+            color: netProfit >= 0 ? '#00ccff' : '#ff6b6b',
+            fontFamily: 'JetBrains Mono, monospace'
+          }}>
+            {formatCurrency(netProfit)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+            {((netProfit / totalRevenue) * 100 || 0).toFixed(1)}% margin
+          </div>
+        </div>
+      </div>
+
+      {/* Cost Breakdown */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '24px'
+      }}>
+        <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
+          <DollarSign size={20} style={{ color: '#ff6b6b' }} />
+          Cost Breakdown
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[
+            { name: 'Purchases', amount: totalPurchaseCosts, color: '#ff9f43' },
+            { name: 'Subscriptions', amount: totalSubscriptionCosts, color: '#a55eea' },
+            { name: 'Printer Payments', amount: totalPrinterPayments, color: '#00ccff' },
+            { name: 'Material Costs', amount: totalMaterialCosts, color: '#00ff88' }
+          ].filter(item => item.amount > 0).map(item => {
+            const percentage = totalCosts > 0 ? (item.amount / totalCosts) * 100 : 0;
+            return (
+              <div key={item.name}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '3px',
+                      background: item.color
+                    }} />
+                    {item.name}
+                  </span>
+                  <span style={{ fontWeight: '600', color: item.color, fontFamily: 'JetBrains Mono, monospace' }}>
+                    {formatCurrency(item.amount)}
+                  </span>
+                </div>
+                <div style={{
+                  height: '8px',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${percentage}%`,
+                    background: item.color,
+                    borderRadius: '4px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+          {totalCosts === 0 && (
+            <p style={{ color: '#666', fontSize: '0.9rem' }}>No costs recorded for this period</p>
+          )}
+        </div>
+      </div>
+
+      {/* Profit Allocations */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '24px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
+            <PieChart size={20} style={{ color: '#00ff88' }} />
+            Profit Allocations
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{
+              fontSize: '0.8rem',
+              color: totalAllocatedPercentage === 100 ? '#00ff88' : '#ff9f43'
+            }}>
+              {totalAllocatedPercentage}% allocated
+            </span>
+            <button
+              className="btn btn-primary btn-small"
+              onClick={() => setShowAddAllocation(true)}
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {calculatedAllocations.map(alloc => (
+            <div
+              key={alloc.id}
+              style={{
+                background: `${alloc.color}10`,
+                border: `1px solid ${alloc.color}30`,
+                borderRadius: '10px',
+                padding: '16px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '4px',
+                    background: alloc.color
+                  }} />
+                  <span style={{ fontWeight: '600', fontSize: '1.1rem' }}>{alloc.name}</span>
+                  {alloc.isSplit && (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 6px',
+                      background: 'rgba(0, 204, 255, 0.2)',
+                      border: '1px solid rgba(0, 204, 255, 0.3)',
+                      borderRadius: '4px',
+                      color: '#00ccff'
+                    }}>
+                      Split {partnerCount} ways
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {editingAllocation === alloc.id ? (
+                    <>
+                      <input
+                        type="number"
+                        value={alloc.percentage}
+                        onChange={(e) => updateAllocation(alloc.id, e.target.value)}
+                        min="0"
+                        max="100"
+                        style={{
+                          width: '60px',
+                          padding: '4px 8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '4px',
+                          color: '#fff',
+                          textAlign: 'center'
+                        }}
+                      />
+                      <span style={{ color: '#888' }}>%</span>
+                      <button
+                        className="btn btn-small"
+                        onClick={() => setEditingAllocation(null)}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        <Check size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{
+                        fontSize: '1.1rem',
+                        fontWeight: '600',
+                        color: alloc.color,
+                        fontFamily: 'JetBrains Mono, monospace'
+                      }}>
+                        {alloc.percentage}%
+                      </span>
+                      <button
+                        className="btn btn-secondary btn-small"
+                        onClick={() => setEditingAllocation(alloc.id)}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '4px' }}>
+                    {alloc.isSplit ? 'Total Amount' : 'Allocated Amount'}
+                  </div>
+                  <div style={{
+                    fontSize: '1.5rem',
+                    fontWeight: '700',
+                    color: alloc.color,
+                    fontFamily: 'JetBrains Mono, monospace'
+                  }}>
+                    {formatCurrency(alloc.amount)}
+                  </div>
+                </div>
+
+                {alloc.isSplit && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '4px' }}>
+                      Per Partner ({partnerCount})
+                    </div>
+                    <div style={{
+                      fontSize: '1.25rem',
+                      fontWeight: '700',
+                      color: '#fff',
+                      fontFamily: 'JetBrains Mono, monospace'
+                    }}>
+                      {formatCurrency(alloc.perPerson)}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-secondary btn-small"
+                    onClick={() => toggleSplit(alloc.id)}
+                    title={alloc.isSplit ? 'Don\'t split' : 'Split between partners'}
+                    style={{
+                      padding: '6px 10px',
+                      background: alloc.isSplit ? 'rgba(0, 204, 255, 0.2)' : 'transparent'
+                    }}
+                  >
+                    <Users size={14} />
+                  </button>
+                  <button
+                    className="btn btn-danger btn-small"
+                    onClick={() => deleteAllocation(alloc.id)}
+                    style={{ padding: '6px 10px' }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Unallocated warning */}
+        {totalAllocatedPercentage < 100 && (
+          <div style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: 'rgba(255, 159, 67, 0.1)',
+            border: '1px solid rgba(255, 159, 67, 0.3)',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <AlertCircle size={18} style={{ color: '#ff9f43' }} />
+            <span style={{ color: '#ff9f43' }}>
+              {100 - totalAllocatedPercentage}% of profit is unallocated ({formatCurrency((netProfit * (100 - totalAllocatedPercentage)) / 100)})
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Partner Breakdown */}
+      {teamMembers.length > 0 && (
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '12px',
+          padding: '20px'
+        }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
+            <Users size={20} style={{ color: '#00ccff' }} />
+            Partner Earnings ({periodLabels[timePeriod]})
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+            {teamMembers.map(member => {
+              const partnerEarnings = calculatedAllocations
+                .filter(a => a.isSplit)
+                .reduce((sum, a) => sum + (a.perPerson || 0), 0);
+              return (
+                <div
+                  key={member.id}
+                  style={{
+                    background: 'rgba(0, 204, 255, 0.1)',
+                    border: '1px solid rgba(0, 204, 255, 0.2)',
+                    borderRadius: '10px',
+                    padding: '16px',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: member.color || '#00ccff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 12px',
+                    fontSize: '1.25rem',
+                    fontWeight: '700',
+                    color: '#fff'
+                  }}>
+                    {member.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div style={{ fontWeight: '600', marginBottom: '8px' }}>{member.name}</div>
+                  <div style={{
+                    fontSize: '1.5rem',
+                    fontWeight: '700',
+                    color: '#00ccff',
+                    fontFamily: 'JetBrains Mono, monospace'
+                  }}>
+                    {formatCurrency(partnerEarnings)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Add Allocation Modal */}
+      {showAddAllocation && (
+        <div className="modal-overlay" onClick={() => setShowAddAllocation(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add Allocation</h2>
+              <button className="modal-close" onClick={() => setShowAddAllocation(false)}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Allocation Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g., Emergency Fund, Marketing"
+                  value={newAllocation.name}
+                  onChange={e => setNewAllocation({ ...newAllocation, name: e.target.value })}
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Percentage (max {100 - totalAllocatedPercentage}%)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="10"
+                  min="0"
+                  max={100 - totalAllocatedPercentage}
+                  value={newAllocation.percentage}
+                  onChange={e => setNewAllocation({ ...newAllocation, percentage: e.target.value })}
+                />
+              </div>
+
+              <button className="btn btn-primary" onClick={addAllocation} style={{ width: '100%' }}>
+                <Plus size={18} /> Add Allocation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
