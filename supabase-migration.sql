@@ -91,6 +91,8 @@ ALTER TABLE filaments ADD COLUMN IF NOT EXISTS backup_rolls jsonb DEFAULT '[]';
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS rolls integer DEFAULT 0;
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS cost_per_roll numeric DEFAULT 0;
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS reorder_at numeric DEFAULT 250;
+-- Fix amount column if it was created as integer
+ALTER TABLE filaments ALTER COLUMN amount TYPE numeric USING amount::numeric;
 
 -- PRINTERS TABLE
 ALTER TABLE printers ADD COLUMN IF NOT EXISTS name text;
