@@ -5995,6 +5995,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
 
     // Calculate filament cost
     let filamentCost = 0;
+    let noFilamentMatch = false;
+    let noRollCost = false;
+    let noPlates = false;
+
     if (matchingModel && order.assignedTo) {
       const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase().trim();
       const memberFilaments = filaments?.[order.assignedTo] || [];
@@ -6006,14 +6010,24 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                orderColor.includes(filColor);
       });
 
-      const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
-      if (rollCost > 0) {
-        // Get filament usage from printer settings or fall back
-        const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
-        const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
-          sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
-        const costPerGram = rollCost / 1000;
-        filamentCost = filamentUsage * costPerGram * order.quantity;
+      if (!matchedFilament) {
+        noFilamentMatch = true;
+      } else {
+        const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
+        if (rollCost <= 0) {
+          noRollCost = true;
+        } else {
+          // Get filament usage from printer settings or fall back
+          const printerSettings = matchingModel.printerSettings?.find(ps => ps.printerId === order.printerId) || matchingModel.printerSettings?.[0];
+          const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
+            sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
+          if (filamentUsage <= 0) {
+            noPlates = true;
+          } else {
+            const costPerGram = rollCost / 1000;
+            filamentCost = filamentUsage * costPerGram * order.quantity;
+          }
+        }
       }
 
       // Add costs for additional colors
@@ -6066,7 +6080,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
       shippingCost,
       totalCost,
       profit,
-      hasData: orderTotal > 0 || totalCost > 0
+      hasData: orderTotal > 0 || totalCost > 0,
+      noFilamentMatch,
+      noRollCost,
+      noPlates
     };
   };
 
@@ -6527,8 +6544,15 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             {profitData.orderTotal > 0 && <span>Order: ${profitData.orderTotal.toFixed(2)}</span>}
             {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
             {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
-            {profitData.filamentCost > 0 && <span>Filament: -${profitData.filamentCost.toFixed(2)}</span>}
-            {profitData.partsCost > 0 && <span>Parts: -${profitData.partsCost.toFixed(2)}</span>}
+            <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
+              Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
+              {profitData.filamentCost === 0 && !matchingModel && ' (no model)'}
+              {profitData.filamentCost === 0 && matchingModel && !order.assignedTo && ' (unassigned)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noFilamentMatch && ' (no color match)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (no roll cost)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no plates)'}
+            </span>
+            {profitData.partsCost > 0 && <span style={{ color: '#00ccff' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>}
             {profitData.shippingCost > 0 && <span>Ship: -${profitData.shippingCost.toFixed(2)}</span>}
           </div>
         </div>
