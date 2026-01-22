@@ -1617,7 +1617,8 @@ export default function EtsyOrderManager() {
           printerSettings: m.printer_settings || [],
           aliases: m.aliases || [],
           file3mfUrl: m.file_3mf_url || '',
-          folder: m.folder || 'Uncategorized'
+          folder: m.folder || 'Uncategorized',
+          processingDays: m.processing_days || 3
         }));
         console.log('Transformed models:', transformedModels.length, transformedModels);
         setModels(transformedModels);
@@ -1819,7 +1820,11 @@ export default function EtsyOrderManager() {
             extra_print_minutes: o.extraPrintMinutes || 0,
             additional_colors: o.additionalColors || [],
             completed_plates: o.completedPlates || [],
-            plate_colors: o.plateColors || {}
+            plate_colors: o.plateColors || {},
+            plate_reprints: o.plateReprints || [],
+            buyer_message: o.buyerMessage || '',
+            assignment_issue: o.assignmentIssue || null,
+            used_external_part: o.usedExternalPart || null
           }));
           const { error: upsertError } = await supabase.from('orders').upsert(dbFormat);
           if (upsertError) {
@@ -1978,7 +1983,8 @@ export default function EtsyOrderManager() {
             print_duration: m.printDuration,
             printer_settings: m.printerSettings,
             aliases: m.aliases || [],
-            folder: m.folder || 'Uncategorized'
+            folder: m.folder || 'Uncategorized',
+            processing_days: m.processingDays || 3
           }));
           const { error: upsertError } = await supabase.from('models').upsert(dbFormat);
           if (upsertError) {
@@ -5596,6 +5602,27 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
   );
 }
 
+// Calculate ship by date adding business days (skipping weekends)
+function calculateShipByDate(orderDate, processingDays) {
+  if (!orderDate || !processingDays) return null;
+
+  const date = new Date(orderDate);
+  if (isNaN(date.getTime())) return null;
+
+  let daysToAdd = processingDays;
+
+  while (daysToAdd > 0) {
+    date.setDate(date.getDate() + 1);
+    const dayOfWeek = date.getDay();
+    // Skip Saturday (6) and Sunday (0)
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      daysToAdd--;
+    }
+  }
+
+  return date;
+}
+
 // Order Card Component
 function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
@@ -6085,6 +6112,33 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           <span className="detail-label">Order Date</span>
           <span className="detail-value">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Unknown'}</span>
         </div>
+        {matchingModel && (
+          <div className="detail-item">
+            <span className="detail-label">Ship By</span>
+            {(() => {
+              const shipByDate = calculateShipByDate(order.createdAt, matchingModel.processingDays || 3);
+              if (!shipByDate) return <span className="detail-value">Unknown</span>;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const shipByDay = new Date(shipByDate);
+              shipByDay.setHours(0, 0, 0, 0);
+              const isOverdue = shipByDay < today;
+              const isDueToday = shipByDay.getTime() === today.getTime();
+              const isDueTomorrow = shipByDay.getTime() === today.getTime() + 86400000;
+              return (
+                <span className="detail-value" style={{
+                  color: isOverdue ? '#ff6b6b' : isDueToday ? '#ffc107' : isDueTomorrow ? '#ffcc00' : 'inherit',
+                  fontWeight: (isOverdue || isDueToday) ? '600' : 'normal'
+                }}>
+                  {shipByDate.toLocaleDateString()}
+                  {isOverdue && ' (OVERDUE)'}
+                  {isDueToday && ' (TODAY)'}
+                  {isDueTomorrow && ' (Tomorrow)'}
+                </span>
+              );
+            })()}
+          </div>
+        )}
         <div className="detail-item">
           <span className="detail-label">Quantity</span>
           <span className="detail-value">{order.quantity}</span>
@@ -7864,7 +7918,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     printerSettings: [],
     aliases: [],
     file3mfUrl: '',
-    folder: 'Uncategorized'
+    folder: 'Uncategorized',
+    processingDays: 3
   });
   const [newAlias, setNewAlias] = useState('');
   const [expandedModels, setExpandedModels] = useState({});
@@ -8208,11 +8263,12 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
       printerSettings: printerSettings,
       aliases: newModel.aliases || [],
       file3mfUrl: newModel.file3mfUrl || '',
-      folder: newModel.folder || 'Uncategorized'
+      folder: newModel.folder || 'Uncategorized',
+      processingDays: newModel.processingDays || 3
     };
 
     saveModels([...models, model]);
-    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '', folder: 'Uncategorized' });
+    setNewModel({ name: '', variantName: '', defaultColor: '', externalParts: [], storeId: '', imageUrl: '', printerSettings: [], aliases: [], file3mfUrl: '', folder: 'Uncategorized', processingDays: 3 });
     setShowAddModel(false);
     showNotification('Model added successfully');
   };
@@ -8715,6 +8771,18 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Processing Time (days)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={newModel.processingDays || 3}
+                  onChange={e => setNewModel({ ...newModel, processingDays: parseInt(e.target.value) || 3 })}
+                  min="1"
+                  placeholder="3"
+                />
               </div>
             </div>
 
@@ -9263,6 +9331,18 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label className="form-label">Processing Time (days)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={editingModel.processingDays || 3}
+                  onChange={e => setEditingModel({ ...editingModel, processingDays: parseInt(e.target.value) || 3 })}
+                  min="1"
+                  placeholder="3"
+                />
               </div>
             </div>
 

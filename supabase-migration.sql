@@ -36,6 +36,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS plate_colors jsonb DEFAULT '{}';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS plate_reprints jsonb DEFAULT '[]';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_message text DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS assignment_issue text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS used_external_part text;
 
 -- ARCHIVED_ORDERS TABLE (same columns as orders plus archived_at)
 ALTER TABLE archived_orders ADD COLUMN IF NOT EXISTS order_id text;
@@ -75,6 +76,7 @@ ALTER TABLE models ADD COLUMN IF NOT EXISTS printer_settings jsonb DEFAULT '[]';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS aliases jsonb DEFAULT '[]';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS file_3mf_url text DEFAULT '';
 ALTER TABLE models ADD COLUMN IF NOT EXISTS folder text DEFAULT 'Uncategorized';
+ALTER TABLE models ADD COLUMN IF NOT EXISTS processing_days integer DEFAULT 3;
 
 -- FILAMENTS TABLE
 ALTER TABLE filaments ADD COLUMN IF NOT EXISTS color text;
