@@ -7985,18 +7985,33 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     setExpandedModels(newExpanded);
   };
 
+  const [folderJustCreated, setFolderJustCreated] = useState(false);
+
   const createFolder = () => {
-    if (!newFolderName.trim()) return;
-    const folderName = newFolderName.trim();
-    if (allFolders.includes(folderName)) {
-      showNotification('Folder already exists', 'error');
-      return;
+    try {
+      if (!newFolderName.trim()) {
+        setShowFolderInput(false);
+        return;
+      }
+      const folderName = newFolderName.trim();
+      if (allFolders.includes(folderName)) {
+        showNotification('Folder already exists', 'error');
+        setShowFolderInput(false);
+        setNewFolderName('');
+        return;
+      }
+      // Add to custom folders list (persisted to localStorage)
+      setCustomFolders(prev => [...prev, folderName]);
+      setNewFolderName('');
+      setShowFolderInput(false);
+      setFolderJustCreated(true);
+      setTimeout(() => setFolderJustCreated(false), 300);
+      showNotification(`Folder "${folderName}" created`);
+    } catch (err) {
+      console.error('Error creating folder:', err);
+      setShowFolderInput(false);
+      setNewFolderName('');
     }
-    // Add to custom folders list (persisted to localStorage)
-    setCustomFolders(prev => [...prev, folderName]);
-    setNewFolderName('');
-    setShowFolderInput(false);
-    showNotification(`Folder "${folderName}" created`);
   };
 
   const renameFolder = (oldName, newName) => {
@@ -8332,35 +8347,37 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     <>
       <div className="section-header">
         <h2 className="page-title"><Printer size={28} /> Models</h2>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {showFolderInput ? (
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Folder name"
-                value={newFolderName}
-                onChange={e => setNewFolderName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') createFolder();
-                  if (e.key === 'Escape') { setShowFolderInput(false); setNewFolderName(''); }
-                }}
-                autoFocus
-                style={{ width: '150px', padding: '6px 10px' }}
-              />
-              <button className="btn btn-primary btn-small" onClick={createFolder}>
-                <Check size={14} />
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ minWidth: '140px' }}>
+            {showFolderInput ? (
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Folder name"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); createFolder(); }
+                    if (e.key === 'Escape') { setShowFolderInput(false); setNewFolderName(''); }
+                  }}
+                  autoFocus
+                  style={{ width: '120px', padding: '6px 10px' }}
+                />
+                <button type="button" className="btn btn-primary btn-small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); createFolder(); }}>
+                  <Check size={14} />
+                </button>
+                <button type="button" className="btn btn-secondary btn-small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowFolderInput(false); setNewFolderName(''); }}>
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); setShowFolderInput(true); }}>
+                <Box size={18} /> New Folder
               </button>
-              <button className="btn btn-secondary btn-small" onClick={() => { setShowFolderInput(false); setNewFolderName(''); }}>
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <button className="btn btn-secondary" onClick={() => setShowFolderInput(true)}>
-              <Box size={18} /> New Folder
-            </button>
-          )}
-          <button className="btn btn-primary" onClick={() => setShowAddModel(true)}>
+            )}
+          </div>
+          <button type="button" className="btn btn-primary" onClick={(e) => { e.stopPropagation(); if (!folderJustCreated) setShowAddModel(true); }}>
             <Plus size={18} /> Add Model
           </button>
         </div>
@@ -8424,7 +8441,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     padding: '2px 8px',
                     borderRadius: '10px'
                   }}>
-                    {groupedModels[folder].length} model{groupedModels[folder].length !== 1 ? 's' : ''}
+                    {(groupedModels[folder] || []).length} model{(groupedModels[folder] || []).length !== 1 ? 's' : ''}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
@@ -8468,7 +8485,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               {/* Folder Contents */}
               {!collapsedFolders[folder] && (
                 <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {groupedModels[folder].map(model => {
+                  {(groupedModels[folder] || []).map(model => {
                     const isExpanded = expandedModels[model.id];
                     return (
                       <div key={model.id} className="model-card" style={{ margin: 0 }}>
@@ -8762,15 +8779,32 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Folder</label>
-                <select
-                  className="form-input"
-                  value={newModel.folder || 'Uncategorized'}
-                  onChange={e => setNewModel({ ...newModel, folder: e.target.value })}
-                >
-                  {allFolders.map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <select
+                    className="form-input"
+                    value={newModel.folder || 'Uncategorized'}
+                    onChange={e => {
+                      if (e.target.value === '__new__') {
+                        const folderName = prompt('Enter new folder name:');
+                        if (folderName && folderName.trim()) {
+                          const trimmed = folderName.trim();
+                          if (!allFolders.includes(trimmed)) {
+                            setCustomFolders(prev => [...prev, trimmed]);
+                          }
+                          setNewModel({ ...newModel, folder: trimmed });
+                        }
+                      } else {
+                        setNewModel({ ...newModel, folder: e.target.value });
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    {allFolders.map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                    <option value="__new__">+ Create New Folder</option>
+                  </select>
+                </div>
               </div>
 
               <div className="form-group" style={{ flex: 1 }}>
@@ -9322,15 +9356,32 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Folder</label>
-                <select
-                  className="form-input"
-                  value={editingModel.folder || 'Uncategorized'}
-                  onChange={e => setEditingModel({ ...editingModel, folder: e.target.value })}
-                >
-                  {allFolders.map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <select
+                    className="form-input"
+                    value={editingModel.folder || 'Uncategorized'}
+                    onChange={e => {
+                      if (e.target.value === '__new__') {
+                        const folderName = prompt('Enter new folder name:');
+                        if (folderName && folderName.trim()) {
+                          const trimmed = folderName.trim();
+                          if (!allFolders.includes(trimmed)) {
+                            setCustomFolders(prev => [...prev, trimmed]);
+                          }
+                          setEditingModel({ ...editingModel, folder: trimmed });
+                        }
+                      } else {
+                        setEditingModel({ ...editingModel, folder: e.target.value });
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    {allFolders.map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                    <option value="__new__">+ Create New Folder</option>
+                  </select>
+                </div>
               </div>
 
               <div className="form-group" style={{ flex: 1 }}>
