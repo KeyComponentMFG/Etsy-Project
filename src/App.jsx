@@ -12392,6 +12392,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, teamMembers, models, stores, showNotification }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [storeFilter, setStoreFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'regular', 'historical'
   const [showImportModal, setShowImportModal] = useState(false);
   const [pasteInput, setPasteInput] = useState('');
   const [parsedOrders, setParsedOrders] = useState([]);
@@ -12587,7 +12588,10 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
       o.buyerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.item?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStore = storeFilter === 'all' || o.storeId === storeFilter;
-    return matchesSearch && matchesStore;
+    const matchesType = typeFilter === 'all' ||
+      (typeFilter === 'historical' && o.isHistorical) ||
+      (typeFilter === 'regular' && !o.isHistorical);
+    return matchesSearch && matchesStore && matchesType;
   });
 
   const getMemberName = (id) => teamMembers.find(m => m.id === id)?.name || 'Unknown';
@@ -12660,19 +12664,46 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Clickable to filter */}
       <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setTypeFilter('all')}
+          style={{
+            cursor: 'pointer',
+            border: typeFilter === 'all' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Total Archived</div>
           <div className="stat-value">{archivedOrders.length}</div>
+          {typeFilter === 'all' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Showing All</div>}
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setTypeFilter('regular')}
+          style={{
+            cursor: 'pointer',
+            border: typeFilter === 'regular' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Regular Orders</div>
           <div className="stat-value">{regularCount}</div>
+          {typeFilter === 'regular' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Filtered</div>}
         </div>
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => setTypeFilter('historical')}
+          style={{
+            cursor: 'pointer',
+            border: typeFilter === 'historical' ? '2px solid #00ccff' : '1px solid rgba(255,255,255,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           <div className="stat-label">Historical Imports</div>
           <div className="stat-value" style={{ color: '#00ccff' }}>{historicalCount}</div>
+          {typeFilter === 'historical' && <div style={{ fontSize: '0.7rem', color: '#00ccff', marginTop: '4px' }}>Filtered</div>}
         </div>
       </div>
 
