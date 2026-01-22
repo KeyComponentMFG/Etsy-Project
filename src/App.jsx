@@ -8164,8 +8164,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
   };
 
   const toggleFolderCollapsed = (folder) => {
-    setCollapsedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
+    setCollapsedFolders(prev => ({ ...prev, [folder]: !(prev[folder] ?? true) }));
   };
+
+  // Helper to check if folder is collapsed (default to true)
+  const isFolderCollapsed = (folder) => collapsedFolders[folder] ?? true;
 
   const expandAllInFolder = (folder) => {
     const folderModels = groupedModels[folder] || [];
@@ -8604,11 +8607,11 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   padding: '12px 16px',
                   background: 'rgba(0,255,136,0.08)',
                   cursor: renamingFolder === folder ? 'default' : 'pointer',
-                  borderBottom: collapsedFolders[folder] ? 'none' : '1px solid rgba(0,255,136,0.1)'
+                  borderBottom: isFolderCollapsed(folder) ? 'none' : '1px solid rgba(0,255,136,0.1)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {collapsedFolders[folder] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                  {isFolderCollapsed(folder) ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
                   <Box size={18} style={{ color: '#00ff88' }} />
                   {renamingFolder === folder ? (
                     <input
@@ -8679,7 +8682,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               </div>
 
               {/* Folder Contents */}
-              {!collapsedFolders[folder] && (
+              {!isFolderCollapsed(folder) && (
                 <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {(groupedModels[folder] || []).map(model => {
                     const isExpanded = expandedModels[model.id];
