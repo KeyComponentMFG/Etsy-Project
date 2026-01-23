@@ -3529,18 +3529,24 @@ export default function EtsyOrderManager() {
   const completeFulfillmentWithParts = (orderId, partsWithQuantities) => {
     // partsWithQuantities is an object: {partName: quantity, ...}
     const partsArray = Object.entries(partsWithQuantities).filter(([_, qty]) => qty > 0);
+    const order = orders.find(o => o.orderId === orderId);
 
-    // Update order with the selected external parts for tracking
+    // Update order with selected parts AND fulfill status in one operation
+    // (This prevents the usedExternalParts from being overwritten by updateOrderStatus)
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
-        return { ...o, usedExternalParts: partsWithQuantities };
+        return {
+          ...o,
+          usedExternalParts: partsWithQuantities,
+          status: 'fulfilled',
+          fulfilledAt: Date.now()
+        };
       }
       return o;
     });
-    setOrders(updated);
+    saveOrders(updated);
 
     // Deduct the selected external parts from inventory
-    const order = orders.find(o => o.orderId === orderId);
     if (order && order.assignedTo && partsArray.length > 0) {
       const memberParts = [...(externalParts[order.assignedTo] || [])];
 
@@ -3559,10 +3565,10 @@ export default function EtsyOrderManager() {
       saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
     }
 
-    // Close prompt, reset selection, and fulfill
+    // Close prompt and reset selection
     setFulfillmentPartPrompt(null);
     setSelectedFulfillmentParts({});
-    updateOrderStatus(orderId, 'fulfilled');
+    showNotification('Order fulfilled with selected parts');
   };
 
   // Toggle plate completion and deduct/add filament
