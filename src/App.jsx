@@ -3513,8 +3513,36 @@ export default function EtsyOrderManager() {
     const order = orders.find(o => o.orderId === orderId);
     if (!order) return;
 
-    if (needsExternalPartPrompt(order)) {
-      // Show prompt to select external part
+    // Check if model has external parts defined
+    const model = findBestModelMatch(order.item, order.extra);
+    const modelExternalParts = model?.externalParts || [];
+
+    if (modelExternalParts.length > 0) {
+      // Model has external parts - deduct them automatically and fulfill
+      // Build partsWithQuantities from model's external parts (multiplied by order quantity)
+      const partsWithQuantities = {};
+      modelExternalParts.forEach(part => {
+        const partQty = (part.quantity || 1) * (order.quantity || 1);
+        partsWithQuantities[part.name] = partQty;
+      });
+
+      // Check if all parts are in stock before fulfilling
+      const memberParts = externalParts[order.assignedTo] || [];
+      const outOfStock = modelExternalParts.some(part => {
+        const inventoryPart = memberParts.find(p => p.name.toLowerCase() === part.name.toLowerCase());
+        const needed = (part.quantity || 1) * (order.quantity || 1);
+        return !inventoryPart || inventoryPart.quantity < needed;
+      });
+
+      if (outOfStock) {
+        showNotification('Cannot fulfill: Model requires external parts that are out of stock', 'error');
+        return;
+      }
+
+      // Fulfill with model's external parts
+      completeFulfillmentWithParts(orderId, partsWithQuantities);
+    } else if (needsExternalPartPrompt(order)) {
+      // Show prompt to select external part (model has no parts but variants do)
       const availableParts = getAvailableExternalParts(order);
       setFulfillmentPartPrompt({
         orderId,
@@ -3522,7 +3550,7 @@ export default function EtsyOrderManager() {
         availableParts
       });
     } else {
-      // Fulfill directly
+      // No external parts needed - fulfill directly
       updateOrderStatus(orderId, 'fulfilled');
     }
   };
