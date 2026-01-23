@@ -6894,15 +6894,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           }
                         });
                         togglePlateComplete(order.orderId, idx, matchingModel, partColors);
-                        // Clear pending colors for this plate
-                        const currentPending = order.pendingPartColors || {};
-                        delete currentPending[idx];
-                        const updatedOrders = orders.map(o =>
-                          o.orderId === order.orderId
-                            ? { ...o, pendingPartColors: currentPending }
-                            : o
-                        );
-                        setOrders(updatedOrders);
+                        // Note: Don't call setOrders here - togglePlateComplete already updates orders via saveOrders
                       };
 
                       return (
