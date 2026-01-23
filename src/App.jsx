@@ -3791,6 +3791,7 @@ export default function EtsyOrderManager() {
 
   // Complete fulfillment with selected external parts (multiple with quantities)
   const completeFulfillmentWithParts = (orderId, partsWithQuantities) => {
+    const ROLL_SIZE = 1000;
     // partsWithQuantities is an object: {partName: quantity, ...}
     const partsArray = Object.entries(partsWithQuantities).filter(([_, qty]) => qty > 0);
     const order = orders.find(o => o.orderId === orderId);
@@ -3809,6 +3810,63 @@ export default function EtsyOrderManager() {
       return o;
     });
     saveOrders(updated);
+
+    // Deduct filament for this order
+    if (order && order.assignedTo) {
+      const model = findBestModelMatch(order.item, order.extra);
+      if (model) {
+        const memberFilaments = [...(filaments[order.assignedTo] || [])];
+        const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+
+        // Check if plates were already completed (filament already deducted per-plate)
+        const plates = printerSettings?.plates || [];
+        const completedPlates = order.completedPlates || [];
+        const platesWereUsed = plates.length > 0 && completedPlates.length === plates.length;
+
+        if (!platesWereUsed) {
+          const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
+          const filamentIdx = memberFilaments.findIndex(f => {
+            const filColor = f.color.toLowerCase().trim();
+            return filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor);
+          });
+
+          if (filamentIdx >= 0) {
+            // Calculate filament from plates/parts
+            const filamentUsage = printerSettings?.plates?.reduce((sum, plate) => {
+              if (plate.parts?.length > 0) {
+                return sum + plate.parts.reduce((partSum, part) => {
+                  const partQty = parseInt(part.quantity) || 1;
+                  return partSum + ((parseFloat(part.filamentUsage) || 0) * partQty);
+                }, 0);
+              }
+              return sum + (parseFloat(plate.filamentUsage) || 0);
+            }, 0) || (model.filamentUsage ? parseFloat(model.filamentUsage) : 0);
+
+            const totalUsed = filamentUsage * (order.quantity || 1);
+            if (totalUsed > 0) {
+              let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
+              let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+              let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
+
+              if (newAmount <= 0 && backupRolls.length > 0) {
+                const nextRoll = backupRolls.shift();
+                currentRollCost = nextRoll.cost;
+                newAmount = ROLL_SIZE + newAmount;
+                showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}!`);
+              }
+
+              memberFilaments[filamentIdx] = {
+                ...memberFilaments[filamentIdx],
+                amount: Math.max(0, newAmount),
+                backupRolls,
+                currentRollCost
+              };
+              saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+            }
+          }
+        }
+      }
+    }
 
     // Deduct the selected external parts from inventory
     if (order && order.assignedTo && partsArray.length > 0) {
