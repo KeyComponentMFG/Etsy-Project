@@ -7170,51 +7170,57 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     let partsCost = 0;
     const memberParts = order.assignedTo ? (externalParts?.[order.assignedTo] || []) : [];
 
-    // Parts from model definition - handle multi-item orders
-    if (order.lineItems && order.lineItems.length > 1) {
-      order.lineItems.forEach(li => {
-        const liModel = models.find(m => {
-          const liItem = (li.item || '').toLowerCase();
-          const modelName = m.name.toLowerCase();
-          if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
-          if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
-          return false;
-        });
-        if (liModel && liModel.externalParts?.length > 0) {
-          liModel.externalParts.forEach(needed => {
-            const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+    // Check if parts were recorded during fulfillment - if so, use those instead of model definition
+    const hasUsedParts = (order.usedExternalParts && Object.keys(order.usedExternalParts).length > 0) ||
+                         (order.usedExternalPart && typeof order.usedExternalPart === 'string');
+
+    if (hasUsedParts) {
+      // Use parts that were actually recorded during fulfillment
+      if (order.usedExternalParts && typeof order.usedExternalParts === 'object') {
+        Object.entries(order.usedExternalParts).forEach(([partName, qty]) => {
+          if (qty > 0) {
+            const matchedPart = memberParts.find(p => p.name.toLowerCase() === partName.toLowerCase());
             if (matchedPart && matchedPart.costPerUnit > 0) {
-              partsCost += matchedPart.costPerUnit * needed.quantity * (li.quantity || 1);
+              partsCost += matchedPart.costPerUnit * qty;
             }
-          });
-        }
-      });
-    } else if (matchingModel && matchingModel.externalParts?.length > 0) {
-      matchingModel.externalParts.forEach(needed => {
-        const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
-        if (matchedPart && matchedPart.costPerUnit > 0) {
-          partsCost += matchedPart.costPerUnit * needed.quantity * order.quantity;
-        }
-      });
-    }
-
-    // Parts selected during fulfillment (usedExternalParts)
-    if (order.usedExternalParts && typeof order.usedExternalParts === 'object') {
-      Object.entries(order.usedExternalParts).forEach(([partName, qty]) => {
-        if (qty > 0) {
-          const matchedPart = memberParts.find(p => p.name.toLowerCase() === partName.toLowerCase());
-          if (matchedPart && matchedPart.costPerUnit > 0) {
-            partsCost += matchedPart.costPerUnit * qty;
           }
-        }
-      });
-    }
+        });
+      }
 
-    // Also check usedExternalPart (singular - older format for single part selection)
-    if (order.usedExternalPart && typeof order.usedExternalPart === 'string') {
-      const matchedPart = memberParts.find(p => p.name.toLowerCase() === order.usedExternalPart.toLowerCase());
-      if (matchedPart && matchedPart.costPerUnit > 0) {
-        partsCost += matchedPart.costPerUnit * order.quantity;
+      // Also check usedExternalPart (singular - older format for single part selection)
+      if (order.usedExternalPart && typeof order.usedExternalPart === 'string') {
+        const matchedPart = memberParts.find(p => p.name.toLowerCase() === order.usedExternalPart.toLowerCase());
+        if (matchedPart && matchedPart.costPerUnit > 0) {
+          partsCost += matchedPart.costPerUnit * order.quantity;
+        }
+      }
+    } else {
+      // No fulfillment parts recorded - use model definition
+      if (order.lineItems && order.lineItems.length > 1) {
+        order.lineItems.forEach(li => {
+          const liModel = models.find(m => {
+            const liItem = (li.item || '').toLowerCase();
+            const modelName = m.name.toLowerCase();
+            if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+            if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+            return false;
+          });
+          if (liModel && liModel.externalParts?.length > 0) {
+            liModel.externalParts.forEach(needed => {
+              const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+              if (matchedPart && matchedPart.costPerUnit > 0) {
+                partsCost += matchedPart.costPerUnit * needed.quantity * (li.quantity || 1);
+              }
+            });
+          }
+        });
+      } else if (matchingModel && matchingModel.externalParts?.length > 0) {
+        matchingModel.externalParts.forEach(needed => {
+          const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+          if (matchedPart && matchedPart.costPerUnit > 0) {
+            partsCost += matchedPart.costPerUnit * needed.quantity * order.quantity;
+          }
+        });
       }
     }
 
