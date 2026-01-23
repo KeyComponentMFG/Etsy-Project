@@ -3423,8 +3423,8 @@ export default function EtsyOrderManager() {
               showNotification(`Added back ${o.extraPrintFilament.toFixed(2)}g of ${memberFilaments[filamentIdx].color}`);
             }
           } else {
-            // Regular order - add back filament based on plates
-            const model = findModelByName(o.item);
+            // Regular order - add back filament based on plates (use variant matching)
+            const model = findBestModelMatch(o.item, o.extra);
             if (model) {
               const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
               const plates = printerSettings?.plates || [];
@@ -3561,8 +3561,8 @@ export default function EtsyOrderManager() {
               }
             }
           } else {
-            // Regular order - look up model for filament usage
-            const model = findModelByName(o.item);
+            // Regular order - look up model for filament usage (use variant matching)
+            const model = findBestModelMatch(o.item, o.extra);
             if (model) {
               // Check if plates were already completed (filament already deducted per-plate)
               const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
