@@ -3461,24 +3461,21 @@ export default function EtsyOrderManager() {
     return variants.length > 0;
   };
 
-  // Get all external parts from model variants for selection
+  // Get all external parts from Lighting, Electronics, and Hardware categories for the assigned member
   const getAvailableExternalParts = (order) => {
-    const model = findBestModelMatch(order.item, order.extra);
-    if (!model) return [];
+    if (!order.assignedTo) return [];
 
-    const lowerName = model.name.toLowerCase();
-    const variants = models.filter(m =>
-      m.name.toLowerCase() === lowerName &&
-      m.externalParts && m.externalParts.length > 0
+    // Get the member's external parts
+    const memberParts = externalParts[order.assignedTo] || [];
+
+    // Filter to only Lighting, Electronics, and Hardware categories
+    const allowedCategories = ['lighting', 'electronics', 'hardware'];
+    const filteredParts = memberParts.filter(p =>
+      p.categoryId && allowedCategories.includes(p.categoryId)
     );
 
-    // Collect unique external part names from all variants
-    const partsSet = new Set();
-    variants.forEach(v => {
-      v.externalParts.forEach(p => partsSet.add(p.name));
-    });
-
-    return Array.from(partsSet);
+    // Return part names
+    return filteredParts.map(p => p.name);
   };
 
   // Initiate fulfillment - check if we need to prompt for external part
