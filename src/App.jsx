@@ -3183,7 +3183,7 @@ export default function EtsyOrderManager() {
 
       // Combine with current orders and save
       const combinedOrders = [...orders, ...newOrders];
-      prevOrdersRef.current = combinedOrders;
+      // Don't set prevOrdersRef here - let the useEffect handle it so it actually saves
       setOrders(combinedOrders);
 
       // Decrease stock for matching models
