@@ -3504,8 +3504,8 @@ export default function EtsyOrderManager() {
       p.categoryId && allowedCategories.includes(p.categoryId)
     );
 
-    // Return part names
-    return filteredParts.map(p => p.name);
+    // Return part objects with name and quantity
+    return filteredParts.map(p => ({ name: p.name, quantity: p.quantity || 0 }));
   };
 
   // Initiate fulfillment - check if we need to prompt for external part
@@ -5199,86 +5199,145 @@ export default function EtsyOrderManager() {
             <p style={{ marginBottom: '16px', color: '#888' }}>
               Which external parts were used for this order? Select parts and quantities.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              {fulfillmentPartPrompt.availableParts.map(partName => (
-                <div
-                  key={partName}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    background: selectedFulfillmentParts[partName] > 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255,255,255,0.05)',
-                    border: selectedFulfillmentParts[partName] > 0 ? '1px solid rgba(0, 255, 136, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedFulfillmentParts[partName] > 0}
-                    onChange={e => {
-                      if (e.target.checked) {
-                        setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: 1 });
-                      } else {
-                        const { [partName]: _, ...rest } = selectedFulfillmentParts;
-                        setSelectedFulfillmentParts(rest);
-                      }
-                    }}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ flex: 1, fontWeight: selectedFulfillmentParts[partName] > 0 ? '500' : '400' }}>
-                    {partName}
-                  </span>
-                  {selectedFulfillmentParts[partName] > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#888', fontSize: '0.85rem' }}>Qty:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={selectedFulfillmentParts[partName] || 1}
-                        onChange={e => {
-                          const qty = parseInt(e.target.value) || 1;
-                          setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: qty });
-                        }}
-                        style={{
-                          width: '60px',
-                          padding: '6px 10px',
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: '6px',
-                          color: '#fff',
-                          fontSize: '1rem',
-                          textAlign: 'center'
-                        }}
-                      />
-                    </div>
+            {(() => {
+              // Check if any selected part exceeds available stock
+              const hasStockIssue = Object.entries(selectedFulfillmentParts).some(([partName, qty]) => {
+                const part = fulfillmentPartPrompt.availableParts.find(p => p.name === partName);
+                return part && qty > part.quantity;
+              });
+
+              return (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                    {fulfillmentPartPrompt.availableParts.map(part => {
+                      const partName = part.name;
+                      const stock = part.quantity || 0;
+                      const isOutOfStock = stock === 0;
+                      const selectedQty = selectedFulfillmentParts[partName] || 0;
+                      const exceedsStock = selectedQty > stock;
+
+                      return (
+                        <div
+                          key={partName}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            background: isOutOfStock
+                              ? 'rgba(255, 0, 0, 0.1)'
+                              : exceedsStock
+                                ? 'rgba(255, 159, 67, 0.15)'
+                                : selectedFulfillmentParts[partName] > 0
+                                  ? 'rgba(0, 255, 136, 0.1)'
+                                  : 'rgba(255,255,255,0.05)',
+                            border: isOutOfStock
+                              ? '1px solid rgba(255, 0, 0, 0.3)'
+                              : exceedsStock
+                                ? '1px solid rgba(255, 159, 67, 0.4)'
+                                : selectedFulfillmentParts[partName] > 0
+                                  ? '1px solid rgba(0, 255, 136, 0.3)'
+                                  : '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '8px',
+                            opacity: isOutOfStock ? 0.6 : 1
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedFulfillmentParts[partName] > 0}
+                            disabled={isOutOfStock}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: 1 });
+                              } else {
+                                const { [partName]: _, ...rest } = selectedFulfillmentParts;
+                                setSelectedFulfillmentParts(rest);
+                              }
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: selectedFulfillmentParts[partName] > 0 ? '500' : '400' }}>
+                              {partName}
+                            </span>
+                            <span style={{
+                              marginLeft: '8px',
+                              fontSize: '0.8rem',
+                              color: isOutOfStock ? '#ff4444' : stock <= 5 ? '#ff9f43' : '#888'
+                            }}>
+                              ({stock} in stock)
+                            </span>
+                            {isOutOfStock && (
+                              <span style={{ marginLeft: '8px', fontSize: '0.75rem', color: '#ff4444' }}>
+                                OUT OF STOCK
+                              </span>
+                            )}
+                          </div>
+                          {selectedFulfillmentParts[partName] > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#888', fontSize: '0.85rem' }}>Qty:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max={stock}
+                                value={selectedFulfillmentParts[partName] || 1}
+                                onChange={e => {
+                                  const qty = parseInt(e.target.value) || 1;
+                                  setSelectedFulfillmentParts({ ...selectedFulfillmentParts, [partName]: qty });
+                                }}
+                                style={{
+                                  width: '60px',
+                                  padding: '6px 10px',
+                                  background: exceedsStock ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.3)',
+                                  border: exceedsStock ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.2)',
+                                  borderRadius: '6px',
+                                  color: '#fff',
+                                  fontSize: '1rem',
+                                  textAlign: 'center'
+                                }}
+                              />
+                              {exceedsStock && (
+                                <span style={{ color: '#ff4444', fontSize: '0.75rem' }}>
+                                  Exceeds stock!
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {hasStockIssue && (
+                    <p style={{ color: '#ff4444', fontSize: '0.85rem', marginBottom: '12px' }}>
+                      Cannot fulfill: Some selected parts exceed available stock.
+                    </p>
                   )}
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => { setFulfillmentPartPrompt(null); setSelectedFulfillmentParts({}); }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, {})}
-                style={{ opacity: 0.7 }}
-              >
-                No Parts Used
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, selectedFulfillmentParts)}
-                disabled={Object.keys(selectedFulfillmentParts).length === 0}
-                style={Object.keys(selectedFulfillmentParts).length === 0 ? { opacity: 0.5 } : {}}
-              >
-                Confirm & Fulfill
-              </button>
-            </div>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setFulfillmentPartPrompt(null); setSelectedFulfillmentParts({}); }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, {})}
+                      style={{ opacity: 0.7 }}
+                    >
+                      No Parts Used
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => completeFulfillmentWithParts(fulfillmentPartPrompt.orderId, selectedFulfillmentParts)}
+                      disabled={Object.keys(selectedFulfillmentParts).length === 0 || hasStockIssue}
+                      style={(Object.keys(selectedFulfillmentParts).length === 0 || hasStockIssue) ? { opacity: 0.5 } : {}}
+                    >
+                      Confirm & Fulfill
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
