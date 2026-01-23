@@ -1563,6 +1563,9 @@ export default function EtsyOrderManager() {
           usedExternalPart: o.used_external_part || null,
           usedExternalParts: o.used_external_parts || {},
           overrideShipByDate: o.override_ship_by_date || null,
+          lineItems: o.line_items || null,
+          fulfilledItems: o.fulfilled_items || [],
+          lineItemPlates: o.line_item_plates || {},
           id: o.id
         }));
         setOrders(transformedOrders);
@@ -1854,7 +1857,10 @@ export default function EtsyOrderManager() {
             assignment_issue: o.assignmentIssue || null,
             used_external_part: o.usedExternalPart || null,
             used_external_parts: o.usedExternalParts || {},
-            override_ship_by_date: o.overrideShipByDate || null
+            override_ship_by_date: o.overrideShipByDate || null,
+            line_items: o.lineItems || null,
+            fulfilled_items: o.fulfilledItems || [],
+            line_item_plates: o.lineItemPlates || {}
           }));
           const { error: upsertError } = await supabase.from('orders').upsert(dbFormat);
           if (upsertError) {
@@ -2319,12 +2325,12 @@ export default function EtsyOrderManager() {
   };
 
   // Calculate material cost for an order based on model and filament data
-  const calculateMaterialCost = (order, model, allFilaments, allExternalParts = {}) => {
-    let totalCost = 0;
+  // Calculate material cost for a single item given its model
+  const calculateSingleItemCost = (itemName, itemColor, itemQty, model, allFilaments, allExternalParts, assignedTo, printerId) => {
+    let cost = 0;
 
-    // Calculate filament cost
     if (model) {
-      const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+      const printerSettings = model.printerSettings?.find(ps => ps.printerId === printerId) || model.printerSettings?.[0];
       let filamentUsage = 0;
       if (printerSettings?.plates?.length > 0) {
         filamentUsage = printerSettings.plates.reduce((sum, plate) =>
@@ -2334,7 +2340,7 @@ export default function EtsyOrderManager() {
       }
 
       if (filamentUsage > 0) {
-        const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
+        const orderColor = (itemColor || model.defaultColor || '').toLowerCase().trim();
         let costPerGram = 0;
 
         Object.values(allFilaments).forEach(memberFilaments => {
@@ -2349,26 +2355,67 @@ export default function EtsyOrderManager() {
           });
         });
 
-        totalCost += filamentUsage * (order.quantity || 1) * costPerGram;
+        cost += filamentUsage * (itemQty || 1) * costPerGram;
+      }
+
+      // External parts from model definition
+      const memberParts = assignedTo ? (allExternalParts[assignedTo] || []) : [];
+      if (model.externalParts?.length > 0) {
+        model.externalParts.forEach(modelPart => {
+          const inventoryPart = memberParts.find(p =>
+            p.name.toLowerCase() === modelPart.name.toLowerCase()
+          );
+          const costPerUnit = inventoryPart?.costPerUnit || 0;
+          const qtyNeeded = modelPart.quantity || 1;
+          cost += costPerUnit * qtyNeeded * (itemQty || 1);
+        });
       }
     }
 
-    // Calculate external parts cost
-    const memberParts = order.assignedTo ? (allExternalParts[order.assignedTo] || []) : [];
+    return cost;
+  };
 
-    // Get parts from model definition
-    if (model?.externalParts?.length > 0) {
-      model.externalParts.forEach(modelPart => {
-        const inventoryPart = memberParts.find(p =>
-          p.name.toLowerCase() === modelPart.name.toLowerCase()
+  const calculateMaterialCost = (order, model, allFilaments, allExternalParts = {}, modelsList = []) => {
+    let totalCost = 0;
+
+    // If order has lineItems, calculate cost for each item separately
+    if (order.lineItems && order.lineItems.length > 1) {
+      order.lineItems.forEach(li => {
+        // Find model for this specific line item
+        const liModel = modelsList.find(m => {
+          const liItem = (li.item || '').toLowerCase();
+          const modelName = m.name.toLowerCase();
+          if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+          if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+          return false;
+        });
+        totalCost += calculateSingleItemCost(
+          li.item,
+          li.color || order.color,
+          li.quantity || 1,
+          liModel,
+          allFilaments,
+          allExternalParts,
+          order.assignedTo,
+          order.printerId
         );
-        const costPerUnit = inventoryPart?.costPerUnit || 0;
-        const qtyNeeded = modelPart.quantity || 1;
-        totalCost += costPerUnit * qtyNeeded * (order.quantity || 1);
       });
+    } else {
+      // Single item order - use provided model
+      totalCost = calculateSingleItemCost(
+        order.item,
+        order.color,
+        order.quantity || 1,
+        model,
+        allFilaments,
+        allExternalParts,
+        order.assignedTo,
+        order.printerId
+      );
     }
 
     // Get parts from user selection during fulfillment (usedExternalParts)
+    const memberParts = order.assignedTo ? (allExternalParts[order.assignedTo] || []) : [];
     if (order.usedExternalParts && typeof order.usedExternalParts === 'object') {
       Object.entries(order.usedExternalParts).forEach(([partName, qty]) => {
         if (qty > 0) {
@@ -2395,25 +2442,54 @@ export default function EtsyOrderManager() {
     });
   };
 
+  // Calculate filament used for an order (handles multi-item orders)
+  const calculateFilamentUsed = (order, model, modelsList) => {
+    let filamentUsed = 0;
+
+    // For multi-item orders, calculate filament for each item
+    if (order.lineItems && order.lineItems.length > 1) {
+      order.lineItems.forEach(li => {
+        const liModel = modelsList.find(m => {
+          const liItem = (li.item || '').toLowerCase();
+          const modelName = m.name.toLowerCase();
+          if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+          if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+          return false;
+        });
+        if (liModel) {
+          const printerSettings = liModel.printerSettings?.find(ps => ps.printerId === order.printerId) || liModel.printerSettings?.[0];
+          let liFilament = 0;
+          if (printerSettings?.plates?.length > 0) {
+            liFilament = printerSettings.plates.reduce((sum, plate) =>
+              sum + (parseFloat(plate.filamentUsage) || 0), 0);
+          } else if (liModel.filamentUsage) {
+            liFilament = parseFloat(liModel.filamentUsage) || 0;
+          }
+          filamentUsed += liFilament * (li.quantity || 1);
+        }
+      });
+    } else if (model) {
+      // Single item order
+      const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+      if (printerSettings?.plates?.length > 0) {
+        filamentUsed = printerSettings.plates.reduce((sum, plate) =>
+          sum + (parseFloat(plate.filamentUsage) || 0), 0);
+      } else if (model.filamentUsage) {
+        filamentUsed = parseFloat(model.filamentUsage) || 0;
+      }
+      filamentUsed *= (order.quantity || 1);
+    }
+
+    return filamentUsed;
+  };
+
   // Recalculate material costs for all orders based on current models
   const recalculateOrderCosts = (modelsList) => {
     // Update active orders
     const updatedOrders = orders.map(order => {
       const model = findModelForOrder(order, modelsList);
-      const materialCost = calculateMaterialCost(order, model, filaments, externalParts);
-
-      // Calculate filament used for display
-      let filamentUsed = 0;
-      if (model) {
-        const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
-        if (printerSettings?.plates?.length > 0) {
-          filamentUsed = printerSettings.plates.reduce((sum, plate) =>
-            sum + (parseFloat(plate.filamentUsage) || 0), 0);
-        } else if (model.filamentUsage) {
-          filamentUsed = parseFloat(model.filamentUsage) || 0;
-        }
-        filamentUsed *= (order.quantity || 1);
-      }
+      const materialCost = calculateMaterialCost(order, model, filaments, externalParts, modelsList);
+      const filamentUsed = calculateFilamentUsed(order, model, modelsList);
 
       return {
         ...order,
@@ -2426,19 +2502,8 @@ export default function EtsyOrderManager() {
     // Update archived orders (for analytics only - no filament deduction)
     const updatedArchived = archivedOrders.map(order => {
       const model = findModelForOrder(order, modelsList);
-      const materialCost = calculateMaterialCost(order, model, filaments, externalParts);
-
-      let filamentUsed = 0;
-      if (model) {
-        const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
-        if (printerSettings?.plates?.length > 0) {
-          filamentUsed = printerSettings.plates.reduce((sum, plate) =>
-            sum + (parseFloat(plate.filamentUsage) || 0), 0);
-        } else if (model.filamentUsage) {
-          filamentUsed = parseFloat(model.filamentUsage) || 0;
-        }
-        filamentUsed *= (order.quantity || 1);
-      }
+      const materialCost = calculateMaterialCost(order, model, filaments, externalParts, modelsList);
+      const filamentUsed = calculateFilamentUsed(order, model, modelsList);
 
       return {
         ...order,
@@ -2810,9 +2875,14 @@ export default function EtsyOrderManager() {
 
       const newOrders = [];
       let duplicates = 0;
+      let combinedCount = 0;
 
       if (hasTab && firstLineStartsWithTxn) {
         // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations, Price, Tax, BuyerName, BuyerMessage, Timestamp
+
+        // First pass: group rows by buyer name (same buyer = same order)
+        const orderGroups = {};
+        const seenTransactionIds = new Set();
 
         for (let i = 0; i < lines.length; i++) {
           const values = lines[i].split('\t').map(v => v.trim());
@@ -2822,12 +2892,10 @@ export default function EtsyOrderManager() {
           const quantity = parseInt(values[2]) || 1;
           const colorField = values[3] || '';
           const price = values[4] || '$0';
-          // Parse tax - remove $ and parse as float
           const taxStr = values[5] || '0';
           const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
           const buyerName = values[6] || 'Unknown';
           const buyerMessage = values[7] || '';
-          // Parse timestamp - ISO format like 2026-01-20T02:45:34.000Z
           const timestampStr = values[8] || '';
           const createdAt = timestampStr ? new Date(timestampStr).getTime() : Date.now();
 
@@ -2835,34 +2903,103 @@ export default function EtsyOrderManager() {
             continue;
           }
 
-          // Check existing orders, archived orders, AND orders being added in this batch
+          // Check if this specific transaction already exists in database
           if (orders.find(o => o.orderId === transactionId) ||
-              archivedOrders.find(o => o.orderId === transactionId) ||
-              newOrders.find(o => o.orderId === transactionId)) {
+              archivedOrders.find(o => o.orderId === transactionId)) {
             duplicates++;
             continue;
           }
 
-          const { extractedColor, extractedExtra } = parseColorField(colorField);
+          // Track this transaction ID to avoid duplicates within import
+          if (seenTransactionIds.has(transactionId)) {
+            continue;
+          }
+          seenTransactionIds.add(transactionId);
 
-          newOrders.push({
-            orderId: transactionId,
-            buyerName: buyerName,
+          const { extractedColor, extractedExtra } = parseColorField(colorField);
+          const priceNum = parseFloat(price.replace(/[^0-9.]/g, '')) || 0;
+
+          const lineItem = {
+            transactionId,
             item: product,
             quantity: quantity,
             color: extractedColor,
             extra: extractedExtra,
-            price: price.startsWith('$') ? price : `$${price}`,
-            address: '',
-            status: 'received',
-            assignedTo: null,
-            createdAt: createdAt,
-            notes: '',
-            storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
-            salesTax: salesTax,
-            buyerMessage: buyerMessage
-          });
+            price: priceNum
+          };
+
+          // Group by buyer name - same buyer in same import = same order
+          if (!orderGroups[buyerName]) {
+            orderGroups[buyerName] = {
+              transactionId, // Use first transaction ID as the order ID
+              buyerName,
+              buyerMessage,
+              createdAt,
+              salesTax, // Use tax from first row only (Etsy shows full tax on each row)
+              orderPrice: priceNum, // Use price from first row only (Etsy shows full order price on each row)
+              lineItems: [lineItem]
+            };
+          } else {
+            // Add to existing group - DON'T sum price/tax (Etsy duplicates these on each row)
+            orderGroups[buyerName].lineItems.push(lineItem);
+          }
         }
+
+        // Second pass: create orders from groups
+        Object.values(orderGroups).forEach(group => {
+          const lineItems = group.lineItems;
+          // Use the order price from first row (Etsy shows full order total on each row, not per-item price)
+          const orderPrice = group.orderPrice;
+
+          if (lineItems.length === 1) {
+            // Single item order - use traditional format
+            const li = lineItems[0];
+            newOrders.push({
+              orderId: group.transactionId,
+              buyerName: group.buyerName,
+              item: li.item,
+              quantity: li.quantity,
+              color: li.color,
+              extra: li.extra,
+              price: `$${orderPrice.toFixed(2)}`,
+              address: '',
+              status: 'received',
+              assignedTo: null,
+              createdAt: group.createdAt,
+              notes: '',
+              storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+              salesTax: group.salesTax,
+              buyerMessage: group.buyerMessage,
+              lineItems: null
+            });
+          } else {
+            // Multi-item order - combine items
+            combinedCount++;
+            const itemNames = lineItems.map(li => li.item).join(' + ');
+            const totalQty = lineItems.reduce((sum, li) => sum + li.quantity, 0);
+            // Use first item's color/extra for display, store all in lineItems
+            const firstItem = lineItems[0];
+
+            newOrders.push({
+              orderId: group.transactionId,
+              buyerName: group.buyerName,
+              item: itemNames,
+              quantity: totalQty,
+              color: firstItem.color,
+              extra: firstItem.extra,
+              price: `$${orderPrice.toFixed(2)}`,
+              address: '',
+              status: 'received',
+              assignedTo: null,
+              createdAt: group.createdAt,
+              notes: '',
+              storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+              salesTax: group.salesTax,
+              buyerMessage: group.buyerMessage,
+              lineItems: lineItems
+            });
+          }
+        });
       } else if (hasTab || lines[0]?.includes(',')) {
         // Traditional CSV/TSV parsing with headers
         const lines = rawInput.split('\n').map(l => l.trim()).filter(l => l);
@@ -2896,6 +3033,10 @@ export default function EtsyOrderManager() {
         const messageIdx = headers.findIndex(h => h.includes('message') || h.includes('note'));
         const timestampIdx = headers.findIndex(h => h.includes('timestamp') || h.includes('date') || h.includes('time'));
 
+        // First pass: group rows by buyer name (same buyer = same order)
+        const orderGroups = {};
+        const seenTransactionIds = new Set();
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
           let values;
@@ -2917,34 +3058,102 @@ export default function EtsyOrderManager() {
           const timestampStr = timestampIdx >= 0 ? values[timestampIdx] : '';
           const createdAt = timestampStr ? new Date(timestampStr).getTime() : Date.now();
 
-          // Check existing orders, archived orders, AND orders being added in this batch
+          // Check if this specific transaction already exists in database
           if (orders.find(o => o.orderId === transactionId) ||
-              archivedOrders.find(o => o.orderId === transactionId) ||
-              newOrders.find(o => o.orderId === transactionId)) {
+              archivedOrders.find(o => o.orderId === transactionId)) {
             duplicates++;
             continue;
           }
 
-          const { extractedColor, extractedExtra } = parseColorField(colorField);
+          // Track this transaction ID to avoid duplicates within import
+          if (seenTransactionIds.has(transactionId)) {
+            continue;
+          }
+          seenTransactionIds.add(transactionId);
 
-          newOrders.push({
-            orderId: transactionId,
-            buyerName: buyerName,
+          const { extractedColor, extractedExtra } = parseColorField(colorField);
+          const priceNum = parseFloat(priceVal.replace(/[^0-9.]/g, '')) || 0;
+
+          const lineItem = {
+            transactionId,
             item: product,
             quantity: quantity,
             color: extractedColor,
             extra: extractedExtra,
-            price: priceVal.startsWith('$') ? priceVal : `$${priceVal}`,
-            address: '',
-            status: 'received',
-            assignedTo: null,
-            createdAt: createdAt,
-            notes: '',
-            storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
-            salesTax: salesTax,
-            buyerMessage: buyerMessage
-          });
+            price: priceNum
+          };
+
+          // Group by buyer name - same buyer in same import = same order
+          if (!orderGroups[buyerName]) {
+            orderGroups[buyerName] = {
+              transactionId, // Use first transaction ID as the order ID
+              buyerName,
+              buyerMessage,
+              createdAt,
+              salesTax, // Use tax from first row only (Etsy shows full tax on each row)
+              orderPrice: priceNum, // Use price from first row only (Etsy shows full order price on each row)
+              lineItems: [lineItem]
+            };
+          } else {
+            // Add to existing group - DON'T sum price/tax (Etsy duplicates these on each row)
+            orderGroups[buyerName].lineItems.push(lineItem);
+          }
         }
+
+        // Second pass: create orders from groups
+        Object.values(orderGroups).forEach(group => {
+          const lineItems = group.lineItems;
+          // Use the order price from first row (Etsy shows full order total on each row, not per-item price)
+          const orderPrice = group.orderPrice;
+
+          if (lineItems.length === 1) {
+            // Single item order - use traditional format
+            const li = lineItems[0];
+            newOrders.push({
+              orderId: group.transactionId,
+              buyerName: group.buyerName,
+              item: li.item,
+              quantity: li.quantity,
+              color: li.color,
+              extra: li.extra,
+              price: `$${orderPrice.toFixed(2)}`,
+              address: '',
+              status: 'received',
+              assignedTo: null,
+              createdAt: group.createdAt,
+              notes: '',
+              storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+              salesTax: group.salesTax,
+              buyerMessage: group.buyerMessage,
+              lineItems: null
+            });
+          } else {
+            // Multi-item order - combine items
+            combinedCount++;
+            const itemNames = lineItems.map(li => li.item).join(' + ');
+            const totalQty = lineItems.reduce((sum, li) => sum + li.quantity, 0);
+            const firstItem = lineItems[0];
+
+            newOrders.push({
+              orderId: group.transactionId,
+              buyerName: group.buyerName,
+              item: itemNames,
+              quantity: totalQty,
+              color: firstItem.color,
+              extra: firstItem.extra,
+              price: `$${orderPrice.toFixed(2)}`,
+              address: '',
+              status: 'received',
+              assignedTo: null,
+              createdAt: group.createdAt,
+              notes: '',
+              storeId: importStoreId && importStoreId !== '' ? importStoreId : null,
+              salesTax: group.salesTax,
+              buyerMessage: group.buyerMessage,
+              lineItems: lineItems
+            });
+          }
+        });
       } else {
         showNotification('Unknown data format. Please use tab-separated or comma-separated data.', 'error');
         return;
@@ -3009,11 +3218,12 @@ export default function EtsyOrderManager() {
         }
       }
 
-      // Show notification with unassigned count if any
+      // Show notification with stats
+      const combinedMsg = combinedCount > 0 ? ` ${combinedCount} multi-item order${combinedCount !== 1 ? 's' : ''} combined.` : '';
       if (unassignedCount > 0) {
-        showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${unassignedCount} unassigned (no stock). ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
+        showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}.${combinedMsg} ${unassignedCount} unassigned (no stock). ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
       } else if (newOrders.length > 0) {
-        showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
+        showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}.${combinedMsg} ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
       } else {
         showNotification(`No new orders imported. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
       }
@@ -3616,6 +3826,223 @@ export default function EtsyOrderManager() {
     showNotification('Order fulfilled with selected parts');
   };
 
+  // Fulfill a single line item in a multi-item order
+  const fulfillLineItem = (orderId, lineItemIndex) => {
+    const ROLL_SIZE = 1000;
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order || !order.lineItems || !order.lineItems[lineItemIndex]) return;
+
+    const lineItem = order.lineItems[lineItemIndex];
+    const fulfilledItems = order.fulfilledItems || [];
+
+    // Check if already fulfilled
+    if (fulfilledItems.includes(lineItemIndex)) {
+      showNotification('This item is already fulfilled', 'warning');
+      return;
+    }
+
+    // Find matching model for this line item
+    const model = models.find(m => {
+      const liItem = (lineItem.item || '').toLowerCase();
+      const modelName = m.name.toLowerCase();
+      if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+      if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+      return false;
+    });
+
+    // Check if plates were completed for this line item (filament already deducted per-plate)
+    const liPlateData = order.lineItemPlates?.[lineItemIndex] || { completedPlates: [], plateColors: {} };
+    const printerSettings = model?.printerSettings?.find(ps => ps.printerId === order.printerId) || model?.printerSettings?.[0];
+    const plates = printerSettings?.plates || [];
+    const platesWereCompleted = plates.length > 0 && liPlateData.completedPlates?.length === plates.length;
+
+    // Deduct filament for this item if model found and assigned to someone
+    // SKIP if plates were completed (filament was already deducted per-plate)
+    if (model && order.assignedTo && !platesWereCompleted) {
+      const memberFilaments = [...(filaments[order.assignedTo] || [])];
+      let filamentChanged = false;
+
+      // Get filament usage from model
+      let filamentUsage = 0;
+      if (plates.length > 0) {
+        filamentUsage = plates.reduce((sum, plate) =>
+          sum + (parseFloat(plate.filamentUsage) || 0), 0);
+      } else if (model.filamentUsage) {
+        filamentUsage = parseFloat(model.filamentUsage) || 0;
+      }
+
+      if (filamentUsage > 0) {
+        const itemColor = (lineItem.color || order.color || model.defaultColor || '').toLowerCase().trim();
+        const totalUsage = filamentUsage * (lineItem.quantity || 1);
+
+        const filamentIdx = memberFilaments.findIndex(f => {
+          const filColor = f.color.toLowerCase().trim();
+          return filColor === itemColor ||
+                 filColor.includes(itemColor) ||
+                 itemColor.includes(filColor);
+        });
+
+        if (filamentIdx >= 0) {
+          memberFilaments[filamentIdx] = {
+            ...memberFilaments[filamentIdx],
+            amount: Math.max(0, memberFilaments[filamentIdx].amount - totalUsage)
+          };
+          filamentChanged = true;
+        }
+      }
+
+      if (filamentChanged) {
+        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+      }
+    }
+
+    // Deduct external parts for this model (always do this, regardless of plate completion)
+    if (model && order.assignedTo) {
+      if (model.externalParts?.length > 0) {
+        const memberParts = [...(externalParts[order.assignedTo] || [])];
+        model.externalParts.forEach(needed => {
+          const partIdx = memberParts.findIndex(p => p.name.toLowerCase() === needed.name.toLowerCase());
+          if (partIdx >= 0) {
+            memberParts[partIdx] = {
+              ...memberParts[partIdx],
+              quantity: Math.max(0, memberParts[partIdx].quantity - (needed.quantity || 1) * (lineItem.quantity || 1))
+            };
+          }
+        });
+        saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
+      }
+    }
+
+    // Update order with new fulfilled item and clear line item's plate data
+    const newFulfilledItems = [...fulfilledItems, lineItemIndex];
+    const allItemsFulfilled = newFulfilledItems.length === order.lineItems.length;
+
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        // Clear the plate data for this fulfilled line item
+        const newLineItemPlates = { ...(o.lineItemPlates || {}) };
+        delete newLineItemPlates[lineItemIndex];
+
+        return {
+          ...o,
+          fulfilledItems: newFulfilledItems,
+          lineItemPlates: newLineItemPlates,
+          // Auto-mark as fulfilled when all items are done
+          status: allItemsFulfilled ? 'fulfilled' : o.status,
+          fulfilledAt: allItemsFulfilled ? Date.now() : o.fulfilledAt
+        };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    const itemName = lineItem.item.length > 30 ? lineItem.item.substring(0, 30) + '...' : lineItem.item;
+    if (allItemsFulfilled) {
+      showNotification(`Fulfilled "${itemName}" - All items complete! Order marked as fulfilled.`);
+    } else {
+      showNotification(`Fulfilled "${itemName}" (${newFulfilledItems.length}/${order.lineItems.length} items done)`);
+    }
+  };
+
+  // Unfulfill a single line item in a multi-item order
+  const unfulfillLineItem = (orderId, lineItemIndex) => {
+    const ROLL_SIZE = 1000;
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order || !order.lineItems || !order.lineItems[lineItemIndex]) return;
+
+    const lineItem = order.lineItems[lineItemIndex];
+    const fulfilledItems = order.fulfilledItems || [];
+
+    // Check if not fulfilled
+    if (!fulfilledItems.includes(lineItemIndex)) {
+      showNotification('This item is not fulfilled', 'warning');
+      return;
+    }
+
+    // Find matching model for this line item
+    const model = models.find(m => {
+      const liItem = (lineItem.item || '').toLowerCase();
+      const modelName = m.name.toLowerCase();
+      if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+      if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+      return false;
+    });
+
+    // Add back filament for this item if model found and assigned to someone
+    if (model && order.assignedTo) {
+      const memberFilaments = [...(filaments[order.assignedTo] || [])];
+      let filamentChanged = false;
+
+      const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+      let filamentUsage = 0;
+      if (printerSettings?.plates?.length > 0) {
+        filamentUsage = printerSettings.plates.reduce((sum, plate) =>
+          sum + (parseFloat(plate.filamentUsage) || 0), 0);
+      } else if (model.filamentUsage) {
+        filamentUsage = parseFloat(model.filamentUsage) || 0;
+      }
+
+      if (filamentUsage > 0) {
+        const itemColor = (lineItem.color || order.color || model.defaultColor || '').toLowerCase().trim();
+        const totalUsage = filamentUsage * (lineItem.quantity || 1);
+
+        const filamentIdx = memberFilaments.findIndex(f => {
+          const filColor = f.color.toLowerCase().trim();
+          return filColor === itemColor ||
+                 filColor.includes(itemColor) ||
+                 itemColor.includes(filColor);
+        });
+
+        if (filamentIdx >= 0) {
+          memberFilaments[filamentIdx] = {
+            ...memberFilaments[filamentIdx],
+            amount: memberFilaments[filamentIdx].amount + totalUsage
+          };
+          filamentChanged = true;
+        }
+      }
+
+      if (filamentChanged) {
+        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+      }
+
+      // Add back external parts for this model
+      if (model.externalParts?.length > 0) {
+        const memberParts = [...(externalParts[order.assignedTo] || [])];
+        model.externalParts.forEach(needed => {
+          const partIdx = memberParts.findIndex(p => p.name.toLowerCase() === needed.name.toLowerCase());
+          if (partIdx >= 0) {
+            memberParts[partIdx] = {
+              ...memberParts[partIdx],
+              quantity: memberParts[partIdx].quantity + (needed.quantity || 1) * (lineItem.quantity || 1)
+            };
+          }
+        });
+        saveExternalParts({ ...externalParts, [order.assignedTo]: memberParts });
+      }
+    }
+
+    // Update order - remove item from fulfilled list
+    const newFulfilledItems = fulfilledItems.filter(idx => idx !== lineItemIndex);
+
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        return {
+          ...o,
+          fulfilledItems: newFulfilledItems,
+          // If order was fulfilled, revert to received
+          status: o.status === 'fulfilled' ? 'received' : o.status,
+          fulfilledAt: o.status === 'fulfilled' ? null : o.fulfilledAt
+        };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    const itemName = lineItem.item.length > 30 ? lineItem.item.substring(0, 30) + '...' : lineItem.item;
+    showNotification(`Unfulfilled "${itemName}" - filament and parts restored`);
+  };
+
   // Toggle plate completion and deduct/add filament
   // partColors is an object { partIndex: color } for per-part color tracking
   const togglePlateComplete = (orderId, plateIndex, model, partColors) => {
@@ -3782,6 +4209,174 @@ export default function EtsyOrderManager() {
     showNotification(isCompleting
       ? `${plateName} completed${colorInfo}! (${totalPlateFilament.toFixed(2)}g deducted${timeInfo})`
       : `${plateName} uncompleted (${totalPlateFilament.toFixed(2)}g added back)`
+    );
+  };
+
+  // Toggle plate completion for a specific line item in a multi-item order
+  const toggleLineItemPlateComplete = (orderId, lineItemIndex, plateIndex, model, partColors) => {
+    const ROLL_SIZE = 1000;
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order || !order.assignedTo || !order.lineItems?.[lineItemIndex]) return;
+
+    const lineItem = order.lineItems[lineItemIndex];
+    const lineItemPlates = order.lineItemPlates || {};
+    const itemPlateData = lineItemPlates[lineItemIndex] || { completedPlates: [], plateColors: {} };
+    const completedPlates = itemPlateData.completedPlates || [];
+    const storedPlateColors = itemPlateData.plateColors || {};
+    const isCompleting = !completedPlates.includes(plateIndex);
+
+    // Get the plate's filament usage
+    const printerSettings = model?.printerSettings?.find(ps => ps.printerId === order.printerId) || model?.printerSettings?.[0];
+    const plate = printerSettings?.plates?.[plateIndex];
+    if (!plate) return;
+
+    const parts = plate.parts || [];
+    const itemColor = lineItem.color || order.color || model?.defaultColor || '';
+
+    // Build color map for each part - use item's color for non-multi-color parts
+    const colorsToUse = {};
+    if (isCompleting) {
+      parts.forEach((part, partIdx) => {
+        if (part.isMultiColor) {
+          colorsToUse[partIdx] = partColors?.[partIdx] || '';
+        } else {
+          colorsToUse[partIdx] = itemColor;
+        }
+      });
+    } else {
+      // When uncompleting, use stored colors
+      const storedColors = storedPlateColors[plateIndex] || {};
+      parts.forEach((part, partIdx) => {
+        colorsToUse[partIdx] = storedColors[partIdx] || itemColor;
+      });
+    }
+
+    // Group filament usage by color (use line item quantity)
+    const usageByColor = {};
+    let totalPlateFilament = 0;
+    const itemQty = lineItem.quantity || 1;
+    parts.forEach((part, partIdx) => {
+      const partQty = parseInt(part.quantity) || 1;
+      const partFilament = (parseFloat(part.filamentUsage) || 0) * partQty * itemQty;
+      const color = colorsToUse[partIdx];
+      if (color && partFilament > 0) {
+        const colorLower = color.toLowerCase().trim();
+        if (!usageByColor[colorLower]) {
+          usageByColor[colorLower] = { color: color, amount: 0 };
+        }
+        usageByColor[colorLower].amount += partFilament;
+        totalPlateFilament += partFilament;
+      }
+    });
+
+    // Handle filament deduction/addition for each color
+    const memberFilaments = [...(filaments[order.assignedTo] || [])];
+    let filamentChanged = false;
+
+    Object.values(usageByColor).forEach(({ color, amount }) => {
+      const colorLower = color.toLowerCase().trim();
+      const filamentIdx = memberFilaments.findIndex(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === colorLower ||
+               filColor.includes(colorLower) ||
+               colorLower.includes(filColor);
+      });
+
+      if (filamentIdx >= 0 && amount > 0) {
+        let newAmount = memberFilaments[filamentIdx].amount;
+        let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
+        let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
+
+        if (isCompleting) {
+          newAmount -= amount;
+          if (newAmount <= 0 && backupRolls.length > 0) {
+            const nextRoll = backupRolls.shift();
+            currentRollCost = nextRoll.cost;
+            newAmount = ROLL_SIZE + newAmount;
+            showNotification(`Auto-switched to new roll of ${memberFilaments[filamentIdx].color}!`);
+          }
+
+          // Record usage history
+          const usageEvent = {
+            id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            color: memberFilaments[filamentIdx].color,
+            amount: amount,
+            date: Date.now(),
+            orderId: order.orderId,
+            memberId: order.assignedTo,
+            modelName: model?.name || lineItem.item,
+            plateName: plate.name,
+            lineItemIndex: lineItemIndex
+          };
+          setFilamentUsageHistory(prev => [...prev, usageEvent]);
+        } else {
+          newAmount += amount;
+        }
+
+        memberFilaments[filamentIdx] = {
+          ...memberFilaments[filamentIdx],
+          amount: Math.max(0, newAmount),
+          backupRolls: backupRolls,
+          currentRollCost: currentRollCost
+        };
+        filamentChanged = true;
+      }
+    });
+
+    if (filamentChanged) {
+      saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+    }
+
+    // Calculate plate print time
+    const platePrintHours = parts.reduce((sum, part) => {
+      const hours = parseFloat(part.printHours) || 0;
+      const minutes = parseFloat(part.printMinutes) || 0;
+      const partQty = parseInt(part.quantity) || 1;
+      return sum + (hours + (minutes / 60)) * partQty;
+    }, 0) * itemQty;
+
+    // Update printer hours
+    if (order.printerId && platePrintHours > 0) {
+      const updatedPrinters = printers.map(p => {
+        if (p.id === order.printerId) {
+          const currentHours = p.totalHours || 0;
+          const newHours = isCompleting
+            ? currentHours + platePrintHours
+            : Math.max(0, currentHours - platePrintHours);
+          return { ...p, totalHours: newHours };
+        }
+        return p;
+      });
+      savePrinters(updatedPrinters);
+    }
+
+    // Update order's lineItemPlates structure
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        const newLineItemPlates = { ...(o.lineItemPlates || {}) };
+        const newItemData = { ...itemPlateData };
+
+        if (isCompleting) {
+          newItemData.completedPlates = [...completedPlates, plateIndex];
+          newItemData.plateColors = { ...storedPlateColors, [plateIndex]: colorsToUse };
+        } else {
+          newItemData.completedPlates = completedPlates.filter(idx => idx !== plateIndex);
+          const { [plateIndex]: removed, ...rest } = storedPlateColors;
+          newItemData.plateColors = rest;
+        }
+
+        newLineItemPlates[lineItemIndex] = newItemData;
+        return { ...o, lineItemPlates: newLineItemPlates };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    const plateName = plate.name || `Plate ${plateIndex + 1}`;
+    const itemName = lineItem.item.length > 20 ? lineItem.item.substring(0, 20) + '...' : lineItem.item;
+    showNotification(isCompleting
+      ? `${itemName}: ${plateName} completed! (${totalPlateFilament.toFixed(2)}g deducted)`
+      : `${itemName}: ${plateName} uncompleted (${totalPlateFilament.toFixed(2)}g added back)`
     );
   };
 
@@ -4924,6 +5519,8 @@ export default function EtsyOrderManager() {
               togglePlateComplete={togglePlateComplete}
               reprintPart={reprintPart}
               deleteReprint={deleteReprint}
+              fulfillLineItem={fulfillLineItem}
+              unfulfillLineItem={unfulfillLineItem}
             />
           )}
 
@@ -5435,7 +6032,7 @@ function calculateShipByDate(orderDate, processingDays) {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
@@ -5813,9 +6410,29 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
               showNotification('No orders to delete', 'error');
               return;
             }
-            if (confirm(`Are you sure you want to delete ALL ${orders.length} orders?\n\nThis action cannot be undone!`)) {
+            const activeOrders = orders.filter(o => o.status !== 'shipped');
+            const shippedOrders = orders.filter(o => o.status === 'shipped');
+
+            const choice = prompt(
+              `What would you like to clear?\n\n` +
+              `Active orders (received/fulfilled): ${activeOrders.length}\n` +
+              `Shipped orders: ${shippedOrders.length}\n` +
+              `Total orders: ${orders.length}\n\n` +
+              `Type "active" to clear only active orders (keep shipped)\n` +
+              `Type "all" to clear ALL orders\n` +
+              `Press Cancel to abort`
+            );
+
+            if (choice === 'active') {
+              if (activeOrders.length === 0) {
+                showNotification('No active orders to clear', 'warning');
+                return;
+              }
+              setOrders(shippedOrders);
+              showNotification(`Cleared ${activeOrders.length} active order${activeOrders.length !== 1 ? 's' : ''}. ${shippedOrders.length} shipped order${shippedOrders.length !== 1 ? 's' : ''} kept.`);
+            } else if (choice === 'all') {
               setOrders([]);
-              showNotification(`Deleted ${orders.length} orders`);
+              showNotification(`Deleted all ${orders.length} orders`);
             }
           }}
           style={{
@@ -6029,6 +6646,10 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   togglePlateComplete={togglePlateComplete}
                                   reprintPart={reprintPart}
                                   deleteReprint={deleteReprint}
+                                  fulfillLineItem={fulfillLineItem}
+                                  unfulfillLineItem={unfulfillLineItem}
+                                  showNotification={showNotification}
+                                  toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                                 />
                               ))}
                             </div>
@@ -6084,6 +6705,10 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     togglePlateComplete={togglePlateComplete}
                     reprintPart={reprintPart}
                     deleteReprint={deleteReprint}
+                    fulfillLineItem={fulfillLineItem}
+                    unfulfillLineItem={unfulfillLineItem}
+                    showNotification={showNotification}
+                    toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                   />
                 ))
               )}
@@ -6121,6 +6746,10 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     togglePlateComplete={togglePlateComplete}
                     reprintPart={reprintPart}
                     deleteReprint={deleteReprint}
+                    fulfillLineItem={fulfillLineItem}
+                    unfulfillLineItem={unfulfillLineItem}
+                    showNotification={showNotification}
+                    toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                   />
                 ))
               )}
@@ -6133,7 +6762,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, showNotification, toggleLineItemPlateComplete }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -6640,7 +7269,318 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   </span>
                 )}
               </div>
-              <div className="order-item" style={{ fontSize: '0.85rem', lineHeight: '1.3' }}>{order.item}</div>
+              {order.lineItems && order.lineItems.length > 1 ? (
+                <div className="order-items" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                  <div style={{ fontWeight: '500', marginBottom: '4px', color: '#a55eea' }}>
+                    Multi-item order ({(order.fulfilledItems || []).length}/{order.lineItems.length} fulfilled):
+                  </div>
+                  {order.lineItems.map((li, liIdx) => {
+                    const isFulfilled = (order.fulfilledItems || []).includes(liIdx);
+                    // Find matching model for this line item
+                    const liModel = models.find(m => {
+                      const liItem = (li.item || '').toLowerCase();
+                      const modelName = m.name.toLowerCase();
+                      if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+                      if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+                      return false;
+                    });
+                    // Get plates for this item's model
+                    const liPrinterSettings = liModel?.printerSettings?.find(ps => ps.printerId === order.printerId) || liModel?.printerSettings?.[0];
+                    const liPlates = liPrinterSettings?.plates || [];
+                    const hasPlates = liPlates.length > 0 && order.status === 'received';
+                    // Get this line item's plate completion data
+                    const liPlateData = order.lineItemPlates?.[liIdx] || { completedPlates: [], plateColors: {} };
+                    const liCompletedPlates = liPlateData.completedPlates || [];
+                    const allPlatesComplete = liPlates.length > 0 && liCompletedPlates.length === liPlates.length;
+                    // Track expanded state for this line item
+                    const isLiExpanded = (order.expandedLineItems || []).includes(liIdx);
+                    const toggleLiExpanded = () => {
+                      const current = order.expandedLineItems || [];
+                      const newExpanded = current.includes(liIdx)
+                        ? current.filter(i => i !== liIdx)
+                        : [...current, liIdx];
+                      const updatedOrders = orders.map(o =>
+                        o.orderId === order.orderId ? { ...o, expandedLineItems: newExpanded } : o
+                      );
+                      setOrders(updatedOrders);
+                    };
+                    // Get available colors for color selection
+                    const memberFilaments = filaments[order.assignedTo] || [];
+                    const availableColors = memberFilaments.map(f => f.color);
+                    const itemColor = li.color || order.color || liModel?.defaultColor || '';
+
+                    return (
+                      <div key={liIdx} style={{ marginBottom: hasPlates ? '8px' : '4px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginLeft: '8px',
+                          color: isFulfilled ? '#00ff88' : '#ccc',
+                          fontSize: '0.8rem',
+                          textDecoration: isFulfilled ? 'line-through' : 'none',
+                          opacity: isFulfilled ? 0.7 : 1
+                        }}>
+                          {hasPlates && !isFulfilled && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleLiExpanded(); }}
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#a55eea', display: 'flex' }}
+                            >
+                              {isLiExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                          )}
+                          <span style={{ flex: 1 }}>
+                            • {li.item.length > 35 ? li.item.substring(0, 35) + '...' : li.item}
+                            {li.quantity > 1 ? ` (×${li.quantity})` : ''}
+                            - {li.color || 'No color'}
+                            {li.extra ? ` / ${li.extra}` : ''}
+                            {hasPlates && !isFulfilled && (
+                              <span style={{
+                                fontSize: '0.65rem',
+                                marginLeft: '6px',
+                                padding: '1px 4px',
+                                borderRadius: '4px',
+                                background: allPlatesComplete ? 'rgba(0, 255, 136, 0.2)' : 'rgba(0, 204, 255, 0.15)',
+                                color: allPlatesComplete ? '#00ff88' : '#00ccff'
+                              }}>
+                                {liCompletedPlates.length}/{liPlates.length}
+                              </span>
+                            )}
+                          </span>
+                          {order.status !== 'shipped' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isFulfilled) {
+                                  unfulfillLineItem(order.orderId, liIdx);
+                                } else {
+                                  // Only allow fulfill if all plates complete (or no plates)
+                                  if (hasPlates && !allPlatesComplete) {
+                                    showNotification('Complete all plates before fulfilling this item', 'warning');
+                                    if (!isLiExpanded) toggleLiExpanded();
+                                    return;
+                                  }
+                                  fulfillLineItem(order.orderId, liIdx);
+                                }
+                              }}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: '0.7rem',
+                                borderRadius: '4px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                background: isFulfilled ? 'rgba(255, 71, 87, 0.2)' : (hasPlates && !allPlatesComplete) ? 'rgba(128, 128, 128, 0.2)' : 'rgba(0, 255, 136, 0.2)',
+                                color: isFulfilled ? '#ff4757' : (hasPlates && !allPlatesComplete) ? '#888' : '#00ff88',
+                                fontWeight: '500'
+                              }}
+                              title={hasPlates && !allPlatesComplete ? 'Complete all plates first' : ''}
+                            >
+                              {isFulfilled ? 'Undo' : 'Fulfill'}
+                            </button>
+                          )}
+                          {isFulfilled && <Check size={14} style={{ color: '#00ff88' }} />}
+                        </div>
+                        {/* Expandable plates section for this line item */}
+                        {hasPlates && !isFulfilled && isLiExpanded && (
+                          <div style={{
+                            marginLeft: '24px',
+                            marginTop: '6px',
+                            padding: '8px',
+                            background: 'rgba(165, 94, 234, 0.1)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(165, 94, 234, 0.2)'
+                          }}>
+                            <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '6px' }}>
+                              Plates for {liModel?.name || 'this item'}:
+                            </div>
+                            {liPlates.map((plate, plateIdx) => {
+                              const isPlateComplete = liCompletedPlates.includes(plateIdx);
+                              const plateParts = plate.parts || [];
+                              const hasMultiColorPart = plateParts.some(p => p.isMultiColor);
+                              // Calculate plate totals
+                              const plateFilament = plateParts.reduce((sum, p) =>
+                                sum + ((parseFloat(p.filamentUsage) || 0) * (parseInt(p.quantity) || 1)), 0) * (li.quantity || 1);
+                              // Track expanded state for plate parts
+                              const isPlateExpanded = (order.lineItemExpandedPlates?.[liIdx] || []).includes(plateIdx);
+                              const togglePlateExpanded = () => {
+                                const currentExpanded = order.lineItemExpandedPlates || {};
+                                const plateExpanded = currentExpanded[liIdx] || [];
+                                const newPlateExpanded = plateExpanded.includes(plateIdx)
+                                  ? plateExpanded.filter(i => i !== plateIdx)
+                                  : [...plateExpanded, plateIdx];
+                                const updatedOrders = orders.map(o =>
+                                  o.orderId === order.orderId
+                                    ? { ...o, lineItemExpandedPlates: { ...currentExpanded, [liIdx]: newPlateExpanded } }
+                                    : o
+                                );
+                                setOrders(updatedOrders);
+                              };
+                              // Pending colors for parts
+                              const pendingColors = order.lineItemPendingColors?.[liIdx]?.[plateIdx] || {};
+                              const updatePendingColor = (partIdx, color) => {
+                                const currentPending = order.lineItemPendingColors || {};
+                                const liPending = currentPending[liIdx] || {};
+                                const platePending = { ...(liPending[plateIdx] || {}) };
+                                platePending[partIdx] = color;
+                                const updatedOrders = orders.map(o =>
+                                  o.orderId === order.orderId
+                                    ? { ...o, lineItemPendingColors: { ...currentPending, [liIdx]: { ...liPending, [plateIdx]: platePending } } }
+                                    : o
+                                );
+                                setOrders(updatedOrders);
+                              };
+                              // Check if all multi-color parts have colors selected
+                              const allMultiColorPartsHaveColors = plateParts.every((part, partIdx) =>
+                                !part.isMultiColor || pendingColors[partIdx]
+                              );
+
+                              return (
+                                <div key={plateIdx} style={{ marginBottom: '4px' }}>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '4px 6px',
+                                    background: isPlateComplete ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                    borderRadius: '4px'
+                                  }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isPlateComplete}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (hasMultiColorPart && !isPlateComplete) {
+                                          if (!isPlateExpanded) togglePlateExpanded();
+                                        } else if (!isPlateComplete) {
+                                          const partColors = {};
+                                          plateParts.forEach((_, partIdx) => { partColors[partIdx] = itemColor; });
+                                          toggleLineItemPlateComplete(order.orderId, liIdx, plateIdx, liModel, partColors);
+                                        } else {
+                                          const storedColors = liPlateData.plateColors?.[plateIdx] || null;
+                                          toggleLineItemPlateComplete(order.orderId, liIdx, plateIdx, liModel, storedColors);
+                                        }
+                                      }}
+                                      readOnly
+                                      style={{ cursor: 'pointer' }}
+                                    />
+                                    <span style={{
+                                      flex: 1,
+                                      fontSize: '0.75rem',
+                                      color: isPlateComplete ? '#00ff88' : '#e0e0e0',
+                                      textDecoration: isPlateComplete ? 'line-through' : 'none'
+                                    }}>
+                                      {plate.name || `Plate ${plateIdx + 1}`}
+                                    </span>
+                                    <span style={{ fontSize: '0.65rem', color: '#888' }}>
+                                      {plateFilament.toFixed(1)}g
+                                    </span>
+                                    {hasMultiColorPart && !isPlateComplete && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); togglePlateExpanded(); }}
+                                        style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: '#a55eea', display: 'flex' }}
+                                      >
+                                        {isPlateExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                      </button>
+                                    )}
+                                    {isPlateComplete && <Check size={12} style={{ color: '#00ff88' }} />}
+                                  </div>
+                                  {/* Expanded parts with color selection */}
+                                  {hasMultiColorPart && !isPlateComplete && isPlateExpanded && (
+                                    <div style={{
+                                      marginLeft: '20px',
+                                      marginTop: '4px',
+                                      padding: '6px',
+                                      background: 'rgba(165, 94, 234, 0.05)',
+                                      borderRadius: '4px'
+                                    }}>
+                                      {plateParts.map((part, partIdx) => (
+                                        <div key={partIdx} style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          marginBottom: '4px',
+                                          fontSize: '0.7rem'
+                                        }}>
+                                          <Palette size={10} style={{ color: part.isMultiColor ? '#a55eea' : '#888' }} />
+                                          <span style={{ flex: 1, color: '#ccc' }}>
+                                            {part.name || `Part ${partIdx + 1}`}
+                                            {(parseInt(part.quantity) || 1) > 1 && ` x${part.quantity}`}
+                                          </span>
+                                          {part.isMultiColor ? (
+                                            <select
+                                              value={pendingColors[partIdx] || ''}
+                                              onChange={(e) => updatePendingColor(partIdx, e.target.value)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              style={{
+                                                padding: '2px 6px',
+                                                fontSize: '0.65rem',
+                                                background: pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.2)' : 'rgba(165, 94, 234, 0.2)',
+                                                border: `1px solid ${pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.4)' : 'rgba(165, 94, 234, 0.4)'}`,
+                                                borderRadius: '3px',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                                minWidth: '90px'
+                                              }}
+                                            >
+                                              <option value="">Select...</option>
+                                              {availableColors.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                          ) : (
+                                            <span style={{
+                                              padding: '2px 6px',
+                                              fontSize: '0.65rem',
+                                              background: 'rgba(0, 204, 255, 0.15)',
+                                              border: '1px solid rgba(0, 204, 255, 0.3)',
+                                              borderRadius: '3px',
+                                              color: '#00ccff'
+                                            }}>
+                                              {itemColor || 'No color'}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const partColors = {};
+                                          plateParts.forEach((part, partIdx) => {
+                                            partColors[partIdx] = part.isMultiColor ? (pendingColors[partIdx] || '') : itemColor;
+                                          });
+                                          toggleLineItemPlateComplete(order.orderId, liIdx, plateIdx, liModel, partColors);
+                                        }}
+                                        disabled={!allMultiColorPartsHaveColors}
+                                        style={{
+                                          marginTop: '4px',
+                                          padding: '4px 8px',
+                                          fontSize: '0.65rem',
+                                          background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
+                                          border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
+                                          borderRadius: '3px',
+                                          color: allMultiColorPartsHaveColors ? '#00ff88' : '#888',
+                                          cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <Check size={10} /> Complete
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="order-item" style={{ fontSize: '0.85rem', lineHeight: '1.3' }}>{order.item}</div>
+              )}
             </div>
             <span
               className={`status-badge status-${order.status}`}

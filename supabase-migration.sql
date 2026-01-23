@@ -40,6 +40,9 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS used_external_part text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS used_external_parts jsonb DEFAULT '{}';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS override_ship_by_date date;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS extra text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS line_items jsonb;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfilled_items jsonb DEFAULT '[]';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS line_item_plates jsonb DEFAULT '{}';
 
 -- ARCHIVED_ORDERS TABLE (same columns as orders plus archived_at)
 ALTER TABLE archived_orders ADD COLUMN IF NOT EXISTS order_id text;
