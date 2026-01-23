@@ -3430,14 +3430,14 @@ export default function EtsyOrderManager() {
   };
 
   // Toggle plate completion and deduct/add filament
-  // selectedColor is used for multi-color plates to specify which color filament was used
-  const togglePlateComplete = (orderId, plateIndex, model, selectedColor) => {
+  // partColors is an object { partIndex: color } for per-part color tracking
+  const togglePlateComplete = (orderId, plateIndex, model, partColors) => {
     const ROLL_SIZE = 1000;
     const order = orders.find(o => o.orderId === orderId);
     if (!order || !order.assignedTo) return;
 
     const completedPlates = order.completedPlates || [];
-    const plateColors = order.plateColors || {};
+    const storedPlateColors = order.plateColors || {};
     const isCompleting = !completedPlates.includes(plateIndex);
 
     // Get the plate's filament usage
@@ -3445,33 +3445,52 @@ export default function EtsyOrderManager() {
     const plate = printerSettings?.plates?.[plateIndex];
     if (!plate) return;
 
-    // Calculate total filament from all parts in the plate (accounting for part quantity)
-    const plateFilament = (plate.parts || []).reduce((sum, part) => {
-      const partQty = parseInt(part.quantity) || 1;
-      return sum + ((parseFloat(part.filamentUsage) || 0) * partQty);
-    }, 0) * order.quantity;
+    const parts = plate.parts || [];
+    const orderColor = order.color || model?.defaultColor || '';
 
-    // Check if any part in the plate is multi-color
-    const hasMultiColorPart = (plate.parts || []).some(part => part.isMultiColor);
-
-    // Determine which color to use for filament deduction
-    // For plates with multi-color parts, use selectedColor; otherwise use order color
-    let colorToUse;
-    if (hasMultiColorPart) {
-      if (isCompleting) {
-        colorToUse = selectedColor;
-      } else {
-        // When uncompleting, use the stored color
-        colorToUse = plateColors[plateIndex];
-      }
+    // Build color map for each part
+    // If completing: use partColors param (multi-color) or order color (non-multi-color)
+    // If uncompleting: use stored colors from plateColors
+    const colorsToUse = {};
+    if (isCompleting) {
+      parts.forEach((part, partIdx) => {
+        if (part.isMultiColor) {
+          colorsToUse[partIdx] = partColors?.[partIdx] || '';
+        } else {
+          colorsToUse[partIdx] = orderColor;
+        }
+      });
     } else {
-      colorToUse = order.color || model?.defaultColor || '';
+      // When uncompleting, use stored colors
+      const storedColors = storedPlateColors[plateIndex] || {};
+      parts.forEach((part, partIdx) => {
+        colorsToUse[partIdx] = storedColors[partIdx] || orderColor;
+      });
     }
 
-    // Handle filament deduction/addition
-    if (plateFilament > 0 && colorToUse) {
-      const memberFilaments = [...(filaments[order.assignedTo] || [])];
-      const colorLower = colorToUse.toLowerCase().trim();
+    // Group filament usage by color
+    const usageByColor = {};
+    let totalPlateFilament = 0;
+    parts.forEach((part, partIdx) => {
+      const partQty = parseInt(part.quantity) || 1;
+      const partFilament = (parseFloat(part.filamentUsage) || 0) * partQty * order.quantity;
+      const color = colorsToUse[partIdx];
+      if (color && partFilament > 0) {
+        const colorLower = color.toLowerCase().trim();
+        if (!usageByColor[colorLower]) {
+          usageByColor[colorLower] = { color: color, amount: 0 };
+        }
+        usageByColor[colorLower].amount += partFilament;
+        totalPlateFilament += partFilament;
+      }
+    });
+
+    // Handle filament deduction/addition for each color
+    const memberFilaments = [...(filaments[order.assignedTo] || [])];
+    let filamentChanged = false;
+
+    Object.values(usageByColor).forEach(({ color, amount }) => {
+      const colorLower = color.toLowerCase().trim();
       const filamentIdx = memberFilaments.findIndex(f => {
         const filColor = f.color.toLowerCase().trim();
         return filColor === colorLower ||
@@ -3479,14 +3498,14 @@ export default function EtsyOrderManager() {
                colorLower.includes(filColor);
       });
 
-      if (filamentIdx >= 0) {
+      if (filamentIdx >= 0 && amount > 0) {
         let newAmount = memberFilaments[filamentIdx].amount;
         let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
         let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
 
         if (isCompleting) {
           // Deduct filament when completing plate
-          newAmount -= plateFilament;
+          newAmount -= amount;
           if (newAmount <= 0 && backupRolls.length > 0) {
             const nextRoll = backupRolls.shift();
             currentRollCost = nextRoll.cost;
@@ -3498,7 +3517,7 @@ export default function EtsyOrderManager() {
           const usageEvent = {
             id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             color: memberFilaments[filamentIdx].color,
-            amount: plateFilament,
+            amount: amount,
             date: Date.now(),
             orderId: order.orderId,
             memberId: order.assignedTo,
@@ -3508,7 +3527,7 @@ export default function EtsyOrderManager() {
           setFilamentUsageHistory(prev => [...prev, usageEvent]);
         } else {
           // Add filament back when uncompleting plate
-          newAmount += plateFilament;
+          newAmount += amount;
         }
 
         memberFilaments[filamentIdx] = {
@@ -3517,12 +3536,16 @@ export default function EtsyOrderManager() {
           backupRolls: backupRolls,
           currentRollCost: currentRollCost
         };
-        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+        filamentChanged = true;
       }
+    });
+
+    if (filamentChanged) {
+      saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
     }
 
     // Calculate plate print time from all parts (in hours, accounting for part quantity)
-    const platePrintHours = (plate.parts || []).reduce((sum, part) => {
+    const platePrintHours = parts.reduce((sum, part) => {
       const hours = parseFloat(part.printHours) || 0;
       const minutes = parseFloat(part.printMinutes) || 0;
       const partQty = parseInt(part.quantity) || 1;
@@ -3552,13 +3575,11 @@ export default function EtsyOrderManager() {
 
         if (isCompleting) {
           newCompletedPlates = [...completedPlates, plateIndex];
-          // Store the color used for multi-color plates
-          if (hasMultiColorPart && selectedColor) {
-            newPlateColors[plateIndex] = selectedColor;
-          }
+          // Store the colors used for each part (only for multi-color parts)
+          newPlateColors[plateIndex] = colorsToUse;
         } else {
           newCompletedPlates = completedPlates.filter(idx => idx !== plateIndex);
-          // Remove the stored color when uncompleting
+          // Remove the stored colors when uncompleting
           delete newPlateColors[plateIndex];
         }
         return { ...o, completedPlates: newCompletedPlates, plateColors: newPlateColors };
@@ -3568,11 +3589,12 @@ export default function EtsyOrderManager() {
     saveOrders(updated);
 
     const plateName = plate.name || `Plate ${plateIndex + 1}`;
-    const colorInfo = hasMultiColorPart && selectedColor ? ` in ${selectedColor}` : '';
+    const colorList = Object.values(usageByColor).map(u => u.color).join(', ');
+    const colorInfo = colorList ? ` (${colorList})` : '';
     const timeInfo = platePrintHours > 0 ? `, +${platePrintHours.toFixed(1)}h` : '';
     showNotification(isCompleting
-      ? `${plateName} completed${colorInfo}! (${plateFilament.toFixed(2)}g deducted${timeInfo})`
-      : `${plateName} uncompleted (${plateFilament.toFixed(2)}g added back)`
+      ? `${plateName} completed${colorInfo}! (${totalPlateFilament.toFixed(2)}g deducted${timeInfo})`
+      : `${plateName} uncompleted (${totalPlateFilament.toFixed(2)}g added back)`
     );
   };
 
@@ -6743,7 +6765,17 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           if (hasMultiColorPart && !isComplete) {
                             // For multi-color plates, need to select color first - expand the dropdown
                             if (!isExpanded) toggleExpanded();
+                          } else if (!isComplete) {
+                            // For non-multi-color plates, auto-complete with order color for all parts
+                            const allParts = plate.parts || [];
+                            const orderColor = order.color || matchingModel?.defaultColor || '';
+                            const partColors = {};
+                            allParts.forEach((_, partIdx) => {
+                              partColors[partIdx] = orderColor;
+                            });
+                            togglePlateComplete(order.orderId, idx, matchingModel, partColors);
                           } else {
+                            // Uncompleting - pass stored colors
                             togglePlateComplete(order.orderId, idx, matchingModel, completedColor || null);
                           }
                         }}
@@ -6763,7 +6795,17 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         onClick={() => {
                           if (hasMultiColorPart && !isComplete) {
                             if (!isExpanded) toggleExpanded();
+                          } else if (!isComplete) {
+                            // For non-multi-color plates, auto-complete with order color for all parts
+                            const allParts = plate.parts || [];
+                            const orderColor = order.color || matchingModel?.defaultColor || '';
+                            const partColors = {};
+                            allParts.forEach((_, partIdx) => {
+                              partColors[partIdx] = orderColor;
+                            });
+                            togglePlateComplete(order.orderId, idx, matchingModel, partColors);
                           } else {
+                            // Uncompleting - pass stored colors
                             togglePlateComplete(order.orderId, idx, matchingModel, completedColor || null);
                           }
                         }}
@@ -6771,19 +6813,25 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         {plate.name || `Plate ${idx + 1}`}
                       </span>
 
-                      {/* Show completed color badge if multi-color and complete */}
-                      {isComplete && hasMultiColorPart && completedColor && (
-                        <span style={{
-                          fontSize: '0.7rem',
-                          padding: '2px 6px',
-                          background: 'rgba(165, 94, 234, 0.2)',
-                          border: '1px solid rgba(165, 94, 234, 0.3)',
-                          borderRadius: '4px',
-                          color: '#a55eea'
-                        }}>
-                          {completedColor}
-                        </span>
-                      )}
+                      {/* Show completed colors badge if multi-color and complete */}
+                      {isComplete && hasMultiColorPart && completedColor && (() => {
+                        // completedColor is now an object { partIndex: color }
+                        const colors = typeof completedColor === 'object'
+                          ? [...new Set(Object.values(completedColor))].filter(c => c)
+                          : [completedColor];
+                        return colors.length > 0 && (
+                          <span style={{
+                            fontSize: '0.7rem',
+                            padding: '2px 6px',
+                            background: 'rgba(165, 94, 234, 0.2)',
+                            border: '1px solid rgba(165, 94, 234, 0.3)',
+                            borderRadius: '4px',
+                            color: '#a55eea'
+                          }}>
+                            {colors.join(', ')}
+                          </span>
+                        );
+                      })()}
 
                       {/* Stats */}
                       <span style={{ fontSize: '0.7rem', color: '#888' }}>
@@ -6812,57 +6860,141 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                       {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
                     </div>
 
-                    {/* Expanded section for multi-color parts */}
-                    {hasMultiColorPart && !isComplete && isExpanded && (
-                      <div style={{
-                        marginLeft: '24px',
-                        marginTop: '4px',
-                        padding: '8px',
-                        background: 'rgba(165, 94, 234, 0.1)',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(165, 94, 234, 0.2)'
-                      }}>
-                        <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '8px' }}>
-                          Select color for multi-color part:
-                        </div>
-                        {multiColorParts.map((part, partIdx) => (
-                          <div key={partIdx} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: '6px'
-                          }}>
-                            <Palette size={12} style={{ color: '#a55eea' }} />
-                            <span style={{ fontSize: '0.8rem', color: '#e0e0e0', flex: 1 }}>
-                              {part.name || `Part ${partIdx + 1}`}
-                            </span>
-                            <select
-                              value={completedColor || ''}
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  // Store the selected color and complete the plate
-                                  togglePlateComplete(order.orderId, idx, matchingModel, e.target.value);
-                                }
-                              }}
-                              style={{
-                                padding: '4px 8px',
-                                fontSize: '0.75rem',
-                                background: 'rgba(165, 94, 234, 0.2)',
-                                border: '1px solid rgba(165, 94, 234, 0.4)',
-                                borderRadius: '4px',
-                                color: '#fff',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <option value="">Select color...</option>
-                              {availableColors.map(color => (
-                                <option key={color} value={color}>{color}</option>
-                              ))}
-                            </select>
+                    {/* Expanded section for parts - shows all parts with color selection */}
+                    {hasMultiColorPart && !isComplete && isExpanded && (() => {
+                      const allParts = plate.parts || [];
+                      const pendingColors = order.pendingPartColors?.[idx] || {};
+                      const orderColor = order.color || matchingModel?.defaultColor || '';
+
+                      // Check if all multi-color parts have colors selected
+                      const allMultiColorPartsHaveColors = allParts.every((part, partIdx) =>
+                        !part.isMultiColor || pendingColors[partIdx]
+                      );
+
+                      const updatePendingColor = (partIdx, color) => {
+                        const currentPending = order.pendingPartColors || {};
+                        const platePending = { ...(currentPending[idx] || {}) };
+                        platePending[partIdx] = color;
+                        const updatedOrders = orders.map(o =>
+                          o.orderId === order.orderId
+                            ? { ...o, pendingPartColors: { ...currentPending, [idx]: platePending } }
+                            : o
+                        );
+                        setOrders(updatedOrders);
+                      };
+
+                      const completePlateWithColors = () => {
+                        // Build partColors object for all parts
+                        const partColors = {};
+                        allParts.forEach((part, partIdx) => {
+                          if (part.isMultiColor) {
+                            partColors[partIdx] = pendingColors[partIdx] || '';
+                          } else {
+                            partColors[partIdx] = orderColor;
+                          }
+                        });
+                        togglePlateComplete(order.orderId, idx, matchingModel, partColors);
+                        // Clear pending colors for this plate
+                        const currentPending = order.pendingPartColors || {};
+                        delete currentPending[idx];
+                        const updatedOrders = orders.map(o =>
+                          o.orderId === order.orderId
+                            ? { ...o, pendingPartColors: currentPending }
+                            : o
+                        );
+                        setOrders(updatedOrders);
+                      };
+
+                      return (
+                        <div style={{
+                          marginLeft: '24px',
+                          marginTop: '4px',
+                          padding: '8px',
+                          background: 'rgba(165, 94, 234, 0.1)',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(165, 94, 234, 0.2)'
+                        }}>
+                          <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '8px' }}>
+                            Part colors:
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          {allParts.map((part, partIdx) => {
+                            const partQty = parseInt(part.quantity) || 1;
+                            const partFilament = (parseFloat(part.filamentUsage) || 0) * partQty;
+                            return (
+                              <div key={partIdx} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                marginBottom: '6px'
+                              }}>
+                                <Palette size={12} style={{ color: part.isMultiColor ? '#a55eea' : '#888' }} />
+                                <span style={{ fontSize: '0.8rem', color: '#e0e0e0', flex: 1 }}>
+                                  {part.name || `Part ${partIdx + 1}`}
+                                  {partQty > 1 && <span style={{ color: '#888' }}> x{partQty}</span>}
+                                  <span style={{ color: '#666', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                    ({partFilament.toFixed(1)}g)
+                                  </span>
+                                </span>
+                                {part.isMultiColor ? (
+                                  <select
+                                    value={pendingColors[partIdx] || ''}
+                                    onChange={(e) => updatePendingColor(partIdx, e.target.value)}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '0.75rem',
+                                      background: pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.2)' : 'rgba(165, 94, 234, 0.2)',
+                                      border: `1px solid ${pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.4)' : 'rgba(165, 94, 234, 0.4)'}`,
+                                      borderRadius: '4px',
+                                      color: '#fff',
+                                      cursor: 'pointer',
+                                      minWidth: '120px'
+                                    }}
+                                  >
+                                    <option value="">Select color...</option>
+                                    {availableColors.map(color => (
+                                      <option key={color} value={color}>{color}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span style={{
+                                    padding: '4px 8px',
+                                    fontSize: '0.75rem',
+                                    background: 'rgba(0, 204, 255, 0.15)',
+                                    border: '1px solid rgba(0, 204, 255, 0.3)',
+                                    borderRadius: '4px',
+                                    color: '#00ccff'
+                                  }}>
+                                    {orderColor || 'No color set'}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <button
+                            onClick={completePlateWithColors}
+                            disabled={!allMultiColorPartsHaveColors}
+                            style={{
+                              marginTop: '8px',
+                              padding: '6px 12px',
+                              fontSize: '0.75rem',
+                              background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
+                              border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
+                              borderRadius: '4px',
+                              color: allMultiColorPartsHaveColors ? '#00ff88' : '#888',
+                              cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Check size={14} />
+                            Complete Plate
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Reprint Part Section - only show for completed plates with parts */}
                     {isComplete && hasParts && (
