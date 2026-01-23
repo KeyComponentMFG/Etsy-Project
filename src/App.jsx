@@ -5521,6 +5521,7 @@ export default function EtsyOrderManager() {
               deleteReprint={deleteReprint}
               fulfillLineItem={fulfillLineItem}
               unfulfillLineItem={unfulfillLineItem}
+              toggleLineItemPlateComplete={toggleLineItemPlateComplete}
             />
           )}
 
@@ -6032,7 +6033,7 @@ function calculateShipByDate(orderDate, processingDays) {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
