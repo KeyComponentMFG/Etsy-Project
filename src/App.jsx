@@ -1813,14 +1813,14 @@ export default function EtsyOrderManager() {
             price: o.price,
             address: o.address,
             status: o.status,
-            assigned_to: o.assignedTo,
+            assigned_to: o.assignedTo || null,
             notes: o.notes,
-            store_id: o.storeId,
-            shipped_at: o.shippedAt,
-            fulfilled_at: o.fulfilledAt,
+            store_id: o.storeId || null,
+            shipped_at: o.shippedAt || null,
+            fulfilled_at: o.fulfilledAt || null,
             created_at: o.createdAt,
-            scheduled_start: o.scheduledStart,
-            printer_id: o.printerId,
+            scheduled_start: o.scheduledStart || null,
+            printer_id: o.printerId || null,
             shipping_cost: o.shippingCost,
             production_stage: o.productionStage,
             sales_tax: o.salesTax,
@@ -1889,9 +1889,9 @@ export default function EtsyOrderManager() {
           price: o.price,
           address: o.address,
           status: o.status,
-          assigned_to: o.assignedTo,
+          assigned_to: o.assignedTo || null,
           notes: o.notes,
-          store_id: o.storeId,
+          store_id: o.storeId || null,
           shipped_at: o.shippedAt || null,
           fulfilled_at: o.fulfilledAt || null,
           created_at: o.createdAt || Date.now(),
@@ -3679,7 +3679,7 @@ export default function EtsyOrderManager() {
   // Reassign order (also clears any assignment issue)
   const reassignOrder = (orderId, memberId) => {
     const updated = orders.map(o =>
-      o.orderId === orderId ? { ...o, assignedTo: memberId, assignmentIssue: null } : o
+      o.orderId === orderId ? { ...o, assignedTo: memberId || null, assignmentIssue: null } : o
     );
     saveOrders(updated);
   };
