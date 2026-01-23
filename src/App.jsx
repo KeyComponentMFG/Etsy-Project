@@ -6255,14 +6255,36 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
 
     // Calculate external parts cost
     let partsCost = 0;
-    if (matchingModel && matchingModel.externalParts?.length > 0 && order.assignedTo) {
-      const memberParts = externalParts?.[order.assignedTo] || [];
+    const memberParts = order.assignedTo ? (externalParts?.[order.assignedTo] || []) : [];
+
+    // Parts from model definition
+    if (matchingModel && matchingModel.externalParts?.length > 0) {
       matchingModel.externalParts.forEach(needed => {
         const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
         if (matchedPart && matchedPart.costPerUnit > 0) {
           partsCost += matchedPart.costPerUnit * needed.quantity * order.quantity;
         }
       });
+    }
+
+    // Parts selected during fulfillment (usedExternalParts)
+    if (order.usedExternalParts && typeof order.usedExternalParts === 'object') {
+      Object.entries(order.usedExternalParts).forEach(([partName, qty]) => {
+        if (qty > 0) {
+          const matchedPart = memberParts.find(p => p.name.toLowerCase() === partName.toLowerCase());
+          if (matchedPart && matchedPart.costPerUnit > 0) {
+            partsCost += matchedPart.costPerUnit * qty;
+          }
+        }
+      });
+    }
+
+    // Also check usedExternalPart (singular - older format for single part selection)
+    if (order.usedExternalPart && typeof order.usedExternalPart === 'string') {
+      const matchedPart = memberParts.find(p => p.name.toLowerCase() === order.usedExternalPart.toLowerCase());
+      if (matchedPart && matchedPart.costPerUnit > 0) {
+        partsCost += matchedPart.costPerUnit * order.quantity;
+      }
     }
 
     // Shipping cost
