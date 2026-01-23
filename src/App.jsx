@@ -1364,24 +1364,14 @@ export default function EtsyOrderManager() {
     try {
       const rawInput = input.trim();
       const lines = rawInput.split('\n').map(l => l.trim()).filter(l => l);
-      
-      console.log('=== PREVIEW DEBUG ===');
-      console.log('Lines:', lines.length);
-      console.log('First line:', lines[0]?.substring(0, 80));
-      
+
       // Check if first line starts with a 10-digit number (means no header row)
       const firstLineStartsWithTxn = /^\d{10}/.test(lines[0]);
       const hasTab = lines[0]?.includes('\t');
-      
-      console.log('First line starts with TXN ID?', firstLineStartsWithTxn);
-      console.log('Has tabs?', hasTab);
-      
+
       if (hasTab && firstLineStartsWithTxn) {
         // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations, Price, Tax
-        console.log('Format: TAB-separated WITHOUT headers');
-
         const firstRow = lines[0].split('\t').map(v => v.trim());
-        console.log('First row values:', firstRow);
 
         const transactionId = firstRow[0] || '';
         const product = firstRow[1] || '';
@@ -1393,8 +1383,19 @@ export default function EtsyOrderManager() {
 
         const { extractedColor, extractedExtra } = parseColorField(colorField);
 
+        // Count duplicates in preview
+        let duplicateCount = 0;
+        lines.forEach(line => {
+          const txnId = line.split('\t')[0]?.trim();
+          if (orders.find(o => o.orderId === txnId) || archivedOrders.find(o => o.orderId === txnId)) {
+            duplicateCount++;
+          }
+        });
+
         setCsvPreview({
           rowCount: lines.length,
+          newCount: lines.length - duplicateCount,
+          duplicateCount,
           format: 'TAB (no headers)',
           transactionId,
           extractedProduct: product,
@@ -1437,8 +1438,20 @@ export default function EtsyOrderManager() {
 
         const { extractedColor, extractedExtra } = parseColorField(colorField);
 
+        // Count duplicates in preview (skip header row)
+        let duplicateCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const rowValues = lines[i].split(delimiter);
+          const txnId = txnIdx >= 0 ? rowValues[txnIdx]?.trim() : '';
+          if (txnId && (orders.find(o => o.orderId === txnId) || archivedOrders.find(o => o.orderId === txnId))) {
+            duplicateCount++;
+          }
+        }
+
         setCsvPreview({
           rowCount: lines.length - 1,
+          newCount: lines.length - 1 - duplicateCount,
+          duplicateCount,
           format: 'CSV',
           transactionId,
           extractedProduct: product,
@@ -1474,8 +1487,6 @@ export default function EtsyOrderManager() {
   // Load data from Supabase
   const loadData = useCallback(async (isInitialLoad = false) => {
     try {
-      console.log('=== LOADING DATA FROM SUPABASE ===');
-
       // Fetch all data in parallel
       const [
         { data: ordersData, error: ordersError },
@@ -1779,7 +1790,9 @@ export default function EtsyOrderManager() {
       prevOrdersRef.current = orders;
       return;
     }
-    if (JSON.stringify(orders) === JSON.stringify(prevOrdersRef.current)) return;
+    if (JSON.stringify(orders) === JSON.stringify(prevOrdersRef.current)) {
+      return;
+    }
     prevOrdersRef.current = orders;
 
     // Sync orders to Supabase
@@ -2794,17 +2807,12 @@ export default function EtsyOrderManager() {
       // Check if first line starts with a 10-digit number (means no header row)
       const firstLineStartsWithTxn = /^\d{10}/.test(lines[0]);
       const hasTab = lines[0]?.includes('\t');
-      
-      console.log('=== IMPORT DEBUG ===');
-      console.log('First line starts with TXN?', firstLineStartsWithTxn);
-      console.log('Has tabs?', hasTab);
-      
+
       const newOrders = [];
       let duplicates = 0;
 
       if (hasTab && firstLineStartsWithTxn) {
         // Tab-separated WITHOUT headers - columns are: TXN, Product, Qty, Variations, Price, Tax, BuyerName, BuyerMessage, Timestamp
-        console.log('Format: TAB-separated WITHOUT headers');
 
         for (let i = 0; i < lines.length; i++) {
           const values = lines[i].split('\t').map(v => v.trim());
@@ -2823,10 +2831,7 @@ export default function EtsyOrderManager() {
           const timestampStr = values[8] || '';
           const createdAt = timestampStr ? new Date(timestampStr).getTime() : Date.now();
 
-          console.log(`Row ${i + 1}:`, { transactionId, product: product.substring(0, 40), quantity, colorField, price, salesTax, buyerName, timestampStr });
-
           if (!transactionId || !/^\d+$/.test(transactionId)) {
-            console.log('Skipping invalid transaction ID');
             continue;
           }
 
@@ -2859,7 +2864,7 @@ export default function EtsyOrderManager() {
           });
         }
       } else if (hasTab || lines[0]?.includes(',')) {
-        // Traditional CSV/TSV parsing
+        // Traditional CSV/TSV parsing with headers
         const lines = rawInput.split('\n').map(l => l.trim()).filter(l => l);
         if (lines.length < 2) {
           showNotification('Need header row and at least one data row', 'error');
@@ -2940,12 +2945,19 @@ export default function EtsyOrderManager() {
             buyerMessage: buyerMessage
           });
         }
+      } else {
+        showNotification('Unknown data format. Please use tab-separated or comma-separated data.', 'error');
+        return;
       }
 
-      console.log('=== IMPORT COMPLETE ===');
-      console.log('Store ID for import:', importStoreId);
-      console.log('New orders:', newOrders.length);
-      console.log('First order storeId:', newOrders[0]?.storeId);
+      if (newOrders.length === 0) {
+        showNotification(`No new orders to import. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
+        setCsvInput('');
+        setCsvPreview(null);
+        setShowCsvModal(false);
+        setImportStoreId('');
+        return;
+      }
 
       // Auto-assign orders based on external parts inventory
       const allOrders = [...orders];
@@ -2960,7 +2972,10 @@ export default function EtsyOrderManager() {
         allOrders.push(order);
       });
 
-      saveOrders([...orders, ...newOrders]);
+      // Combine with current orders and save
+      const combinedOrders = [...orders, ...newOrders];
+      prevOrdersRef.current = combinedOrders;
+      setOrders(combinedOrders);
 
       // Decrease stock for matching models
       const stockUpdates = {};
@@ -2975,6 +2990,7 @@ export default function EtsyOrderManager() {
       });
 
       // Update models with decreased stock
+      // Use setModels directly to avoid recalculateOrderCosts which would overwrite our new orders
       if (Object.keys(stockUpdates).length > 0) {
         const updatedModels = models.map(m => {
           if (stockUpdates[m.id]) {
@@ -2983,7 +2999,7 @@ export default function EtsyOrderManager() {
           }
           return m;
         });
-        saveModels(updatedModels);
+        setModels(updatedModels);
 
         // Check for low stock models and notify
         const lowStockModels = updatedModels.filter(m => m.stockCount !== null && m.stockCount <= 3);
@@ -2996,14 +3012,13 @@ export default function EtsyOrderManager() {
       // Show notification with unassigned count if any
       if (unassignedCount > 0) {
         showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${unassignedCount} unassigned (no stock). ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`, 'warning');
-        return;
-      }
-
-      if (newOrders.length > 0) {
+      } else if (newOrders.length > 0) {
         showNotification(`Imported ${newOrders.length} order${newOrders.length > 1 ? 's' : ''}. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
       } else {
         showNotification(`No new orders imported. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
       }
+
+      // Close modal and reset state
       setCsvInput('');
       setCsvPreview(null);
       setShowCsvModal(false);
@@ -5142,11 +5157,25 @@ export default function EtsyOrderManager() {
             />
             {csvPreview && (
               <div style={{ background: 'rgba(0,255,136,0.1)', padding: '12px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem' }}>
-                <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <span><strong>Format:</strong> {csvPreview.format || 'AUTO'}</span>
-                  <span style={{ background: 'rgba(0,255,136,0.3)', padding: '6px 14px', borderRadius: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
-                    {csvPreview.rowCount} order{csvPreview.rowCount !== 1 ? 's' : ''} to import
-                  </span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {csvPreview.duplicateCount > 0 && (
+                      <span style={{ background: 'rgba(255,159,67,0.3)', padding: '6px 14px', borderRadius: '12px', fontWeight: 600, fontSize: '0.85rem', color: '#ff9f43' }}>
+                        {csvPreview.duplicateCount} duplicate{csvPreview.duplicateCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span style={{
+                      background: csvPreview.newCount > 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,0,0,0.2)',
+                      padding: '6px 14px',
+                      borderRadius: '12px',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: csvPreview.newCount > 0 ? '#00ff88' : '#ff4444'
+                    }}>
+                      {csvPreview.newCount !== undefined ? csvPreview.newCount : csvPreview.rowCount} new order{(csvPreview.newCount !== undefined ? csvPreview.newCount : csvPreview.rowCount) !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
                 
                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '6px' }}>
@@ -5205,9 +5234,20 @@ export default function EtsyOrderManager() {
               <button className="btn btn-secondary" onClick={() => { setShowCsvModal(false); setCsvPreview(null); setCsvInput(''); setImportStoreId(''); }}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={importCsv} disabled={!csvPreview}>
+              <button
+                className="btn btn-primary"
+                onClick={importCsv}
+                disabled={!csvPreview || (csvPreview.newCount !== undefined && csvPreview.newCount === 0)}
+                style={csvPreview?.newCount === 0 ? { opacity: 0.5 } : {}}
+              >
                 <Upload size={18} />
-                {csvPreview ? `Import ${csvPreview.rowCount} Order${csvPreview.rowCount !== 1 ? 's' : ''}` : 'Import Orders'}
+                {csvPreview
+                  ? csvPreview.newCount !== undefined
+                    ? csvPreview.newCount === 0
+                      ? 'All Duplicates'
+                      : `Import ${csvPreview.newCount} New Order${csvPreview.newCount !== 1 ? 's' : ''}`
+                    : `Import ${csvPreview.rowCount} Order${csvPreview.rowCount !== 1 ? 's' : ''}`
+                  : 'Import Orders'}
               </button>
             </div>
           </div>
@@ -5449,25 +5489,18 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
     setShowExtraPrintForm(false);
     showNotification('Extra print added to queue');
   };
-  
-  console.log('=== QUEUE TAB DEBUG ===');
-  console.log('Total orders:', orders?.length);
-  console.log('Selected store filter:', selectedStoreFilter);
-  console.log('Selected partner filter:', selectedPartnerFilter);
-  
+
   // Filter orders by selected store
-  let filteredOrders = selectedStoreFilter === 'all' 
-    ? orders 
+  let filteredOrders = selectedStoreFilter === 'all'
+    ? orders
     : orders.filter(o => o.storeId === selectedStoreFilter);
-  
+
   // Filter by partner
   if (selectedPartnerFilter === 'unassigned') {
     filteredOrders = filteredOrders.filter(o => !o.assignedTo);
   } else if (selectedPartnerFilter !== 'all') {
     filteredOrders = filteredOrders.filter(o => o.assignedTo === selectedPartnerFilter);
   }
-  
-  console.log('Filtered orders:', filteredOrders?.length);
   
   // Helper to find matching model for an order
   const findModelForOrder = (order) => {
