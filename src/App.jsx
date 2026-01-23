@@ -248,10 +248,17 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
     };
   };
 
-  // Calculate expenses from purchases
+  // Calculate expenses from purchases AND material costs from orders
   const calculateExpenses = () => {
+    // Purchases (supplies, equipment, etc.)
     const filteredPurchases = getFilteredData(purchases || [], 'purchaseDate');
-    return filteredPurchases.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+    const purchaseCosts = filteredPurchases.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+
+    // Material costs from shipped orders (filament + external parts)
+    const shippedOrders = getFilteredData(allOrders).filter(o => o.status === 'shipped');
+    const materialCosts = shippedOrders.reduce((sum, o) => sum + (parseFloat(o.materialCost) || 0), 0);
+
+    return purchaseCosts + materialCosts;
   };
 
   // Calculate shipping costs
