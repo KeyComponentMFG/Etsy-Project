@@ -3582,9 +3582,18 @@ export default function EtsyOrderManager() {
                          orderColor.includes(filColor);
                 });
                 if (filamentIdx >= 0) {
-                  // Sum filament from all plates
-                  const filamentUsage = printerSettings?.plates?.reduce((sum, plate) =>
-                    sum + (parseFloat(plate.filamentUsage) || 0), 0) || 0;
+                  // Sum filament from all plates - check both plate.filamentUsage and plate.parts
+                  const filamentUsage = printerSettings?.plates?.reduce((sum, plate) => {
+                    // Check if plate uses parts structure
+                    if (plate.parts?.length > 0) {
+                      return sum + plate.parts.reduce((partSum, part) => {
+                        const partQty = parseInt(part.quantity) || 1;
+                        return partSum + ((parseFloat(part.filamentUsage) || 0) * partQty);
+                      }, 0);
+                    }
+                    // Fall back to direct plate.filamentUsage
+                    return sum + (parseFloat(plate.filamentUsage) || 0);
+                  }, 0) || (model.filamentUsage ? parseFloat(model.filamentUsage) : 0);
                   const totalUsed = filamentUsage * o.quantity;
                   let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
                   let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
