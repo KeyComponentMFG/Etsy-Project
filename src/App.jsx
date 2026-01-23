@@ -2304,41 +2304,69 @@ export default function EtsyOrderManager() {
   };
 
   // Calculate material cost for an order based on model and filament data
-  const calculateMaterialCost = (order, model, allFilaments) => {
-    if (!model) return 0;
+  const calculateMaterialCost = (order, model, allFilaments, allExternalParts = {}) => {
+    let totalCost = 0;
 
-    // Get filament usage from model
-    const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
-    let filamentUsage = 0;
-    if (printerSettings?.plates?.length > 0) {
-      filamentUsage = printerSettings.plates.reduce((sum, plate) =>
-        sum + (parseFloat(plate.filamentUsage) || 0), 0);
-    } else if (model.filamentUsage) {
-      filamentUsage = parseFloat(model.filamentUsage) || 0;
+    // Calculate filament cost
+    if (model) {
+      const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+      let filamentUsage = 0;
+      if (printerSettings?.plates?.length > 0) {
+        filamentUsage = printerSettings.plates.reduce((sum, plate) =>
+          sum + (parseFloat(plate.filamentUsage) || 0), 0);
+      } else if (model.filamentUsage) {
+        filamentUsage = parseFloat(model.filamentUsage) || 0;
+      }
+
+      if (filamentUsage > 0) {
+        const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
+        let costPerGram = 0;
+
+        Object.values(allFilaments).forEach(memberFilaments => {
+          memberFilaments.forEach(fil => {
+            const filColor = fil.color.toLowerCase().trim();
+            if (filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor)) {
+              const rollCost = fil.currentRollCost || fil.costPerRoll || 0;
+              if (rollCost > 0) {
+                costPerGram = rollCost / 1000;
+              }
+            }
+          });
+        });
+
+        totalCost += filamentUsage * (order.quantity || 1) * costPerGram;
+      }
     }
 
-    if (filamentUsage === 0) return 0;
+    // Calculate external parts cost
+    const memberParts = order.assignedTo ? (allExternalParts[order.assignedTo] || []) : [];
 
-    // Find the cost per gram from filament inventory
-    const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
-    let costPerGram = 0;
+    // Get parts from model definition
+    if (model?.externalParts?.length > 0) {
+      model.externalParts.forEach(modelPart => {
+        const inventoryPart = memberParts.find(p =>
+          p.name.toLowerCase() === modelPart.name.toLowerCase()
+        );
+        const costPerUnit = inventoryPart?.costPerUnit || 0;
+        const qtyNeeded = modelPart.quantity || 1;
+        totalCost += costPerUnit * qtyNeeded * (order.quantity || 1);
+      });
+    }
 
-    // Search through all team members' filaments to find the color
-    Object.values(allFilaments).forEach(memberFilaments => {
-      memberFilaments.forEach(fil => {
-        const filColor = fil.color.toLowerCase().trim();
-        // Match if exact, or if one contains the other (e.g., "Sunla PLA Black" matches "Black")
-        if (filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor)) {
-          // Use currentRollCost (new structure) or fall back to costPerRoll (old structure)
-          const rollCost = fil.currentRollCost || fil.costPerRoll || 0;
-          if (rollCost > 0) {
-            costPerGram = rollCost / 1000; // Cost per gram (assuming 1kg rolls)
-          }
+    // Get parts from user selection during fulfillment (usedExternalParts)
+    if (order.usedExternalParts && typeof order.usedExternalParts === 'object') {
+      Object.entries(order.usedExternalParts).forEach(([partName, qty]) => {
+        if (qty > 0) {
+          const inventoryPart = memberParts.find(p =>
+            p.name.toLowerCase() === partName.toLowerCase()
+          );
+          const costPerUnit = inventoryPart?.costPerUnit || 0;
+          totalCost += costPerUnit * qty;
         }
       });
-    });
+    }
 
-    return filamentUsage * (order.quantity || 1) * costPerGram;
+    return totalCost;
   };
 
   // Find model by order item name
@@ -2357,7 +2385,7 @@ export default function EtsyOrderManager() {
     // Update active orders
     const updatedOrders = orders.map(order => {
       const model = findModelForOrder(order, modelsList);
-      const materialCost = calculateMaterialCost(order, model, filaments);
+      const materialCost = calculateMaterialCost(order, model, filaments, externalParts);
 
       // Calculate filament used for display
       let filamentUsed = 0;
@@ -2383,7 +2411,7 @@ export default function EtsyOrderManager() {
     // Update archived orders (for analytics only - no filament deduction)
     const updatedArchived = archivedOrders.map(order => {
       const model = findModelForOrder(order, modelsList);
-      const materialCost = calculateMaterialCost(order, model, filaments);
+      const materialCost = calculateMaterialCost(order, model, filaments, externalParts);
 
       let filamentUsed = 0;
       if (model) {
