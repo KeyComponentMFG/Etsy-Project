@@ -1550,6 +1550,7 @@ export default function EtsyOrderManager() {
           buyerMessage: o.buyer_message || '',
           assignmentIssue: o.assignment_issue || null,
           usedExternalPart: o.used_external_part || null,
+          usedExternalParts: o.used_external_parts || {},
           overrideShipByDate: o.override_ship_by_date || null,
           id: o.id
         }));
@@ -1839,6 +1840,7 @@ export default function EtsyOrderManager() {
             buyer_message: o.buyerMessage || '',
             assignment_issue: o.assignmentIssue || null,
             used_external_part: o.usedExternalPart || null,
+            used_external_parts: o.usedExternalParts || {},
             override_ship_by_date: o.overrideShipByDate || null
           }));
           const { error: upsertError } = await supabase.from('orders').upsert(dbFormat);
