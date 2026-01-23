@@ -3841,11 +3841,12 @@ export default function EtsyOrderManager() {
   };
 
   // Delete a reprint and restore filament/printer hours
-  const deleteReprint = (orderId, reprintId) => {
+  const deleteReprint = (orderId, reprintId, reprintObj) => {
     const order = orders.find(o => o.orderId === orderId);
     if (!order) return;
 
-    const reprint = order.plateReprints?.find(r => r.id === reprintId);
+    // Use the passed reprint object directly (more reliable)
+    const reprint = reprintObj || order.plateReprints?.find(r => r.id === reprintId);
     if (!reprint) return;
 
     // Add back the filament that was deducted
@@ -3881,9 +3882,18 @@ export default function EtsyOrderManager() {
     }
 
     // Remove reprint from order's plateReprints array
+    // Match by id if available, otherwise by plateIndex + partIndex + timestamp
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
-        const newReprints = (o.plateReprints || []).filter(r => r.id !== reprintId);
+        const newReprints = (o.plateReprints || []).filter(r => {
+          if (reprint.id && r.id) {
+            return r.id !== reprint.id;
+          }
+          // Fallback: match by plateIndex, partIndex, and timestamp
+          return !(r.plateIndex === reprint.plateIndex &&
+                   r.partIndex === reprint.partIndex &&
+                   r.timestamp === reprint.timestamp);
+        });
         return { ...o, plateReprints: newReprints };
       }
       return o;
@@ -4868,6 +4878,7 @@ export default function EtsyOrderManager() {
               saveFilaments={saveFilaments}
               togglePlateComplete={togglePlateComplete}
               reprintPart={reprintPart}
+              deleteReprint={deleteReprint}
             />
           )}
 
@@ -5295,7 +5306,7 @@ function calculateShipByDate(orderDate, processingDays) {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
@@ -5895,6 +5906,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   reassignOrder={reassignOrder}
                                   togglePlateComplete={togglePlateComplete}
                                   reprintPart={reprintPart}
+                                  deleteReprint={deleteReprint}
                                 />
                               ))}
                             </div>
@@ -5949,6 +5961,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     reassignOrder={reassignOrder}
                     togglePlateComplete={togglePlateComplete}
                     reprintPart={reprintPart}
+                    deleteReprint={deleteReprint}
                   />
                 ))
               )}
@@ -5985,6 +5998,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     reassignOrder={reassignOrder}
                     togglePlateComplete={togglePlateComplete}
                     reprintPart={reprintPart}
+                    deleteReprint={deleteReprint}
                   />
                 ))
               )}
@@ -5997,7 +6011,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -7266,14 +7280,16 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                               }}>
                                 {r.partName} ({r.color})
                                 <button
+                                  type="button"
                                   onClick={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
-                                    deleteReprint(order.orderId, r.id);
+                                    deleteReprint(order.orderId, r.id, r);
                                   }}
                                   style={{
                                     background: 'none',
                                     border: 'none',
-                                    padding: '0',
+                                    padding: '0 2px',
                                     cursor: 'pointer',
                                     color: '#ff6b6b',
                                     fontSize: '0.7rem',
