@@ -3840,6 +3840,59 @@ export default function EtsyOrderManager() {
     showNotification(`Reprinted ${part.name} in ${selectedColor} (${partFilament}g deducted${timeInfo})`);
   };
 
+  // Delete a reprint and restore filament/printer hours
+  const deleteReprint = (orderId, reprintId) => {
+    const order = orders.find(o => o.orderId === orderId);
+    if (!order) return;
+
+    const reprint = order.plateReprints?.find(r => r.id === reprintId);
+    if (!reprint) return;
+
+    // Add back the filament that was deducted
+    if (reprint.filamentUsage > 0 && order.assignedTo && reprint.color) {
+      const memberFilaments = [...(filaments[order.assignedTo] || [])];
+      const colorLower = reprint.color.toLowerCase().trim();
+      const filamentIdx = memberFilaments.findIndex(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === colorLower ||
+               filColor.includes(colorLower) ||
+               colorLower.includes(filColor);
+      });
+
+      if (filamentIdx >= 0) {
+        memberFilaments[filamentIdx] = {
+          ...memberFilaments[filamentIdx],
+          amount: memberFilaments[filamentIdx].amount + reprint.filamentUsage
+        };
+        saveFilaments({ ...filaments, [order.assignedTo]: memberFilaments });
+      }
+    }
+
+    // Subtract printer hours that were added
+    if (order.printerId && reprint.printHours > 0) {
+      const updatedPrinters = printers.map(p => {
+        if (p.id === order.printerId) {
+          const currentHours = p.totalHours || 0;
+          return { ...p, totalHours: Math.max(0, currentHours - reprint.printHours) };
+        }
+        return p;
+      });
+      savePrinters(updatedPrinters);
+    }
+
+    // Remove reprint from order's plateReprints array
+    const updated = orders.map(o => {
+      if (o.orderId === orderId) {
+        const newReprints = (o.plateReprints || []).filter(r => r.id !== reprintId);
+        return { ...o, plateReprints: newReprints };
+      }
+      return o;
+    });
+    saveOrders(updated);
+
+    showNotification(`Deleted reprint: ${reprint.partName} (${reprint.filamentUsage}g restored)`);
+  };
+
   // Reassign order (also clears any assignment issue)
   const reassignOrder = (orderId, memberId) => {
     const updated = orders.map(o =>
@@ -7202,13 +7255,35 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         {plateReprintsForThis.length > 0 && (
                           <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#888' }}>
                             Reprints: {plateReprintsForThis.map((r, i) => (
-                              <span key={i} style={{
+                              <span key={r.id || i} style={{
                                 background: 'rgba(255, 159, 67, 0.15)',
                                 padding: '1px 4px',
                                 borderRadius: '3px',
-                                marginLeft: i > 0 ? '4px' : '2px'
+                                marginLeft: i > 0 ? '4px' : '2px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
                               }}>
                                 {r.partName} ({r.color})
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteReprint(order.orderId, r.id);
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: '0',
+                                    cursor: 'pointer',
+                                    color: '#ff6b6b',
+                                    fontSize: '0.7rem',
+                                    lineHeight: 1,
+                                    marginLeft: '2px'
+                                  }}
+                                  title="Delete reprint"
+                                >
+                                  x
+                                </button>
                               </span>
                             ))}
                           </div>
