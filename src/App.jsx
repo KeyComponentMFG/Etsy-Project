@@ -3143,7 +3143,118 @@ export default function EtsyOrderManager() {
           }
         }
         if (newStatus === 'fulfilled') updates.fulfilledAt = Date.now();
-        
+
+        // Add back inventory when UN-fulfilling (changing from fulfilled to something else)
+        if (o.status === 'fulfilled' && newStatus !== 'fulfilled' && o.assignedTo) {
+          const ROLL_SIZE = 1000;
+          const memberFilaments = [...(filaments[o.assignedTo] || [])];
+          let filamentChanged = false;
+
+          // Handle extra prints
+          if (o.isExtraPrint && o.extraPrintFilament > 0) {
+            const orderColor = (o.color || '').toLowerCase().trim();
+            const filamentIdx = memberFilaments.findIndex(f => {
+              const filColor = f.color.toLowerCase().trim();
+              return filColor === orderColor ||
+                     filColor.includes(orderColor) ||
+                     orderColor.includes(filColor);
+            });
+            if (filamentIdx >= 0) {
+              memberFilaments[filamentIdx] = {
+                ...memberFilaments[filamentIdx],
+                amount: memberFilaments[filamentIdx].amount + o.extraPrintFilament
+              };
+              filamentChanged = true;
+              showNotification(`Added back ${o.extraPrintFilament.toFixed(2)}g of ${memberFilaments[filamentIdx].color}`);
+            }
+          } else {
+            // Regular order - add back filament based on plates
+            const model = findModelByName(o.item);
+            if (model) {
+              const printerSettings = model.printerSettings?.find(ps => ps.printerId === o.printerId) || model.printerSettings?.[0];
+              const plates = printerSettings?.plates || [];
+              const completedPlates = o.completedPlates || [];
+              const plateColors = o.plateColors || {};
+              const orderColor = o.color || model.defaultColor || '';
+
+              // If plates were completed, add back filament for each plate
+              if (plates.length > 0 && completedPlates.length > 0) {
+                const usageByColor = {};
+
+                completedPlates.forEach(plateIdx => {
+                  const plate = plates[plateIdx];
+                  if (!plate) return;
+
+                  const parts = plate.parts || [];
+                  const storedColors = plateColors[plateIdx] || {};
+
+                  parts.forEach((part, partIdx) => {
+                    const partQty = parseInt(part.quantity) || 1;
+                    const partFilament = (parseFloat(part.filamentUsage) || 0) * partQty * o.quantity;
+                    // Get color from stored plateColors or fall back to order color
+                    const color = (typeof storedColors === 'object' ? storedColors[partIdx] : storedColors) || orderColor;
+
+                    if (color && partFilament > 0) {
+                      const colorLower = color.toLowerCase().trim();
+                      if (!usageByColor[colorLower]) {
+                        usageByColor[colorLower] = { color, amount: 0 };
+                      }
+                      usageByColor[colorLower].amount += partFilament;
+                    }
+                  });
+                });
+
+                // Add filament back for each color
+                Object.values(usageByColor).forEach(({ color, amount }) => {
+                  const colorLower = color.toLowerCase().trim();
+                  const filamentIdx = memberFilaments.findIndex(f => {
+                    const filColor = f.color.toLowerCase().trim();
+                    return filColor === colorLower ||
+                           filColor.includes(colorLower) ||
+                           colorLower.includes(filColor);
+                  });
+                  if (filamentIdx >= 0 && amount > 0) {
+                    memberFilaments[filamentIdx] = {
+                      ...memberFilaments[filamentIdx],
+                      amount: memberFilaments[filamentIdx].amount + amount
+                    };
+                    filamentChanged = true;
+                  }
+                });
+
+                if (filamentChanged) {
+                  const totalAdded = Object.values(usageByColor).reduce((sum, u) => sum + u.amount, 0);
+                  showNotification(`Added back ${totalAdded.toFixed(2)}g of filament`);
+                }
+              }
+
+              // Add back external parts
+              if (model.externalParts?.length > 0) {
+                const memberParts = [...(externalParts[o.assignedTo] || [])];
+                model.externalParts.forEach(needed => {
+                  const partIdx = memberParts.findIndex(p => p.name.toLowerCase() === needed.name.toLowerCase());
+                  if (partIdx >= 0) {
+                    memberParts[partIdx] = {
+                      ...memberParts[partIdx],
+                      quantity: memberParts[partIdx].quantity + (needed.quantity * o.quantity)
+                    };
+                  }
+                });
+                saveExternalParts({ ...externalParts, [o.assignedTo]: memberParts });
+              }
+            }
+          }
+
+          if (filamentChanged) {
+            saveFilaments({ ...filaments, [o.assignedTo]: memberFilaments });
+          }
+
+          // Clear completion data when unfulfilling
+          updates.completedPlates = [];
+          updates.plateColors = {};
+          updates.fulfilledAt = null;
+        }
+
         // Deduct inventory when fulfilled
         if (newStatus === 'fulfilled' && o.assignedTo) {
           const ROLL_SIZE = 1000;
