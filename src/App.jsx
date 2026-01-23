@@ -6993,7 +6993,95 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     let noRollCost = false;
     let noPlates = false;
 
-    if (matchingModel && order.assignedTo) {
+    // Helper function to calculate filament cost for a single item/model
+    const calculateItemFilamentCost = (model, itemColor, itemQuantity, memberFilaments) => {
+      let cost = 0;
+      const orderColor = (itemColor || model?.defaultColor || '').toLowerCase().trim();
+      const matchedFilament = memberFilaments.find(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor);
+      });
+
+      if (!matchedFilament) return { cost: 0, noMatch: true, noRoll: false, noPlates: false };
+
+      const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
+
+      if (printerSettings?.plates?.length > 0) {
+        const usageByColor = {};
+        printerSettings.plates.forEach(plate => {
+          if (plate.parts?.length > 0) {
+            plate.parts.forEach(part => {
+              const partQty = parseInt(part.quantity) || 1;
+              const partColor = (part.color || itemColor || model.defaultColor || '').toLowerCase().trim();
+              const partUsage = (parseFloat(part.filamentUsage) || 0) * partQty;
+              if (partColor && partUsage > 0) {
+                usageByColor[partColor] = (usageByColor[partColor] || 0) + partUsage;
+              }
+            });
+          } else if (plate.filamentUsage) {
+            const plateColor = (itemColor || model.defaultColor || '').toLowerCase().trim();
+            usageByColor[plateColor] = (usageByColor[plateColor] || 0) + (parseFloat(plate.filamentUsage) || 0);
+          }
+        });
+
+        Object.entries(usageByColor).forEach(([color, usage]) => {
+          const colorFilament = memberFilaments.find(f => {
+            const filColor = f.color.toLowerCase().trim();
+            return filColor === color || filColor.includes(color) || color.includes(filColor);
+          });
+          const colorRollCost = colorFilament?.currentRollCost || colorFilament?.costPerRoll || 0;
+          if (colorRollCost > 0) {
+            cost += usage * (colorRollCost / 1000) * itemQuantity;
+          }
+        });
+
+        if (cost <= 0 && Object.keys(usageByColor).length === 0) {
+          return { cost: 0, noMatch: false, noRoll: false, noPlates: true };
+        }
+      } else if (model.filamentUsage) {
+        const rollCost = matchedFilament?.currentRollCost || matchedFilament?.costPerRoll || 0;
+        if (rollCost > 0) {
+          cost = parseFloat(model.filamentUsage) * (rollCost / 1000) * itemQuantity;
+        } else {
+          return { cost: 0, noMatch: false, noRoll: true, noPlates: false };
+        }
+      } else {
+        return { cost: 0, noMatch: false, noRoll: false, noPlates: true };
+      }
+
+      return { cost, noMatch: false, noRoll: false, noPlates: false };
+    };
+
+    // Handle multi-item orders
+    if (order.lineItems && order.lineItems.length > 1 && order.assignedTo) {
+      const memberFilaments = filaments?.[order.assignedTo] || [];
+      let hasAnyModel = false;
+
+      order.lineItems.forEach(li => {
+        // Find matching model for this line item
+        const liModel = models.find(m => {
+          const liItem = (li.item || '').toLowerCase();
+          const modelName = m.name.toLowerCase();
+          if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+          if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+          return false;
+        });
+
+        if (liModel) {
+          hasAnyModel = true;
+          const result = calculateItemFilamentCost(liModel, li.color || order.color, li.quantity || 1, memberFilaments);
+          filamentCost += result.cost;
+          if (result.noMatch) noFilamentMatch = true;
+          if (result.noRoll) noRollCost = true;
+          if (result.noPlates) noPlates = true;
+        }
+      });
+
+      if (!hasAnyModel) {
+        // No model matched for any line item
+        noFilamentMatch = true;
+      }
+    } else if (matchingModel && order.assignedTo) {
       const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase().trim();
       const memberFilaments = filaments?.[order.assignedTo] || [];
       const matchedFilament = memberFilaments.find(f => {
@@ -7082,8 +7170,26 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     let partsCost = 0;
     const memberParts = order.assignedTo ? (externalParts?.[order.assignedTo] || []) : [];
 
-    // Parts from model definition
-    if (matchingModel && matchingModel.externalParts?.length > 0) {
+    // Parts from model definition - handle multi-item orders
+    if (order.lineItems && order.lineItems.length > 1) {
+      order.lineItems.forEach(li => {
+        const liModel = models.find(m => {
+          const liItem = (li.item || '').toLowerCase();
+          const modelName = m.name.toLowerCase();
+          if (liItem.includes(modelName) || modelName.includes(liItem)) return true;
+          if (m.aliases?.some(alias => liItem.includes(alias.toLowerCase()))) return true;
+          return false;
+        });
+        if (liModel && liModel.externalParts?.length > 0) {
+          liModel.externalParts.forEach(needed => {
+            const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+            if (matchedPart && matchedPart.costPerUnit > 0) {
+              partsCost += matchedPart.costPerUnit * needed.quantity * (li.quantity || 1);
+            }
+          });
+        }
+      });
+    } else if (matchingModel && matchingModel.externalParts?.length > 0) {
       matchingModel.externalParts.forEach(needed => {
         const matchedPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
         if (matchedPart && matchedPart.costPerUnit > 0) {
