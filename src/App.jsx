@@ -14218,12 +14218,13 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
     }
 
     const totalCost = filamentCost + partsCost + totalFees + salesTax;
-    const revenue = orderTotal;
+    const revenue = orderTotal + shippingCost; // Customer pays order + shipping
     const profit = revenue - totalCost;
 
     return {
       hasData: orderTotal > 0,
       orderTotal,
+      shippingCost,
       salesTax,
       totalFees,
       filamentCost,
@@ -14592,6 +14593,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.7rem', color: '#888' }}>
                     <span>Order: ${profitData.orderTotal.toFixed(2)}</span>
+                    {profitData.shippingCost > 0 && <span style={{ color: '#00ff88' }}>Shipping: +${profitData.shippingCost.toFixed(2)}</span>}
                     {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
                     {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
                     <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
