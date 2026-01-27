@@ -5802,6 +5802,8 @@ export default function EtsyOrderManager() {
               teamMembers={teamMembers}
               models={models}
               stores={stores}
+              filaments={filaments}
+              externalParts={externalParts}
               showNotification={showNotification}
             />
           )}
@@ -13901,7 +13903,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 }
 
 // Archive Tab Component
-function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, teamMembers, models, stores, showNotification }) {
+function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, teamMembers, models, stores, filaments, externalParts, showNotification }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [storeFilter, setStoreFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'regular', 'historical'
@@ -14153,6 +14155,84 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
   const historicalCount = archivedOrders.filter(o => o.isHistorical).length;
   const regularCount = archivedOrders.length - historicalCount;
 
+  // Calculate profit for an archived order
+  const calculateOrderProfit = (order, matchingModel) => {
+    // Parse order total (price field may be "$62.75" format)
+    const priceStr = order.price || '';
+    const orderTotal = parseFloat(priceStr.replace(/[^0-9.-]/g, '')) || 0;
+    const salesTax = parseFloat(order.salesTax) || 0;
+    const shippingCost = parseFloat(order.shippingCost) || 0;
+
+    // Calculate Etsy fees (13% transaction + 3% payment processing + $0.25)
+    const etsyTransactionFee = orderTotal * 0.065;
+    const etsyPaymentFee = (orderTotal + shippingCost + salesTax) * 0.03 + 0.25;
+    const totalFees = etsyTransactionFee + etsyPaymentFee;
+
+    // Calculate material cost
+    let filamentCost = 0;
+    let partsCost = 0;
+
+    if (matchingModel && order.assignedTo) {
+      // Get filament cost
+      const memberFilaments = filaments[order.assignedTo] || [];
+      const orderColor = (order.color || matchingModel.defaultColor || '').toLowerCase().trim();
+      const matchingFilament = memberFilaments.find(f => {
+        const filColor = f.color.toLowerCase().trim();
+        return filColor === orderColor || filColor.includes(orderColor) || orderColor.includes(filColor);
+      });
+
+      if (matchingFilament) {
+        const costPerGram = (matchingFilament.currentRollCost || matchingFilament.costPerRoll || 0) / 1000;
+        // Calculate filament usage from model
+        const printerSettings = matchingModel.printerSettings?.[0];
+        let filamentUsage = 0;
+        if (printerSettings?.plates?.length > 0) {
+          filamentUsage = printerSettings.plates.reduce((sum, plate) => {
+            if (plate.parts?.length > 0) {
+              return sum + plate.parts.reduce((partSum, part) => {
+                if (!part.isMultiColor) {
+                  const partQty = parseInt(part.quantity) || 1;
+                  return partSum + ((parseFloat(part.filamentUsage) || 0) * partQty);
+                }
+                return partSum;
+              }, 0);
+            }
+            return sum + (parseFloat(plate.filamentUsage) || 0);
+          }, 0);
+        } else {
+          filamentUsage = parseFloat(matchingModel.filamentUsage) || 0;
+        }
+        filamentCost = filamentUsage * (order.quantity || 1) * costPerGram;
+      }
+
+      // Get external parts cost
+      if (matchingModel.externalParts?.length > 0) {
+        const memberParts = externalParts[order.assignedTo] || [];
+        matchingModel.externalParts.forEach(needed => {
+          const inventoryPart = memberParts.find(p => p.name.toLowerCase() === needed.name.toLowerCase());
+          if (inventoryPart && inventoryPart.costPerUnit) {
+            partsCost += inventoryPart.costPerUnit * (needed.quantity || 1) * (order.quantity || 1);
+          }
+        });
+      }
+    }
+
+    const totalCost = filamentCost + partsCost + totalFees + salesTax;
+    const revenue = orderTotal;
+    const profit = revenue - totalCost;
+
+    return {
+      hasData: orderTotal > 0,
+      orderTotal,
+      salesTax,
+      totalFees,
+      filamentCost,
+      partsCost,
+      totalCost,
+      profit
+    };
+  };
+
   return (
     <>
       <div className="section-header">
@@ -14392,6 +14472,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
         <div className="orders-list">
           {filteredOrders.map(order => {
             const matchingModel = findMatchingModel(order);
+            const profitData = calculateOrderProfit(order, matchingModel);
             return (
             <div key={order.orderId} className="order-card" style={{ opacity: 0.8, height: 'auto', minHeight: 'fit-content' }}>
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -14483,6 +14564,39 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   </span>
                 </div>
               </div>
+
+              {/* Profit Analysis */}
+              {profitData.hasData && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  background: profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 107, 107, 0.1)',
+                  border: `1px solid ${profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#888' }}>Profit Analysis</span>
+                    <span style={{
+                      fontSize: '1rem',
+                      fontWeight: '600',
+                      color: profitData.profit >= 0 ? '#00ff88' : '#ff6b6b'
+                    }}>
+                      {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.7rem', color: '#888' }}>
+                    <span>Order: ${profitData.orderTotal.toFixed(2)}</span>
+                    {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
+                    {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
+                    <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
+                      Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
+                    </span>
+                    {profitData.partsCost > 0 && (
+                      <span style={{ color: '#00ccff' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* External Parts Required */}
               {matchingModel?.externalParts?.length > 0 && (
