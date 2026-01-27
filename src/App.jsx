@@ -14541,6 +14541,12 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     <span className="detail-value" style={{ color: '#00ff88' }}>{order.price}</span>
                   </div>
                 )}
+                {(order.shippingCost !== null && order.shippingCost !== undefined) && (
+                  <div className="detail-item">
+                    <span className="detail-label">Shipping</span>
+                    <span className="detail-value" style={{ color: '#ff9f43' }}>${parseFloat(order.shippingCost).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="detail-item">
                   <span className="detail-label">Color</span>
                   <span className="detail-value">{order.color || 'N/A'}</span>
