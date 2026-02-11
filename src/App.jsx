@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -381,21 +382,138 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
   const revenueByStore = getRevenueByStore();
   const topColors = getTopColors();
 
+  // Generate daily revenue data for chart
+  const getDailyRevenueData = () => {
+    const filteredOrders = getFilteredData(allOrders).filter(o => o.status === 'shipped');
+    const dailyData = {};
+
+    filteredOrders.forEach(order => {
+      const date = new Date(order.shippedAt || order.createdAt);
+      const dateKey = date.toISOString().split('T')[0];
+
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = { date: dateKey, revenue: 0, orders: 0, profit: 0 };
+      }
+
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      const orderTotal = parseFloat(priceStr) || 0;
+      const fees = orderTotal * 0.095 + 0.25; // Simplified fee calc
+      const materialCost = parseFloat(order.materialCost) || 0;
+      const shipping = parseFloat(order.shippingCost) || 0;
+
+      dailyData[dateKey].revenue += orderTotal;
+      dailyData[dateKey].orders += 1;
+      dailyData[dateKey].profit += orderTotal - fees - materialCost - shipping;
+    });
+
+    return Object.values(dailyData)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(-30); // Last 30 days
+  };
+
+  // Pie chart data for order status
+  const getOrderStatusData = () => {
+    const counts = getOrderCounts();
+    return [
+      { name: 'Pending', value: counts.pending, color: '#ffc107' },
+      { name: 'Fulfilled', value: counts.fulfilled, color: '#00ccff' },
+      { name: 'Shipped', value: counts.shipped, color: '#00ff88' }
+    ].filter(d => d.value > 0);
+  };
+
+  // Export orders to CSV
+  const exportOrdersCSV = () => {
+    const filteredOrders = getFilteredData(allOrders);
+    const headers = ['Order ID', 'Date', 'Item', 'Quantity', 'Color', 'Price', 'Shipping', 'Tax', 'Status', 'Store'];
+
+    const rows = filteredOrders.map(order => {
+      const store = (stores || []).find(s => s.id === order.storeId);
+      return [
+        order.orderId,
+        new Date(order.createdAt).toLocaleDateString(),
+        `"${(order.item || '').replace(/"/g, '""')}"`,
+        order.quantity || 1,
+        order.color || '',
+        order.price || '',
+        order.shippingCost || 0,
+        order.salesTax || 0,
+        order.status,
+        store?.name || 'Unknown'
+      ].join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    downloadCSV(csv, `orders-${timeRange}-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  // Export profit report to CSV
+  const exportProfitCSV = () => {
+    const headers = ['Metric', 'Amount'];
+    const rows = [
+      ['Total Revenue', `$${revenueData.orderTotal.toFixed(2)}`],
+      ['Revenue (after tax)', `$${revenueData.actualRevenue.toFixed(2)}`],
+      ['Sales Tax', `$${revenueData.salesTax.toFixed(2)}`],
+      ['Transaction Fees', `$${revenueData.transactionFees.toFixed(2)}`],
+      ['Payment Fees', `$${revenueData.paymentFees.toFixed(2)}`],
+      ['Total Fees', `$${revenueData.totalFees.toFixed(2)}`],
+      ['Material Expenses', `$${expenses.toFixed(2)}`],
+      ['Shipping Costs', `$${shippingCosts.toFixed(2)}`],
+      ['Net Profit', `$${netProfit.toFixed(2)}`],
+      ['Profit Margin', `${revenueData.actualRevenue > 0 ? ((netProfit / revenueData.actualRevenue) * 100).toFixed(1) : 0}%`],
+      ['', ''],
+      ['Total Orders', orderCounts.total],
+      ['Shipped Orders', orderCounts.shipped],
+      ['Pending Orders', orderCounts.pending]
+    ];
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    downloadCSV(csv, `profit-report-${timeRange}-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  // Helper to download CSV
+  const downloadCSV = (content, filename) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const dailyRevenueData = getDailyRevenueData();
+  const orderStatusData = getOrderStatusData();
+
   return (
     <>
       <div className="section-header">
         <h2 className="page-title"><TrendingUp size={28} /> Revenue Dashboard</h2>
-        <select
-          className="form-input"
-          value={timeRange}
-          onChange={e => setTimeRange(e.target.value)}
-          style={{ width: '180px' }}
-        >
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-          <option value="all">All Time</option>
-        </select>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={exportOrdersCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Download size={16} /> Export Orders
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={exportProfitCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <FileText size={16} /> Export Report
+          </button>
+          <select
+            className="form-input"
+            value={timeRange}
+            onChange={e => setTimeRange(e.target.value)}
+            style={{ width: '180px' }}
+          >
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="all">All Time</option>
+          </select>
+        </div>
       </div>
 
       {/* Key Metrics */}
@@ -515,6 +633,106 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ff88' }}>{orderCounts.shipped}</div>
             <div style={{ fontSize: '0.85rem', color: '#888' }}>Shipped</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+        {/* Revenue Trend Chart */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <BarChart3 size={20} /> Revenue Trend
+          </h3>
+          {dailyRevenueData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={dailyRevenueData}>
+                <defs>
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#00ff88" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00ccff" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#00ccff" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#666"
+                  tick={{ fill: '#888', fontSize: 10 }}
+                  tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                />
+                <YAxis stroke="#666" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(val) => `$${val}`} />
+                <Tooltip
+                  contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px' }}
+                  labelStyle={{ color: '#fff' }}
+                  formatter={(value, name) => [`$${value.toFixed(2)}`, name === 'revenue' ? 'Revenue' : 'Profit']}
+                  labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                />
+                <Area type="monotone" dataKey="revenue" stroke="#00ff88" fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="profit" stroke="#00ccff" fillOpacity={1} fill="url(#colorProfit)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+              No revenue data yet
+            </div>
+          )}
+        </div>
+
+        {/* Order Status Pie Chart */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          <h3 style={{ color: '#00ccff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <PieChart size={20} /> Order Status Distribution
+          </h3>
+          {orderStatusData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <RechartsPieChart>
+                <Pie
+                  data={orderStatusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={{ stroke: '#666' }}
+                >
+                  {orderStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px' }}
+                  formatter={(value, name) => [value, name]}
+                />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+              No orders yet
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '8px' }}>
+            {orderStatusData.map((entry) => (
+              <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: entry.color }} />
+                <span style={{ fontSize: '0.8rem', color: '#888' }}>{entry.name}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
