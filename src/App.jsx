@@ -5956,32 +5956,30 @@ export default function EtsyOrderManager() {
           {/* INVENTORY TAB (Filament + Supplies + Restock) */}
           {activeTab === 'inventory' && (
             <>
-              {uiMode === 'advanced' && (
-                <div className="sub-nav">
-                  <button
-                    className={inventorySubTab === 'filament' ? 'active' : ''}
-                    onClick={() => setInventorySubTab('filament')}
-                  >
-                    <Palette size={16} style={{ marginRight: '6px' }} />
-                    Filament
-                  </button>
-                  <button
-                    className={inventorySubTab === 'supplies' ? 'active' : ''}
-                    onClick={() => setInventorySubTab('supplies')}
-                  >
-                    <ShoppingBag size={16} style={{ marginRight: '6px' }} />
-                    Supplies
-                  </button>
-                  <button
-                    className={inventorySubTab === 'restock' ? 'active' : ''}
-                    onClick={() => setInventorySubTab('restock')}
-                  >
-                    <AlertCircle size={16} style={{ marginRight: '6px' }} />
-                    Restock
-                  </button>
-                </div>
-              )}
-              {(uiMode === 'simple' || inventorySubTab === 'filament') && (
+              <div className="sub-nav">
+                <button
+                  className={inventorySubTab === 'filament' ? 'active' : ''}
+                  onClick={() => setInventorySubTab('filament')}
+                >
+                  <Palette size={16} style={{ marginRight: '6px' }} />
+                  Filament
+                </button>
+                <button
+                  className={inventorySubTab === 'supplies' ? 'active' : ''}
+                  onClick={() => setInventorySubTab('supplies')}
+                >
+                  <ShoppingBag size={16} style={{ marginRight: '6px' }} />
+                  Supplies
+                </button>
+                <button
+                  className={inventorySubTab === 'restock' ? 'active' : ''}
+                  onClick={() => setInventorySubTab('restock')}
+                >
+                  <AlertCircle size={16} style={{ marginRight: '6px' }} />
+                  Restock
+                </button>
+              </div>
+              {inventorySubTab === 'filament' && (
                 <FilamentTab
                   filaments={filaments}
                   teamMembers={teamMembers}
@@ -5989,7 +5987,7 @@ export default function EtsyOrderManager() {
                   showNotification={showNotification}
                 />
               )}
-              {uiMode === 'advanced' && inventorySubTab === 'supplies' && (
+              {inventorySubTab === 'supplies' && (
                 <PartsTab
                   externalParts={externalParts}
                   supplyCategories={supplyCategories}
@@ -5999,7 +5997,7 @@ export default function EtsyOrderManager() {
                   showNotification={showNotification}
                 />
               )}
-              {uiMode === 'advanced' && inventorySubTab === 'restock' && (
+              {inventorySubTab === 'restock' && (
                 <RestockTab
                   externalParts={externalParts}
                   supplyCategories={supplyCategories}
