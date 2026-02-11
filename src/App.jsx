@@ -7916,39 +7916,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   }
 
   return (
-    <div className="order-card" style={{
-      position: 'relative',
-      ...(order.assignmentIssue ? {
-        borderColor: 'rgba(255, 107, 107, 0.5)',
-        boxShadow: '0 0 0 1px rgba(255, 107, 107, 0.3), inset 0 0 20px rgba(255, 107, 107, 0.05)'
-      } : {})
-    }}>
-      {/* Collapse button for expanded cards in simple mode */}
-      {uiMode === 'simple' && isExpanded && (
-        <button
-          onClick={() => setIsExpanded(false)}
-          style={{
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            background: 'rgba(0, 204, 255, 0.2)',
-            border: '1px solid rgba(0, 204, 255, 0.4)',
-            borderRadius: '6px',
-            padding: '6px 10px',
-            cursor: 'pointer',
-            color: '#00ccff',
-            zIndex: 10,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '0.75rem',
-            fontWeight: '500'
-          }}
-          title="Collapse card"
-        >
-          <ChevronUp size={14} /> Collapse
-        </button>
-      )}
+    <div className="order-card" style={order.assignmentIssue ? {
+      borderColor: 'rgba(255, 107, 107, 0.5)',
+      boxShadow: '0 0 0 1px rgba(255, 107, 107, 0.3), inset 0 0 20px rgba(255, 107, 107, 0.05)'
+    } : {}}>
       <div style={{ display: 'flex', gap: '12px' }}>
         {/* Model Image */}
         {matchingModel?.imageUrl ? (
@@ -9248,6 +9219,30 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           <RefreshCw size={14} /> Reprint
         </button>
       </div>
+
+      {/* Collapse button for expanded cards in simple mode */}
+      {uiMode === 'simple' && isExpanded && (
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{
+            width: '100%',
+            marginTop: '12px',
+            padding: '8px',
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            color: '#888',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            fontSize: '0.8rem'
+          }}
+        >
+          <ChevronUp size={16} /> Collapse
+        </button>
+      )}
 
       {/* Reprint Modal */}
       {showReprintModal && (
