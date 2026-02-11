@@ -11,11 +11,34 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Simplified 4-color palette */
+  --color-primary: #00ff88;
+  --color-secondary: #00ccff;
+  --color-warning: #ff9f43;
+  --color-error: #ff6b6b;
+
+  /* Background variations */
+  --color-primary-bg: rgba(0, 255, 136, 0.1);
+  --color-primary-border: rgba(0, 255, 136, 0.3);
+  --color-secondary-bg: rgba(0, 204, 255, 0.1);
+  --color-secondary-border: rgba(0, 204, 255, 0.3);
+  --color-warning-bg: rgba(255, 159, 67, 0.1);
+  --color-warning-border: rgba(255, 159, 67, 0.3);
+  --color-error-bg: rgba(255, 107, 107, 0.1);
+  --color-error-border: rgba(255, 107, 107, 0.3);
+
+  /* UI colors */
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-muted: #888;
+  --color-bg-card: rgba(255, 255, 255, 0.03);
+  --color-bg-hover: rgba(255, 255, 255, 0.05);
+  --color-border: rgba(255, 255, 255, 0.1);
 }
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--color-secondary);
   text-decoration: inherit;
 }
 a:hover {
@@ -68,7 +91,7 @@ button[style*="background:none"] {
   background: transparent !important;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: var(--color-secondary);
 }
 button:focus,
 button:focus-visible {
@@ -88,7 +111,9 @@ button:focus-visible {
   }
 }
 
-/* Spinning animation for sync button */
+/* ===== Essential Animations Only ===== */
+
+/* Spinning animation for sync/loading */
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -98,75 +123,29 @@ button:focus-visible {
   animation: spin 1s linear infinite;
 }
 
-/* ===== Enhanced UI Styles ===== */
-
-/* Smooth transitions for all interactive elements */
-* {
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-}
-
-/* Card hover effects */
-.order-card:hover,
-.stat-card:hover,
-.model-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-}
-
-/* Pulse animation for notifications */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.pulse {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-/* Slide in animation */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.slide-in {
-  animation: slideIn 0.3s ease-out;
-}
-
-/* Fade in animation */
+/* Fade in for modals */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 .fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.2s ease-out;
 }
 
-/* Scale animation for buttons */
-@keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+/* Toast notification slide */
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
-/* Glow effect for important elements */
-.glow-green {
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
-}
-
-.glow-orange {
-  box-shadow: 0 0 20px rgba(255, 159, 67, 0.3);
-}
-
-.glow-red {
-  box-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
-}
+/* ===== Simplified UI Styles ===== */
 
 /* Better scrollbar styling */
 ::-webkit-scrollbar {
@@ -188,68 +167,17 @@ button:focus-visible {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Button enhancements */
-.btn {
-  position: relative;
-  overflow: hidden;
-}
-
-.btn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.4s ease, height 0.4s ease;
-}
-
-.btn:active::after {
-  width: 300px;
-  height: 300px;
-}
-
-/* Status badge enhancements */
-.status-badge {
-  transition: all 0.2s ease;
-}
-
-.status-badge:hover {
-  transform: scale(1.05);
-}
-
 /* Input focus effects */
 input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 0 2px var(--color-primary-border);
 }
 
 /* Modal backdrop blur */
 .modal-overlay {
   backdrop-filter: blur(4px);
-}
-
-/* Progress bar animation */
-@keyframes progressPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-/* Skeleton loading animation */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.skeleton {
-  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
 }
 
 /* Tooltip styles */
@@ -280,71 +208,88 @@ textarea:focus {
   visibility: visible;
 }
 
-/* Low stock warning animation */
-@keyframes lowStockPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
-  }
+/* Simple/Advanced mode toggle */
+.mode-toggle {
+  display: flex;
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
 }
 
-.low-stock-warning {
-  animation: lowStockPulse 2s infinite;
+.mode-toggle button {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  transition: all 0.2s;
 }
 
-/* Notification toast animation */
-@keyframes toastSlideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.mode-toggle button.active {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
 }
 
-@keyframes toastSlideOut {
-  from {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
+/* Sub-navigation pills */
+.sub-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  width: fit-content;
 }
 
-/* Number counter animation */
-@keyframes countUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.sub-nav button {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  transition: all 0.2s;
 }
 
-/* Tab indicator animation */
-.tab-indicator {
-  transition: left 0.3s ease, width 0.3s ease;
+.sub-nav button.active {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
 }
 
-/* Gradient text effect */
-.gradient-text {
-  background: linear-gradient(135deg, #00ff88, #00ccff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.sub-nav button:hover:not(.active) {
+  background: var(--color-bg-hover);
 }
 
-/* Glass morphism effect */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* Collapsible order card styles */
+.order-card {
+  transition: box-shadow 0.2s;
+}
+
+.order-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.order-card-compact {
+  cursor: pointer;
+}
+
+.order-card-expand-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.order-card-expand-btn.expanded {
+  transform: rotate(180deg);
 }
 
 /* Improved focus states for accessibility */
 *:focus-visible {
-  outline: 2px solid #00ff88;
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }

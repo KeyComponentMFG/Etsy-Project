@@ -1475,6 +1475,15 @@ export default function EtsyOrderManager() {
   const [selectedFulfillmentParts, setSelectedFulfillmentParts] = useState({}); // {partName: quantity}
   const [subscriptions, setSubscriptions] = useState([]);
 
+  // UI Mode: 'simple' or 'advanced'
+  const [uiMode, setUiMode] = useState('simple');
+
+  // Sub-tab states for combined tabs
+  const [ordersSubTab, setOrdersSubTab] = useState('queue'); // 'queue' or 'schedule'
+  const [inventorySubTab, setInventorySubTab] = useState('filament'); // 'filament', 'supplies', or 'restock'
+  const [equipmentSubTab, setEquipmentSubTab] = useState('printers'); // 'printers' or 'stores'
+  const [financeSubTab, setFinanceSubTab] = useState('dashboard'); // 'dashboard', 'costs', 'finance', or 'analytics'
+
   // Helper function to parse color field
   const parseColorField = (colorField) => {
     const colorValues = ['sage', 'charcoal', 'navy', 'teal', 'cyan', 'magenta', 'beige', 'cream', 'ivory', 'tan', 'maroon', 'burgundy', 'olive', 'lime', 'coral', 'salmon', 'turquoise', 'indigo', 'violet', 'lavender', 'mint', 'peach', 'rose', 'bronze', 'black', 'white', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'gray', 'grey', 'gold', 'silver', 'natural', 'wood', 'clear', 'transparent', 'multicolor', 'rainbow'];
@@ -4939,20 +4948,14 @@ export default function EtsyOrderManager() {
     );
   }
 
+  // Consolidated tabs (14 → 7)
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
-    { id: 'queue', label: 'Order Queue', icon: Package },
-    { id: 'schedule', label: 'Schedule', icon: Clock },
-    { id: 'stores', label: 'Stores', icon: Store },
-    { id: 'printers', label: 'Printers', icon: Printer },
-    { id: 'filament', label: 'Filament', icon: Palette },
-    { id: 'models', label: 'Models', icon: Box },
-    { id: 'parts', label: 'Supplies', icon: ShoppingBag },
-    { id: 'costs', label: 'Costs', icon: DollarSign },
-    { id: 'finance', label: 'Finance', icon: PieChart },
-    { id: 'restock', label: 'Restock', icon: AlertCircle },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'archive', label: 'Archive', icon: Archive },
+    { id: 'orders', label: 'Orders', icon: Package },
+    { id: 'inventory', label: 'Inventory', icon: Box },
+    { id: 'products', label: 'Products', icon: Printer },
+    { id: 'equipment', label: 'Equipment', icon: Settings },
+    { id: 'finance', label: 'Finance', icon: TrendingUp },
+    { id: 'history', label: 'History', icon: Archive },
     { id: 'team', label: 'Team', icon: Users }
   ];
 
@@ -5762,6 +5765,21 @@ export default function EtsyOrderManager() {
           )}
         </div>
         <div className="header-actions">
+          {/* Simple/Advanced Mode Toggle */}
+          <div className="mode-toggle" style={{ marginRight: '16px' }}>
+            <button
+              className={uiMode === 'simple' ? 'active' : ''}
+              onClick={() => setUiMode('simple')}
+            >
+              Simple
+            </button>
+            <button
+              className={uiMode === 'advanced' ? 'active' : ''}
+              onClick={() => setUiMode('advanced')}
+            >
+              Advanced
+            </button>
+          </div>
           <button
             className="btn btn-secondary"
             onClick={() => loadData(false)}
@@ -5800,9 +5818,9 @@ export default function EtsyOrderManager() {
       <div className="main-content">
         <nav className="sidebar">
           {tabs.map(tab => {
-            // Calculate restock count for badge (supplies + filaments + models)
+            // Calculate restock count for badge on Inventory tab
             let restockCount = 0;
-            if (tab.id === 'restock') {
+            if (tab.id === 'inventory') {
               // Count supplies needing restock
               teamMembers.forEach(member => {
                 const memberParts = externalParts[member.id] || [];
@@ -5838,10 +5856,10 @@ export default function EtsyOrderManager() {
             >
               <tab.icon size={20} />
               {tab.label}
-              {tab.id === 'restock' && restockCount > 0 && (
+              {tab.id === 'inventory' && restockCount > 0 && (
                 <span style={{
                   marginLeft: 'auto',
-                  background: '#ffc107',
+                  background: 'var(--color-warning)',
                   color: '#000',
                   fontSize: '0.7rem',
                   fontWeight: '700',
@@ -5858,92 +5876,142 @@ export default function EtsyOrderManager() {
         </nav>
 
         <main className="content-area">
-          {/* Low Stock Alerts Banner */}
-          <LowStockAlerts
-            filaments={filaments}
-            externalParts={externalParts}
-            teamMembers={teamMembers}
-            models={models}
-            setActiveTab={setActiveTab}
-          />
-          {activeTab === 'dashboard' && (
-            <DashboardTab
-              orders={orders}
-              archivedOrders={archivedOrders}
-              purchases={purchases}
-              models={models}
-              stores={stores}
+          {/* Low Stock Alerts Banner - only in Advanced mode */}
+          {uiMode === 'advanced' && (
+            <LowStockAlerts
               filaments={filaments}
               externalParts={externalParts}
-            />
-          )}
-
-          {activeTab === 'queue' && (
-            <QueueTab
-              orders={orders}
-              setOrders={setOrders}
               teamMembers={teamMembers}
-              stores={stores}
-              printers={printers}
               models={models}
-              filaments={filaments}
-              externalParts={externalParts}
-              selectedStoreFilter={selectedStoreFilter}
-              setSelectedStoreFilter={setSelectedStoreFilter}
-              updateOrderStatus={updateOrderStatus}
-              initiateFulfillment={initiateFulfillment}
-              reassignOrder={reassignOrder}
-              showNotification={showNotification}
-              saveFilaments={saveFilaments}
-              togglePlateComplete={togglePlateComplete}
-              reprintPart={reprintPart}
-              deleteReprint={deleteReprint}
-              fulfillLineItem={fulfillLineItem}
-              unfulfillLineItem={unfulfillLineItem}
-              toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+              setActiveTab={(tab) => {
+                if (tab === 'restock') {
+                  setActiveTab('inventory');
+                  setInventorySubTab('restock');
+                } else {
+                  setActiveTab(tab);
+                }
+              }}
             />
           )}
 
-          {activeTab === 'schedule' && (
-            <ScheduleTab
-              orders={orders}
-              models={models}
-              teamMembers={teamMembers}
-              printers={printers}
-              setOrders={setOrders}
-            />
+          {/* ORDERS TAB (Queue + Schedule) */}
+          {activeTab === 'orders' && (
+            <>
+              {uiMode === 'advanced' && (
+                <div className="sub-nav">
+                  <button
+                    className={ordersSubTab === 'queue' ? 'active' : ''}
+                    onClick={() => setOrdersSubTab('queue')}
+                  >
+                    <Package size={16} style={{ marginRight: '6px' }} />
+                    Order Queue
+                  </button>
+                  <button
+                    className={ordersSubTab === 'schedule' ? 'active' : ''}
+                    onClick={() => setOrdersSubTab('schedule')}
+                  >
+                    <Clock size={16} style={{ marginRight: '6px' }} />
+                    Schedule
+                  </button>
+                </div>
+              )}
+              {(uiMode === 'simple' || ordersSubTab === 'queue') && (
+                <QueueTab
+                  orders={orders}
+                  setOrders={setOrders}
+                  teamMembers={teamMembers}
+                  stores={stores}
+                  printers={printers}
+                  models={models}
+                  filaments={filaments}
+                  externalParts={externalParts}
+                  selectedStoreFilter={selectedStoreFilter}
+                  setSelectedStoreFilter={setSelectedStoreFilter}
+                  updateOrderStatus={updateOrderStatus}
+                  initiateFulfillment={initiateFulfillment}
+                  reassignOrder={reassignOrder}
+                  showNotification={showNotification}
+                  saveFilaments={saveFilaments}
+                  togglePlateComplete={togglePlateComplete}
+                  reprintPart={reprintPart}
+                  deleteReprint={deleteReprint}
+                  fulfillLineItem={fulfillLineItem}
+                  unfulfillLineItem={unfulfillLineItem}
+                  toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                  uiMode={uiMode}
+                />
+              )}
+              {uiMode === 'advanced' && ordersSubTab === 'schedule' && (
+                <ScheduleTab
+                  orders={orders}
+                  models={models}
+                  teamMembers={teamMembers}
+                  printers={printers}
+                  setOrders={setOrders}
+                />
+              )}
+            </>
           )}
 
-          {activeTab === 'stores' && (
-            <StoresTab
-              stores={stores}
-              saveStores={saveStores}
-              orders={orders}
-              archivedOrders={archivedOrders}
-              showNotification={showNotification}
-            />
+          {/* INVENTORY TAB (Filament + Supplies + Restock) */}
+          {activeTab === 'inventory' && (
+            <>
+              {uiMode === 'advanced' && (
+                <div className="sub-nav">
+                  <button
+                    className={inventorySubTab === 'filament' ? 'active' : ''}
+                    onClick={() => setInventorySubTab('filament')}
+                  >
+                    <Palette size={16} style={{ marginRight: '6px' }} />
+                    Filament
+                  </button>
+                  <button
+                    className={inventorySubTab === 'supplies' ? 'active' : ''}
+                    onClick={() => setInventorySubTab('supplies')}
+                  >
+                    <ShoppingBag size={16} style={{ marginRight: '6px' }} />
+                    Supplies
+                  </button>
+                  <button
+                    className={inventorySubTab === 'restock' ? 'active' : ''}
+                    onClick={() => setInventorySubTab('restock')}
+                  >
+                    <AlertCircle size={16} style={{ marginRight: '6px' }} />
+                    Restock
+                  </button>
+                </div>
+              )}
+              {(uiMode === 'simple' || inventorySubTab === 'filament') && (
+                <FilamentTab
+                  filaments={filaments}
+                  teamMembers={teamMembers}
+                  saveFilaments={saveFilaments}
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && inventorySubTab === 'supplies' && (
+                <PartsTab
+                  externalParts={externalParts}
+                  supplyCategories={supplyCategories}
+                  teamMembers={teamMembers}
+                  saveExternalParts={saveExternalParts}
+                  saveSupplyCategories={saveSupplyCategories}
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && inventorySubTab === 'restock' && (
+                <RestockTab
+                  externalParts={externalParts}
+                  supplyCategories={supplyCategories}
+                  teamMembers={teamMembers}
+                  filaments={filaments}
+                />
+              )}
+            </>
           )}
 
-          {activeTab === 'printers' && (
-            <PrintersTab
-              printers={printers}
-              savePrinters={savePrinters}
-              orders={orders}
-              teamMembers={teamMembers}
-              showNotification={showNotification}
-            />
-          )}
-
-          {activeTab === 'filament' && (
-            <FilamentTab
-              filaments={filaments}
-              teamMembers={teamMembers}
-              saveFilaments={saveFilaments}
-              showNotification={showNotification}
-            />
-          )}
-          
-          {activeTab === 'models' && (
+          {/* PRODUCTS TAB (Models) */}
+          {activeTab === 'products' && (
             <ModelsTab
               models={models}
               stores={stores}
@@ -5953,65 +6021,135 @@ export default function EtsyOrderManager() {
               showNotification={showNotification}
             />
           )}
-          
-          {activeTab === 'parts' && (
-            <PartsTab
-              externalParts={externalParts}
-              supplyCategories={supplyCategories}
-              teamMembers={teamMembers}
-              saveExternalParts={saveExternalParts}
-              saveSupplyCategories={saveSupplyCategories}
-              showNotification={showNotification}
-            />
+
+          {/* EQUIPMENT TAB (Printers + Stores) */}
+          {activeTab === 'equipment' && (
+            <>
+              {uiMode === 'advanced' && (
+                <div className="sub-nav">
+                  <button
+                    className={equipmentSubTab === 'printers' ? 'active' : ''}
+                    onClick={() => setEquipmentSubTab('printers')}
+                  >
+                    <Printer size={16} style={{ marginRight: '6px' }} />
+                    Printers
+                  </button>
+                  <button
+                    className={equipmentSubTab === 'stores' ? 'active' : ''}
+                    onClick={() => setEquipmentSubTab('stores')}
+                  >
+                    <Store size={16} style={{ marginRight: '6px' }} />
+                    Stores
+                  </button>
+                </div>
+              )}
+              {(uiMode === 'simple' || equipmentSubTab === 'printers') && (
+                <PrintersTab
+                  printers={printers}
+                  savePrinters={savePrinters}
+                  orders={orders}
+                  teamMembers={teamMembers}
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && equipmentSubTab === 'stores' && (
+                <StoresTab
+                  stores={stores}
+                  saveStores={saveStores}
+                  orders={orders}
+                  archivedOrders={archivedOrders}
+                  showNotification={showNotification}
+                />
+              )}
+            </>
           )}
 
-          {activeTab === 'costs' && (
-            <CostsTab
-              purchases={purchases}
-              savePurchases={savePurchases}
-              subscriptions={subscriptions}
-              saveSubscriptions={saveSubscriptions}
-              printers={printers}
-              showNotification={showNotification}
-            />
-          )}
-
+          {/* FINANCE TAB (Dashboard + Costs + Finance + Analytics) */}
           {activeTab === 'finance' && (
-            <FinanceTab
-              orders={orders}
-              archivedOrders={archivedOrders}
-              purchases={purchases}
-              subscriptions={subscriptions}
-              printers={printers}
-              teamMembers={teamMembers}
-              showNotification={showNotification}
-            />
+            <>
+              {uiMode === 'advanced' && (
+                <div className="sub-nav">
+                  <button
+                    className={financeSubTab === 'dashboard' ? 'active' : ''}
+                    onClick={() => setFinanceSubTab('dashboard')}
+                  >
+                    <TrendingUp size={16} style={{ marginRight: '6px' }} />
+                    Dashboard
+                  </button>
+                  <button
+                    className={financeSubTab === 'costs' ? 'active' : ''}
+                    onClick={() => setFinanceSubTab('costs')}
+                  >
+                    <DollarSign size={16} style={{ marginRight: '6px' }} />
+                    Costs
+                  </button>
+                  <button
+                    className={financeSubTab === 'reports' ? 'active' : ''}
+                    onClick={() => setFinanceSubTab('reports')}
+                  >
+                    <PieChart size={16} style={{ marginRight: '6px' }} />
+                    Reports
+                  </button>
+                  <button
+                    className={financeSubTab === 'analytics' ? 'active' : ''}
+                    onClick={() => setFinanceSubTab('analytics')}
+                  >
+                    <BarChart3 size={16} style={{ marginRight: '6px' }} />
+                    Analytics
+                  </button>
+                </div>
+              )}
+              {(uiMode === 'simple' || financeSubTab === 'dashboard') && (
+                <DashboardTab
+                  orders={orders}
+                  archivedOrders={archivedOrders}
+                  purchases={purchases}
+                  models={models}
+                  stores={stores}
+                  filaments={filaments}
+                  externalParts={externalParts}
+                  uiMode={uiMode}
+                />
+              )}
+              {uiMode === 'advanced' && financeSubTab === 'costs' && (
+                <CostsTab
+                  purchases={purchases}
+                  savePurchases={savePurchases}
+                  subscriptions={subscriptions}
+                  saveSubscriptions={saveSubscriptions}
+                  printers={printers}
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && financeSubTab === 'reports' && (
+                <FinanceTab
+                  orders={orders}
+                  archivedOrders={archivedOrders}
+                  purchases={purchases}
+                  subscriptions={subscriptions}
+                  printers={printers}
+                  teamMembers={teamMembers}
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && financeSubTab === 'analytics' && (
+                <AnalyticsTab
+                  orders={orders}
+                  setOrders={setOrders}
+                  archivedOrders={archivedOrders}
+                  setArchivedOrders={setArchivedOrders}
+                  models={models}
+                  filaments={filaments}
+                  teamMembers={teamMembers}
+                  filamentUsageHistory={filamentUsageHistory}
+                  showNotification={showNotification}
+                />
+              )}
+            </>
           )}
 
-          {activeTab === 'restock' && (
-            <RestockTab
-              externalParts={externalParts}
-              supplyCategories={supplyCategories}
-              teamMembers={teamMembers}
-              filaments={filaments}
-            />
-          )}
-
-          {activeTab === 'analytics' && (
-            <AnalyticsTab
-              orders={orders}
-              setOrders={setOrders}
-              archivedOrders={archivedOrders}
-              setArchivedOrders={setArchivedOrders}
-              models={models}
-              filaments={filaments}
-              teamMembers={teamMembers}
-              filamentUsageHistory={filamentUsageHistory}
-              showNotification={showNotification}
-            />
-          )}
-
-          {activeTab === 'archive' && (
+          {/* HISTORY TAB (Archive) */}
+          {activeTab === 'history' && (
             <ArchiveTab
               archivedOrders={archivedOrders}
               saveArchivedOrders={setArchivedOrders}
@@ -6025,7 +6163,8 @@ export default function EtsyOrderManager() {
               showNotification={showNotification}
             />
           )}
-          
+
+          {/* TEAM TAB */}
           {activeTab === 'team' && (
             <TeamTab
               teamMembers={teamMembers}
@@ -6414,7 +6553,7 @@ function calculateShipByDate(orderDate, processingDays) {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete, uiMode = 'advanced' }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
@@ -7032,6 +7171,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   unfulfillLineItem={unfulfillLineItem}
                                   showNotification={showNotification}
                                   toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                                  uiMode={uiMode}
                                 />
                               ))}
                             </div>
@@ -7091,6 +7231,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     unfulfillLineItem={unfulfillLineItem}
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                    uiMode={uiMode}
                   />
                 ))
               )}
@@ -7132,6 +7273,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     unfulfillLineItem={unfulfillLineItem}
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                    uiMode={uiMode}
                   />
                 ))
               )}
@@ -7144,7 +7286,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, showNotification, toggleLineItemPlateComplete }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, showNotification, toggleLineItemPlateComplete, uiMode = 'advanced' }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -7154,6 +7296,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
   const [reprintData, setReprintData] = useState({ filamentUsage: '', printHours: '0', printMinutes: '0' });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editData, setEditData] = useState({});
+  const [isExpanded, setIsExpanded] = useState(uiMode === 'advanced');
 
   const openEditModal = () => {
     setEditData({
@@ -7653,17 +7796,157 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     setShippingCostInput('');
   };
 
+  // Compact view for Simple mode
+  const showCompact = uiMode === 'simple' && !isExpanded;
+
+  // Ship by date calculation for compact view
+  const shipByDate = order.overrideShipByDate ? new Date(order.overrideShipByDate) :
+    order.shipByDate ? new Date(order.shipByDate) : null;
+  const isOverdue = shipByDate && shipByDate < new Date();
+  const isDueSoon = shipByDate && !isOverdue && (shipByDate - new Date()) < 2 * 24 * 60 * 60 * 1000;
+
+  // Compact Card View
+  if (showCompact) {
+    return (
+      <div
+        className="order-card order-card-compact"
+        onClick={() => setIsExpanded(true)}
+        style={{
+          cursor: 'pointer',
+          ...(order.assignmentIssue ? {
+            borderColor: 'rgba(255, 107, 107, 0.5)',
+            boxShadow: '0 0 0 1px rgba(255, 107, 107, 0.3)'
+          } : {})
+        }}
+      >
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Small Image */}
+          {matchingModel?.imageUrl ? (
+            <img
+              src={matchingModel.imageUrl}
+              alt={matchingModel.name}
+              style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{ width: '50px', height: '50px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Image size={20} style={{ color: '#444' }} />
+            </div>
+          )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Top row: ID + Item */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', color: '#888' }}>{order.orderId}</span>
+              {store && (
+                <span style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: '6px', backgroundColor: store.color + '20', color: store.color }}>{store.name}</span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {order.item}
+            </div>
+            {/* Bottom row: Color + Ship By + Price */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: '#888' }}>
+              <span><Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />{order.color || 'No color'}</span>
+              {shipByDate && (
+                <span style={{ color: isOverdue ? 'var(--color-error)' : isDueSoon ? 'var(--color-warning)' : '#888' }}>
+                  <Clock size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                  {shipByDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              <span style={{ color: 'var(--color-primary)' }}>{order.price}</span>
+            </div>
+          </div>
+
+          {/* Right side: Status + Actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+            <span className={`status-badge status-${order.status}`} style={{ fontSize: '0.7rem', padding: '3px 8px' }}>
+              {statusIcons[order.status]} {order.status}
+            </span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {order.status === 'received' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); initiateFulfillment(order); }}
+                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 136, 0.2)', color: '#00ff88', cursor: 'pointer' }}
+                >
+                  Fulfill
+                </button>
+              )}
+              {order.status === 'fulfilled' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowShippingModal(true); }}
+                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 204, 255, 0.2)', color: '#00ccff', cursor: 'pointer' }}
+                >
+                  Ship
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+                style={{ padding: '4px 6px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#888', cursor: 'pointer' }}
+                title="Expand details"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Shipping Modal for compact view */}
+        {showShippingModal && (
+          <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowShippingModal(false); }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '320px' }}>
+              <h3 style={{ marginBottom: '16px' }}>Enter Shipping Cost</h3>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Shipping cost ($)"
+                value={shippingCostInput}
+                onChange={(e) => setShippingCostInput(e.target.value)}
+                style={{ width: '100%', padding: '10px', marginBottom: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowShippingModal(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleShipOrder} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#00ff88', color: '#000', cursor: 'pointer', fontWeight: '600' }}>Confirm Ship</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="order-card" style={order.assignmentIssue ? {
       borderColor: 'rgba(255, 107, 107, 0.5)',
       boxShadow: '0 0 0 1px rgba(255, 107, 107, 0.3), inset 0 0 20px rgba(255, 107, 107, 0.05)'
     } : {}}>
+      {/* Collapse button for expanded cards in simple mode */}
+      {uiMode === 'simple' && isExpanded && (
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: 'rgba(255,255,255,0.1)',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '4px',
+            cursor: 'pointer',
+            color: '#888',
+            zIndex: 10
+          }}
+          title="Collapse"
+        >
+          <ChevronUp size={16} />
+        </button>
+      )}
       <div style={{ display: 'flex', gap: '12px' }}>
         {/* Model Image */}
         {matchingModel?.imageUrl ? (
           <div style={{ flexShrink: 0 }}>
-            <img 
-              src={matchingModel.imageUrl} 
+            <img
+              src={matchingModel.imageUrl}
               alt={matchingModel.name}
               style={{
                 width: '70px',
@@ -7675,7 +7958,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             />
           </div>
         ) : (
-          <div style={{ 
+          <div style={{
             flexShrink: 0,
             width: '70px',
             height: '70px',
