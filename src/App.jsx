@@ -1447,7 +1447,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
 }
 
 export default function EtsyOrderManager() {
-  const [activeTab, setActiveTab] = useState('queue');
+  const [activeTab, setActiveTab] = useState('finance'); // Default to dashboard
   const [orders, setOrders] = useState([]);
   const [archivedOrders, setArchivedOrders] = useState([]);
   const [filaments, setFilaments] = useState({});
