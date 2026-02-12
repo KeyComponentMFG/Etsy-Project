@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
@@ -25,7 +25,7 @@ const DEFAULT_TEAM = [
 
 // Default stores
 const DEFAULT_STORES = [
-  { id: 'store1', name: 'Main Store', color: '#00ff88' }
+  { id: 'store1', name: 'Main Store', color: '#10b981' }
 ];
 
 // Default printers
@@ -35,11 +35,11 @@ const DEFAULT_PRINTERS = [
 
 // Production stages
 const PRODUCTION_STAGES = [
-  { id: 'printing', name: 'Printing', color: '#00ccff', icon: 'Printer' },
+  { id: 'printing', name: 'Printing', color: '#6366f1', icon: 'Printer' },
   { id: 'curing', name: 'Curing', color: '#ff9f43', icon: 'Clock' },
-  { id: 'assembly', name: 'Assembly', color: '#a55eea', icon: 'Box' },
+  { id: 'assembly', name: 'Assembly', color: '#8b5cf6', icon: 'Box' },
   { id: 'qc', name: 'QC', color: '#2ed573', icon: 'Check' },
-  { id: 'packed', name: 'Packed', color: '#00ff88', icon: 'Package' }
+  { id: 'packed', name: 'Packed', color: '#10b981', icon: 'Package' }
 ];
 
 // Low Stock Alerts Component
@@ -108,10 +108,10 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
       alignItems: 'flex-start',
       gap: '16px'
     }}>
-      <AlertCircle size={24} style={{ color: '#ffc107', flexShrink: 0, marginTop: '2px' }} />
+      <AlertCircle size={24} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <h4 style={{ margin: 0, color: '#ffc107', fontWeight: '600' }}>
+          <h4 style={{ margin: 0, color: '#f59e0b', fontWeight: '600' }}>
             Low Stock Alert - {lowStockItems.length} item{lowStockItems.length !== 1 ? 's' : ''} need restock
           </h4>
           <button
@@ -135,7 +135,7 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
               borderRadius: '6px',
               padding: '4px 10px',
               fontSize: '0.8rem',
-              color: item.type === 'filament' ? '#00ccff' : item.type === 'model' ? '#a55eea' : '#00ff88'
+              color: item.type === 'filament' ? '#6366f1' : item.type === 'model' ? '#8b5cf6' : '#10b981'
             }}>
               {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : item.type === 'model' ? <Printer size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
               {item.name} ({item.current})
@@ -154,7 +154,7 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
             border: '1px solid rgba(255, 193, 7, 0.4)',
             borderRadius: '6px',
             padding: '6px 14px',
-            color: '#ffc107',
+            color: '#f59e0b',
             cursor: 'pointer',
             fontSize: '0.85rem',
             fontWeight: '500'
@@ -415,9 +415,9 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
   const getOrderStatusData = () => {
     const counts = getOrderCounts();
     return [
-      { name: 'Pending', value: counts.pending, color: '#ffc107' },
-      { name: 'Fulfilled', value: counts.fulfilled, color: '#00ccff' },
-      { name: 'Shipped', value: counts.shipped, color: '#00ff88' }
+      { name: 'Pending', value: counts.pending, color: '#f59e0b' },
+      { name: 'Fulfilled', value: counts.fulfilled, color: '#6366f1' },
+      { name: 'Shipped', value: counts.shipped, color: '#10b981' }
     ].filter(d => d.value > 0);
   };
 
@@ -530,7 +530,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue (after tax)</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             ${revenueData.actualRevenue.toFixed(2)}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
@@ -560,7 +560,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Material Expenses</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ef4444', fontFamily: 'JetBrains Mono, monospace' }}>
             ${expenses.toFixed(2)}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
@@ -575,7 +575,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Shipping Costs</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>
             ${shippingCosts.toFixed(2)}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
@@ -595,7 +595,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           <div style={{
             fontSize: '2rem',
             fontWeight: '700',
-            color: netProfit >= 0 ? '#00ff88' : '#ff6b6b',
+            color: netProfit >= 0 ? '#10b981' : '#ef4444',
             fontFamily: 'JetBrains Mono, monospace'
           }}>
             {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
@@ -608,30 +608,30 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
 
       {/* Order Status Summary */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.03)',
+        background: 'rgba(0, 0, 0, 0.02)',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px',
-        border: '1px solid rgba(255, 255, 255, 0.1)'
+        border: '1px solid rgba(0, 0, 0, 0.06)'
       }}>
-        <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <h3 style={{ color: '#10b981', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Package size={20} /> Order Summary
         </h3>
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#fff' }}>{orderCounts.total}</div>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a1a2e' }}>{orderCounts.total}</div>
             <div style={{ fontSize: '0.85rem', color: '#888' }}>Total Orders</div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ffc107' }}>{orderCounts.pending}</div>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#f59e0b' }}>{orderCounts.pending}</div>
             <div style={{ fontSize: '0.85rem', color: '#888' }}>In Progress</div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ccff' }}>{orderCounts.fulfilled}</div>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#6366f1' }}>{orderCounts.fulfilled}</div>
             <div style={{ fontSize: '0.85rem', color: '#888' }}>Ready to Ship</div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#00ff88' }}>{orderCounts.shipped}</div>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#10b981' }}>{orderCounts.shipped}</div>
             <div style={{ fontSize: '0.85rem', color: '#888' }}>Shipped</div>
           </div>
         </div>
@@ -641,12 +641,12 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Revenue Trend Chart */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(0, 0, 0, 0.02)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(0, 0, 0, 0.06)'
         }}>
-          <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#10b981', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <BarChart3 size={20} /> Revenue Trend
           </h3>
           {dailyRevenueData.length > 0 ? (
@@ -654,15 +654,15 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
               <AreaChart data={dailyRevenueData}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#00ff88" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00ccff" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#00ccff" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
                 <XAxis
                   dataKey="date"
                   stroke="#666"
@@ -671,13 +671,13 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                 />
                 <YAxis stroke="#666" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(val) => `$${val}`} />
                 <Tooltip
-                  contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px' }}
-                  labelStyle={{ color: '#fff' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #d2d2d7', borderRadius: '8px' }}
+                  labelStyle={{ color: '#1a1a2e' }}
                   formatter={(value, name) => [`$${value.toFixed(2)}`, name === 'revenue' ? 'Revenue' : 'Profit']}
                   labelFormatter={(val) => new Date(val).toLocaleDateString()}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#00ff88" fillOpacity={1} fill="url(#colorRevenue)" />
-                <Area type="monotone" dataKey="profit" stroke="#00ccff" fillOpacity={1} fill="url(#colorProfit)" />
+                <Area type="monotone" dataKey="revenue" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="profit" stroke="#6366f1" fillOpacity={1} fill="url(#colorProfit)" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -689,12 +689,12 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
 
         {/* Order Status Pie Chart */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(0, 0, 0, 0.02)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(0, 0, 0, 0.06)'
         }}>
-          <h3 style={{ color: '#00ccff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#6366f1', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <PieChart size={20} /> Order Status Distribution
           </h3>
           {orderStatusData.length > 0 ? (
@@ -716,7 +716,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #d2d2d7', borderRadius: '8px' }}
                   formatter={(value, name) => [value, name]}
                 />
               </RechartsPieChart>
@@ -740,12 +740,12 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
         {/* Top Selling Items */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(0, 0, 0, 0.02)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(0, 0, 0, 0.06)'
         }}>
-          <h3 style={{ color: '#00ccff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#6366f1', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Star size={20} /> Top Selling Items
           </h3>
           {topModels.length === 0 ? (
@@ -763,8 +763,8 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{
-                      background: idx === 0 ? 'rgba(255, 193, 7, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                      color: idx === 0 ? '#ffc107' : '#888',
+                      background: idx === 0 ? 'rgba(255, 193, 7, 0.3)' : 'rgba(0, 0, 0, 0.06)',
+                      color: idx === 0 ? '#f59e0b' : '#888',
                       padding: '4px 8px',
                       borderRadius: '4px',
                       fontSize: '0.8rem',
@@ -781,7 +781,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                       </div>
                     </div>
                   </div>
-                  <div style={{ color: '#00ff88', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
+                  <div style={{ color: '#10b981', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
                     ${model.revenue.toFixed(2)}
                   </div>
                 </div>
@@ -792,12 +792,12 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
 
         {/* Revenue by Store */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(0, 0, 0, 0.02)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(0, 0, 0, 0.06)'
         }}>
-          <h3 style={{ color: '#00ff88', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#10b981', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Store size={20} /> Revenue by Store
           </h3>
           {revenueByStore.length === 0 ? (
@@ -814,20 +814,20 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontWeight: '500' }}>{store.name}</span>
-                      <span style={{ color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+                      <span style={{ color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
                         ${store.revenue.toFixed(2)}
                       </span>
                     </div>
                     <div style={{
                       height: '6px',
-                      background: 'rgba(255, 255, 255, 0.1)',
+                      background: 'rgba(0, 0, 0, 0.06)',
                       borderRadius: '3px',
                       overflow: 'hidden'
                     }}>
                       <div style={{
                         width: `${percentage}%`,
                         height: '100%',
-                        background: 'linear-gradient(90deg, #00ff88, #00ccff)',
+                        background: 'linear-gradient(90deg, #10b981, #6366f1)',
                         borderRadius: '3px'
                       }} />
                     </div>
@@ -843,12 +843,12 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
 
         {/* Best Selling Colors */}
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'rgba(0, 0, 0, 0.02)',
           borderRadius: '12px',
           padding: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(0, 0, 0, 0.06)'
         }}>
-          <h3 style={{ color: '#a55eea', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ color: '#8b5cf6', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Palette size={20} /> Best Selling Colors
           </h3>
           {topColors.length === 0 ? (
@@ -867,8 +867,8 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{
-                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                          color: idx === 0 ? '#a55eea' : '#888',
+                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : 'rgba(0, 0, 0, 0.06)',
+                          color: idx === 0 ? '#8b5cf6' : '#888',
                           padding: '3px 8px',
                           borderRadius: '4px',
                           fontSize: '0.75rem',
@@ -878,27 +878,27 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                         </span>
                         <span style={{ fontWeight: '500', textTransform: 'capitalize' }}>{color.name}</span>
                       </div>
-                      <span style={{ color: '#a55eea', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
+                      <span style={{ color: '#8b5cf6', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace' }}>
                         {color.quantity} sold
                       </span>
                     </div>
                     <div style={{
                       height: '4px',
-                      background: 'rgba(255, 255, 255, 0.1)',
+                      background: 'rgba(0, 0, 0, 0.06)',
                       borderRadius: '2px',
                       overflow: 'hidden'
                     }}>
                       <div style={{
                         width: `${percentage}%`,
                         height: '100%',
-                        background: 'linear-gradient(90deg, #a55eea, #7c3aed)',
+                        background: 'linear-gradient(90deg, #8b5cf6, #7c3aed)',
                         borderRadius: '2px'
                       }} />
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '4px' }}>
                       {color.count} orders • ${color.revenue.toFixed(2)} revenue
                       {color.filamentWeight > 0 && (
-                        <span style={{ color: '#00ccff' }}> • {color.filamentWeight.toFixed(0)}g filament</span>
+                        <span style={{ color: '#6366f1' }}> • {color.filamentWeight.toFixed(0)}g filament</span>
                       )}
                     </div>
                   </div>
@@ -1189,7 +1189,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Colors Tracked</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
             {colorStats.length}
           </div>
         </div>
@@ -1201,7 +1201,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Items Sold</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>
             {totalQuantity.toLocaleString()}
           </div>
         </div>
@@ -1213,7 +1213,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Filament Used</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             {(totalFilamentUsed / 1000).toFixed(2)} kg
           </div>
         </div>
@@ -1225,7 +1225,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Revenue</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ffc107', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f59e0b', fontFamily: 'JetBrains Mono, monospace' }}>
             ${totalRevenue.toFixed(2)}
           </div>
         </div>
@@ -1233,12 +1233,12 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
 
       {/* Color Stats Table */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(0, 0, 0, 0.02)',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '12px',
         padding: '20px'
       }}>
-        <h3 style={{ color: '#a55eea', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <h3 style={{ color: '#8b5cf6', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Palette size={20} /> Color Breakdown
         </h3>
 
@@ -1279,8 +1279,8 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                     }}>
                       <td style={{ padding: '12px 8px' }}>
                         <span style={{
-                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : idx < 3 ? 'rgba(165, 94, 234, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                          color: idx === 0 ? '#a55eea' : idx < 3 ? '#c084fc' : '#888',
+                          background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : idx < 3 ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0, 0, 0, 0.06)',
+                          color: idx === 0 ? '#8b5cf6' : idx < 3 ? '#c084fc' : '#888',
                           padding: '4px 10px',
                           borderRadius: '4px',
                           fontSize: '0.8rem',
@@ -1305,16 +1305,16 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                           </button>
                         </div>
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#00ccff' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#6366f1' }}>
                         {color.quantity.toLocaleString()}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#888' }}>
                         {color.orderCount}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#00ff88' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#10b981' }}>
                         {color.filamentWeight > 0 ? `${color.filamentWeight.toFixed(0)}g` : '-'}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#ffc107' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#f59e0b' }}>
                         ${color.revenue.toFixed(2)}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
@@ -1322,7 +1322,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }}>
                         {usageRate ? (
-                          <span style={{ color: '#00ccff' }}>{usageRate.weekly.toFixed(0)}g/wk</span>
+                          <span style={{ color: '#6366f1' }}>{usageRate.weekly.toFixed(0)}g/wk</span>
                         ) : (
                           <span style={{ color: '#666' }}>-</span>
                         )}
@@ -1330,7 +1330,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
                         {daysUntilReorder !== null ? (
                           <span style={{
-                            color: isCritical ? '#ff6b6b' : isLow ? '#ffc107' : '#00ff88',
+                            color: isCritical ? '#ef4444' : isLow ? '#f59e0b' : '#10b981',
                             fontWeight: isCritical || isLow ? '600' : '400'
                           }}>
                             {daysUntilReorder === 0 ? 'Now!' : `${daysUntilReorder} days`}
@@ -1357,14 +1357,14 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
         padding: '16px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <AlertCircle size={18} style={{ color: '#00ccff' }} />
-          <strong style={{ color: '#00ccff' }}>About Usage Rates & Reorder Predictions</strong>
+          <AlertCircle size={18} style={{ color: '#6366f1' }} />
+          <strong style={{ color: '#6366f1' }}>About Usage Rates & Reorder Predictions</strong>
         </div>
         <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>
           Usage rates and reorder predictions are calculated from filament deductions when orders are fulfilled.
           The more orders you process, the more accurate these predictions become.
           {(filamentUsageHistory || []).length > 0 ? (
-            <span style={{ color: '#00ff88' }}> Currently tracking {(filamentUsageHistory || []).length} usage events.</span>
+            <span style={{ color: '#10b981' }}> Currently tracking {(filamentUsageHistory || []).length} usage events.</span>
           ) : (
             <span> No usage history recorded yet - fulfill some orders to start tracking.</span>
           )}
@@ -1390,7 +1390,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                 fontSize: '0.9rem'
               }}>
                 <span style={{ color: '#888' }}>Current color: </span>
-                <span style={{ color: '#a55eea', fontWeight: '600', textTransform: 'capitalize' }}>{editingColor}</span>
+                <span style={{ color: '#8b5cf6', fontWeight: '600', textTransform: 'capitalize' }}>{editingColor}</span>
                 <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
                   This will update all orders with this color
                 </div>
@@ -1433,7 +1433,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                 <button
                   className="btn btn-secondary"
                   onClick={clearColor}
-                  style={{ width: '100%', color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' }}
+                  style={{ width: '100%', color: '#ef4444', borderColor: 'rgba(255, 107, 107, 0.3)' }}
                 >
                   <Trash2 size={16} /> Clear This Color
                 </button>
@@ -4943,7 +4943,7 @@ export default function EtsyOrderManager() {
     return (
       <div className="loading-screen">
         <div className="loader"></div>
-        <p>Loading Order Manager...</p>
+        <p>Loading Business Manager...</p>
       </div>
     );
   }
@@ -4962,231 +4962,221 @@ export default function EtsyOrderManager() {
   return (
     <div className="app-container">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        
+
         .app-container {
           min-height: 100vh;
-          background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%);
-          font-family: 'Space Grotesk', sans-serif;
-          color: #e0e0e0;
+          background: #f5f5f7;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          color: #1d1d1f;
           overflow-x: hidden;
         }
-        
+
         .loading-screen {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          background: #0a0a0f;
-          color: #00ff88;
+          background: #f5f5f7;
+          color: #1d1d1f;
         }
-        
+
         .loader {
           width: 50px;
           height: 50px;
-          border: 3px solid #1a1a2e;
-          border-top-color: #00ff88;
+          border: 3px solid #e8e8ed;
+          border-top-color: #007aff;
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
-        
+
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
-        
+
         .header {
-          background: rgba(10, 10, 15, 0.95);
-          border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+          background: rgba(255, 255, 255, 0.8);
+          border-bottom: 1px solid #d2d2d7;
           padding: 1rem 2rem;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          backdrop-filter: blur(10px);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           position: sticky;
           top: 0;
           z-index: 100;
         }
-        
+
         .logo {
           display: flex;
           align-items: center;
           gap: 12px;
         }
-        
+
         .logo-icon {
           width: 40px;
           height: 40px;
-          background: linear-gradient(135deg, #00ff88, #00cc6a);
+          background: #007aff;
           border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #0a0a0f;
+          color: white;
         }
-        
+
         .logo h1 {
-          font-family: 'JetBrains Mono', monospace;
           font-size: 1.25rem;
-          font-weight: 700;
-          background: linear-gradient(90deg, #00ff88, #00ccff);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          font-weight: 600;
+          color: #1d1d1f;
         }
         
         .header-actions {
           display: flex;
           gap: 12px;
         }
-        
+
         .btn {
           display: flex;
           align-items: center;
           gap: 8px;
           padding: 10px 20px;
           border: none;
-          border-radius: 8px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.85rem;
+          border-radius: 980px;
+          font-size: 0.875rem;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s ease;
         }
-        
+
         .btn-primary {
-          background: linear-gradient(135deg, #00ff88, #00cc6a);
-          color: #0a0a0f;
+          background: #007aff;
+          color: white;
         }
-        
+
         .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4);
+          background: #0066d6;
         }
-        
+
         .btn-primary:disabled {
           opacity: 0.5;
           cursor: not-allowed;
-          transform: none;
-          box-shadow: none;
         }
-        
+
         .btn-secondary {
-          background: rgba(255, 255, 255, 0.1);
-          color: #e0e0e0;
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          background: #e8e8ed;
+          color: #1d1d1f;
         }
-        
+
         .btn-secondary:hover {
-          background: rgba(255, 255, 255, 0.15);
+          background: #d2d2d7;
         }
-        
+
         .btn-danger {
-          background: rgba(255, 71, 87, 0.2);
-          color: #ff4757;
-          border: 1px solid rgba(255, 71, 87, 0.3);
+          background: #ff3b30;
+          color: white;
         }
-        
+
         .btn-danger:hover {
-          background: rgba(255, 71, 87, 0.3);
+          background: #d63028;
         }
-        
+
         .btn-small {
-          padding: 6px 12px;
-          font-size: 0.75rem;
+          padding: 6px 14px;
+          font-size: 0.8rem;
         }
-        
+
         .main-content {
           display: flex;
           min-height: calc(100vh - 73px);
         }
-        
+
         .sidebar {
           width: 220px;
-          background: rgba(10, 10, 15, 0.8);
-          border-right: 1px solid rgba(0, 255, 136, 0.1);
+          background: #ffffff;
+          border-right: 1px solid #d2d2d7;
           padding: 1.5rem 1rem;
-          backdrop-filter: blur(10px);
         }
-        
+
         .nav-item {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 12px 16px;
+          padding: 10px 14px;
           border-radius: 8px;
           cursor: pointer;
-          transition: all 0.2s ease;
-          margin-bottom: 4px;
-          color: #888;
+          transition: all 0.15s ease;
+          margin-bottom: 2px;
+          color: #6e6e73;
           font-size: 0.9rem;
+          font-weight: 500;
         }
-        
+
         .nav-item:hover {
-          background: rgba(0, 255, 136, 0.1);
-          color: #00ff88;
+          background: #f5f5f7;
+          color: #1d1d1f;
         }
-        
+
         .nav-item.active {
-          background: rgba(0, 255, 136, 0.15);
-          color: #00ff88;
-          border-left: 3px solid #00ff88;
+          background: #007aff;
+          color: white;
         }
-        
+
         .content-area {
           flex: 1;
           padding: 2rem;
           overflow-y: auto;
+          background: #f5f5f7;
         }
-        
+
         .page-title {
           font-size: 1.75rem;
-          font-weight: 700;
+          font-weight: 600;
           margin-bottom: 1.5rem;
           display: flex;
           align-items: center;
           gap: 12px;
+          color: #1d1d1f;
         }
-        
+
         .page-title svg {
-          color: #00ff88;
+          color: #007aff;
         }
-        
+
         .stats-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 1rem;
           margin-bottom: 2rem;
         }
-        
+
         .stat-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #ffffff;
           border-radius: 12px;
           padding: 1.25rem;
           transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-        
+
         .stat-card:hover {
-          border-color: rgba(0, 255, 136, 0.3);
-          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        
+
         .stat-label {
           font-size: 0.8rem;
-          color: #888;
+          color: #6e6e73;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
           margin-bottom: 8px;
         }
-        
+
         .stat-value {
           font-size: 2rem;
-          font-weight: 700;
-          font-family: 'JetBrains Mono', monospace;
-          color: #00ff88;
+          font-weight: 600;
+          color: #1d1d1f;
         }
         
         .orders-list {
@@ -5195,435 +5185,449 @@ export default function EtsyOrderManager() {
           gap: 1rem;
           align-items: start;
         }
-        
+
         .order-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #ffffff;
           border-radius: 12px;
           padding: 1.25rem;
           transition: all 0.2s ease;
           display: flex;
           flex-direction: column;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-        
+
         .order-card:hover {
-          border-color: rgba(0, 255, 136, 0.3);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        
+
         .order-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 1rem;
         }
-        
+
         .order-id {
-          font-family: 'JetBrains Mono', monospace;
           font-size: 0.8rem;
-          color: #00ff88;
+          color: #007aff;
           margin-bottom: 6px;
-          background: rgba(0, 255, 136, 0.1);
+          background: rgba(0, 122, 255, 0.1);
           padding: 4px 8px;
-          border-radius: 4px;
+          border-radius: 6px;
           display: inline-block;
+          font-weight: 500;
         }
-        
+
         .order-id::before {
           content: 'TXN: ';
-          color: #888;
+          color: #6e6e73;
         }
-        
+
         .order-item {
-          color: #e0e0e0;
+          color: #1d1d1f;
           font-size: 1.1rem;
           font-weight: 600;
         }
-        
+
         .order-details {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
           gap: 1rem;
           margin: 1rem 0;
           padding: 1rem;
-          background: rgba(0, 0, 0, 0.2);
+          background: #f5f5f7;
           border-radius: 8px;
         }
-        
+
         .detail-item {
           display: flex;
           flex-direction: column;
           gap: 4px;
         }
-        
+
         .detail-label {
           font-size: 0.75rem;
-          color: #666;
+          color: #6e6e73;
           text-transform: uppercase;
         }
-        
+
         .detail-value {
           font-size: 0.9rem;
-          color: #e0e0e0;
+          color: #1d1d1f;
         }
-        
+
         .status-badge {
           display: inline-flex;
           align-items: center;
           gap: 6px;
           padding: 6px 12px;
-          border-radius: 20px;
+          border-radius: 980px;
           font-size: 0.75rem;
           font-weight: 600;
           text-transform: uppercase;
         }
-        
+
         .status-received {
-          background: rgba(255, 193, 7, 0.2);
-          color: #ffc107;
+          background: #fff3cd;
+          color: #856404;
         }
-        
+
         .status-fulfilled {
-          background: rgba(0, 204, 255, 0.2);
-          color: #00ccff;
+          background: #cce5ff;
+          color: #004085;
         }
-        
+
         .status-shipped {
-          background: rgba(0, 255, 136, 0.2);
-          color: #00ff88;
+          background: #d4edda;
+          color: #155724;
         }
-        
+
         .order-actions {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
           margin-top: 1rem;
           padding-top: 1rem;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid #e8e8ed;
         }
-        
+
         .assign-select {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          background: #ffffff;
+          border: 1px solid #d2d2d7;
+          border-radius: 8px;
           padding: 8px 12px;
-          color: #e0e0e0;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.85rem;
+          color: #1d1d1f;
+          font-size: 0.875rem;
           cursor: pointer;
         }
-        
+
         .assign-select:focus {
           outline: none;
-          border-color: #00ff88;
+          border-color: #007aff;
+          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
         }
-        
+
         .modal-overlay {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.8);
+          background: rgba(0, 0, 0, 0.4);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 1000;
-          backdrop-filter: blur(4px);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
         }
-        
+
         .modal {
-          background: #1a1a2e;
-          border: 1px solid rgba(0, 255, 136, 0.2);
-          border-radius: 16px;
+          background: #ffffff;
+          border-radius: 14px;
           padding: 2rem;
           max-width: 700px;
           width: 90%;
           max-height: 80vh;
           overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
-        
+
         .modal-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 1.5rem;
         }
-        
+
         .modal-title {
           font-size: 1.25rem;
           font-weight: 600;
+          color: #1d1d1f;
         }
-        
+
         .modal-close {
-          background: none;
+          background: #e8e8ed;
           border: none;
-          color: #888;
+          color: #6e6e73;
           cursor: pointer;
-          padding: 4px;
+          padding: 8px;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        
+
         .modal-close:hover {
-          color: #ff4757;
+          background: #d2d2d7;
+          color: #1d1d1f;
         }
-        
+
         .csv-textarea {
           width: 100%;
           height: 300px;
-          background: rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          background: #f5f5f7;
+          border: 1px solid #d2d2d7;
           border-radius: 8px;
           padding: 1rem;
-          color: #e0e0e0;
-          font-family: 'JetBrains Mono', monospace;
+          color: #1d1d1f;
+          font-family: 'SF Mono', Monaco, monospace;
           font-size: 0.8rem;
           resize: vertical;
           margin-bottom: 1rem;
         }
-        
+
         .csv-textarea:focus {
           outline: none;
-          border-color: #00ff88;
+          border-color: #007aff;
+          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
         }
         
         .csv-help {
           font-size: 0.8rem;
-          color: #888;
+          color: #6e6e73;
           margin-bottom: 1rem;
         }
-        
+
         .form-group {
           margin-bottom: 1rem;
         }
-        
+
         .form-label {
           display: block;
           font-size: 0.85rem;
-          color: #888;
+          color: #6e6e73;
           margin-bottom: 6px;
+          font-weight: 500;
         }
-        
+
         .form-input {
           width: 100%;
-          background: rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          background: #ffffff;
+          border: 1px solid #d2d2d7;
+          border-radius: 8px;
           padding: 10px 12px;
-          color: #e0e0e0;
-          font-family: 'JetBrains Mono', monospace;
+          color: #1d1d1f;
           font-size: 0.9rem;
         }
-        
+
         .form-input:focus {
           outline: none;
-          border-color: #00ff88;
+          border-color: #007aff;
+          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
         }
-        
+
         .form-row {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 1rem;
         }
-        
+
         .inventory-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
           gap: 1.5rem;
         }
-        
+
         .inventory-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #ffffff;
           border-radius: 12px;
           padding: 1.5rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-        
+
         .inventory-card h3 {
           font-size: 1.1rem;
           margin-bottom: 1rem;
           display: flex;
           align-items: center;
           gap: 8px;
+          color: #1d1d1f;
         }
-        
+
         .inventory-items {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
         }
-        
+
         .inventory-item {
           display: flex;
           flex-direction: column;
           gap: 10px;
           padding: 12px 14px;
-          background: rgba(0, 0, 0, 0.2);
+          background: #f5f5f7;
           border-radius: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        
+
         .inventory-item-info {
           display: flex;
           flex-direction: column;
           gap: 2px;
         }
-        
+
         .inventory-item-name {
           font-size: 0.95rem;
           font-weight: 500;
+          color: #1d1d1f;
         }
-        
+
         .inventory-item-meta {
           font-size: 0.8rem;
-          color: #888;
+          color: #6e6e73;
         }
-        
+
         .inventory-item-controls {
           display: flex;
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
         }
-        
+
         .qty-btn {
           width: 28px;
           height: 28px;
           border-radius: 6px;
           border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: #e0e0e0;
+          background: #e8e8ed;
+          color: #1d1d1f;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s ease;
+          transition: all 0.15s ease;
           flex-shrink: 0;
         }
-        
+
         .qty-btn:hover {
-          background: rgba(0, 255, 136, 0.2);
-          color: #00ff88;
+          background: #007aff;
+          color: white;
         }
-        
+
         .qty-value {
           min-width: 50px;
           text-align: center;
-          font-family: 'JetBrains Mono', monospace;
           font-weight: 600;
+          color: #1d1d1f;
         }
-        
+
         .color-dot {
           width: 16px;
           height: 16px;
           border-radius: 50%;
-          border: 2px solid rgba(255, 255, 255, 0.3);
+          border: 2px solid rgba(0, 0, 0, 0.1);
         }
-        
+
         .add-item-form {
           margin-top: 1rem;
           padding-top: 1rem;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid #e8e8ed;
         }
-        
+
         .add-item-row {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
           align-items: center;
         }
-        
+
         .add-item-input {
           flex: 1;
           min-width: 80px;
-          background: rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          background: #ffffff;
+          border: 1px solid #d2d2d7;
+          border-radius: 8px;
           padding: 10px 12px;
-          color: #e0e0e0;
+          color: #1d1d1f;
           font-size: 0.9rem;
         }
-        
+
         .add-item-input:focus {
           outline: none;
-          border-color: #00ff88;
+          border-color: #007aff;
+          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
         }
-        
+
         .model-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #ffffff;
           border-radius: 12px;
           padding: 1.25rem;
           margin-bottom: 1rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-        
+
         .model-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 1rem;
         }
-        
+
         .model-name {
           font-size: 1.1rem;
           font-weight: 600;
+          color: #1d1d1f;
         }
-        
+
         .model-meta {
           display: flex;
           gap: 1.5rem;
           flex-wrap: wrap;
           margin-bottom: 1rem;
         }
-        
+
         .model-meta-item {
           display: flex;
           align-items: center;
           gap: 6px;
           font-size: 0.85rem;
-          color: #888;
+          color: #6e6e73;
         }
         
         .model-meta-item span {
-          color: #00ff88;
-          font-family: 'JetBrains Mono', monospace;
+          color: #007aff;
+          font-weight: 600;
         }
-        
+
         .parts-list {
           display: flex;
           flex-wrap: wrap;
           gap: 8px;
         }
-        
+
         .part-tag {
-          background: rgba(0, 204, 255, 0.2);
-          color: #00ccff;
+          background: #e8e8ed;
+          color: #1d1d1f;
           padding: 4px 10px;
-          border-radius: 20px;
+          border-radius: 980px;
           font-size: 0.75rem;
+          font-weight: 500;
         }
-        
+
         .notification {
           position: fixed;
           top: 80px;
           right: 20px;
-          padding: 12px 20px;
-          border-radius: 8px;
+          padding: 14px 20px;
+          border-radius: 12px;
           font-size: 0.9rem;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           z-index: 1001;
           animation: slideIn 0.3s ease;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         }
-        
+
         .notification.success {
-          background: rgba(0, 255, 136, 0.2);
-          border: 1px solid rgba(0, 255, 136, 0.4);
-          color: #00ff88;
+          background: #ffffff;
+          color: #34c759;
         }
-        
+
         .notification.error {
-          background: rgba(255, 71, 87, 0.2);
-          border: 1px solid rgba(255, 71, 87, 0.4);
-          color: #ff4757;
+          background: #ffffff;
+          color: #ff3b30;
         }
-        
+
         @keyframes slideIn {
           from {
             opacity: 0;
@@ -5634,91 +5638,91 @@ export default function EtsyOrderManager() {
             transform: translateX(0);
           }
         }
-        
+
         .empty-state {
           text-align: center;
           padding: 3rem;
-          color: #666;
+          color: #6e6e73;
         }
-        
+
         .empty-state svg {
           width: 64px;
           height: 64px;
           margin-bottom: 1rem;
-          opacity: 0.5;
+          opacity: 0.4;
         }
-        
+
         .team-member-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #ffffff;
           border-radius: 12px;
           padding: 1.5rem;
           margin-bottom: 1rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
-        
+
         .team-member-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 1rem;
         }
-        
+
         .team-member-name {
           font-size: 1.2rem;
           font-weight: 600;
           display: flex;
           align-items: center;
           gap: 10px;
+          color: #1d1d1f;
         }
-        
+
         .team-member-stats {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 1rem;
         }
-        
+
         .team-stat {
           text-align: center;
           padding: 1rem;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 8px;
+          background: #f5f5f7;
+          border-radius: 10px;
         }
-        
+
         .team-stat-value {
           font-size: 1.5rem;
           font-weight: 700;
-          font-family: 'JetBrains Mono', monospace;
-          color: #00ff88;
+          color: #007aff;
         }
-        
+
         .team-stat-label {
           font-size: 0.75rem;
-          color: #888;
+          color: #6e6e73;
           text-transform: uppercase;
           margin-top: 4px;
         }
-        
+
         .archive-filters {
           display: flex;
           gap: 1rem;
           margin-bottom: 1.5rem;
         }
-        
+
         .filter-input {
-          background: rgba(0, 0, 0, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
+          background: #ffffff;
+          border: 1px solid #d2d2d7;
+          border-radius: 8px;
           padding: 8px 12px;
-          color: #e0e0e0;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.85rem;
+          color: #1d1d1f;
+          font-size: 0.875rem;
         }
-        
+
         .filter-input:focus {
           outline: none;
-          border-color: #00ff88;
+          border-color: #007aff;
+          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
         }
-        
+
         .section-header {
           display: flex;
           justify-content: space-between;
@@ -5739,10 +5743,10 @@ export default function EtsyOrderManager() {
           <div className="logo-icon">
             <Printer size={24} />
           </div>
-          <h1>3D Print Order Manager</h1>
+          <h1>Business Manager</h1>
           <span style={{ 
             fontSize: '0.7rem', 
-            color: '#00ff88', 
+            color: '#10b981', 
             marginLeft: '12px',
             display: 'flex',
             alignItems: 'center',
@@ -6195,9 +6199,9 @@ export default function EtsyOrderManager() {
               marginBottom: '20px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <ShoppingBag size={20} style={{ color: '#00ccff' }} />
-                <strong style={{ color: '#00ccff' }}>Google Sheets Sync</strong>
-                {googleSheetUrl && <Check size={16} style={{ color: '#00ff88' }} />}
+                <ShoppingBag size={20} style={{ color: '#6366f1' }} />
+                <strong style={{ color: '#6366f1' }}>Google Sheets Sync</strong>
+                {googleSheetUrl && <Check size={16} style={{ color: '#10b981' }} />}
               </div>
               <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '12px' }}>
                 Connect your Google Sheet to auto-import orders. Make sure the sheet is shared as "Anyone with the link can view".
@@ -6229,7 +6233,7 @@ export default function EtsyOrderManager() {
                 </button>
               </div>
               {googleSheetUrl && (
-                <p style={{ fontSize: '0.75rem', color: '#00ff88', marginTop: '8px' }}>
+                <p style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '8px' }}>
                   Sheet URL saved. Use the "Sync Sheet" button in the header anytime.
                 </p>
               )}
@@ -6241,7 +6245,7 @@ export default function EtsyOrderManager() {
               marginBottom: '12px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <Upload size={20} style={{ color: '#00ff88' }} />
+                <Upload size={20} style={{ color: '#10b981' }} />
                 <strong>Manual CSV Import</strong>
               </div>
               <p className="csv-help" style={{ margin: 0 }}>
@@ -6287,7 +6291,7 @@ export default function EtsyOrderManager() {
                       borderRadius: '12px',
                       fontWeight: 600,
                       fontSize: '0.9rem',
-                      color: csvPreview.newCount > 0 ? '#00ff88' : '#ff4444'
+                      color: csvPreview.newCount > 0 ? '#10b981' : '#ff4444'
                     }}>
                       {csvPreview.newCount !== undefined ? csvPreview.newCount : csvPreview.rowCount} new order{(csvPreview.newCount !== undefined ? csvPreview.newCount : csvPreview.rowCount) !== 1 ? 's' : ''}
                     </span>
@@ -6299,35 +6303,35 @@ export default function EtsyOrderManager() {
                   {csvPreview.transactionId && (
                     <div style={{ marginBottom: '4px' }}>
                       <span style={{ color: '#888' }}>TXN: </span>
-                      <span style={{ color: '#00ccff', fontFamily: 'JetBrains Mono, monospace' }}>{csvPreview.transactionId}</span>
+                      <span style={{ color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>{csvPreview.transactionId}</span>
                     </div>
                   )}
                   {csvPreview.extractedProduct && (
                     <div style={{ marginBottom: '4px' }}>
                       <span style={{ color: '#888' }}>Product: </span>
-                      <span style={{ color: '#00ff88' }}>{csvPreview.extractedProduct.substring(0, 60)}{csvPreview.extractedProduct.length > 60 ? '...' : ''}</span>
+                      <span style={{ color: '#10b981' }}>{csvPreview.extractedProduct.substring(0, 60)}{csvPreview.extractedProduct.length > 60 ? '...' : ''}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <div>
                       <span style={{ color: '#888' }}>Qty: </span>
-                      <span style={{ color: '#fff' }}>{csvPreview.extractedQuantity || 1}</span>
+                      <span style={{ color: '#1a1a2e' }}>{csvPreview.extractedQuantity || 1}</span>
                     </div>
                     <div>
                       <span style={{ color: '#888' }}>Color: </span>
-                      <span style={{ color: csvPreview.extractedColor ? '#00ff88' : '#ff4757' }}>
+                      <span style={{ color: csvPreview.extractedColor ? '#10b981' : '#ff4757' }}>
                         {csvPreview.extractedColor || 'not detected'}
                       </span>
                     </div>
                     <div>
                       <span style={{ color: '#888' }}>Extra: </span>
-                      <span style={{ color: csvPreview.extractedExtra ? '#00ff88' : '#888' }}>
+                      <span style={{ color: csvPreview.extractedExtra ? '#10b981' : '#888' }}>
                         {csvPreview.extractedExtra || 'none'}
                       </span>
                     </div>
                     <div>
                       <span style={{ color: '#888' }}>Price: </span>
-                      <span style={{ color: csvPreview.price && csvPreview.price !== '$0' ? '#00ff88' : '#888' }}>
+                      <span style={{ color: csvPreview.price && csvPreview.price !== '$0' ? '#10b981' : '#888' }}>
                         {csvPreview.price?.startsWith('$') ? csvPreview.price : `$${csvPreview.price || '0'}`}
                       </span>
                     </div>
@@ -6475,7 +6479,7 @@ export default function EtsyOrderManager() {
                                   background: exceedsStock ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.3)',
                                   border: exceedsStock ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.2)',
                                   borderRadius: '6px',
-                                  color: '#fff',
+                                  color: '#1a1a2e',
                                   fontSize: '1rem',
                                   textAlign: 'center'
                                 }}
@@ -6555,7 +6559,8 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
-  const [groupByBuyer, setGroupByBuyer] = useState(false);
+  const [groupBy, setGroupBy] = useState('shipDate'); // 'none', 'buyer', 'shipDate'
+  const [sortBy, setSortBy] = useState('shipDate'); // 'shipDate', 'color', 'newest', 'oldest'
   const [collapsedBuyers, setCollapsedBuyers] = useState({});
   const [extraPrint, setExtraPrint] = useState({
     name: '',
@@ -6644,7 +6649,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
     });
   };
 
-  // Filter by status, then sort by color (grouped), then by ship by date (earliest first within each color)
+  // Filter by status, then sort based on sortBy option
   const activeOrders = filteredOrders.filter(o => {
     if (statusFilter === 'active') return o.status !== 'shipped';
     if (statusFilter === 'received') return o.status === 'received';
@@ -6652,24 +6657,37 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
     if (statusFilter === 'shipped') return o.status === 'shipped';
     return true;
   }).sort((a, b) => {
-    // Primary sort: by color (alphabetically, so same colors are grouped)
-    const colorA = (a.color || '').toLowerCase();
-    const colorB = (b.color || '').toLowerCase();
-    if (colorA !== colorB) {
-      return colorA.localeCompare(colorB);
-    }
-
-    // Secondary sort: by ship by date (earliest first)
-    // Use override if set, otherwise calculate from model
     const modelA = findModelForOrder(a);
     const modelB = findModelForOrder(b);
     const shipByA = a.overrideShipByDate ? new Date(a.overrideShipByDate) : calculateShipByDate(a.createdAt, modelA?.processingDays || 3);
     const shipByB = b.overrideShipByDate ? new Date(b.overrideShipByDate) : calculateShipByDate(b.createdAt, modelB?.processingDays || 3);
 
-    if (!shipByA && !shipByB) return 0;
-    if (!shipByA) return 1;
-    if (!shipByB) return -1;
-    return shipByA.getTime() - shipByB.getTime();
+    if (sortBy === 'shipDate') {
+      // Primary sort: by ship by date (earliest first)
+      if (!shipByA && !shipByB) return 0;
+      if (!shipByA) return 1;
+      if (!shipByB) return -1;
+      return shipByA.getTime() - shipByB.getTime();
+    } else if (sortBy === 'color') {
+      // Primary sort: by color (alphabetically, so same colors are grouped)
+      const colorA = (a.color || '').toLowerCase();
+      const colorB = (b.color || '').toLowerCase();
+      if (colorA !== colorB) {
+        return colorA.localeCompare(colorB);
+      }
+      // Secondary sort: by ship by date
+      if (!shipByA && !shipByB) return 0;
+      if (!shipByA) return 1;
+      if (!shipByB) return -1;
+      return shipByA.getTime() - shipByB.getTime();
+    } else if (sortBy === 'newest') {
+      // Sort by creation date (newest first)
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    } else if (sortBy === 'oldest') {
+      // Sort by creation date (oldest first)
+      return (a.createdAt || 0) - (b.createdAt || 0);
+    }
+    return 0;
   });
 
   const receivedCount = filteredOrders.filter(o => o.status === 'received').length;
@@ -6695,7 +6713,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
       <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
         {/* Store Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Store size={20} style={{ color: '#00ff88' }} />
+          <Store size={20} style={{ color: '#10b981' }} />
           <span style={{ color: '#888' }}>Store:</span>
           <select
             className="assign-select"
@@ -6712,7 +6730,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 
         {/* Partner Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Users size={20} style={{ color: '#00ccff' }} />
+          <Users size={20} style={{ color: '#6366f1' }} />
           <span style={{ color: '#888' }}>Partner:</span>
           <select
             className="assign-select"
@@ -6725,6 +6743,23 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
             {teamMembers?.map(member => (
               <option key={member.id} value={member.id}>{member.name}</option>
             ))}
+          </select>
+        </div>
+
+        {/* Sort By */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ArrowUpDown size={20} style={{ color: '#007aff' }} />
+          <span style={{ color: '#888' }}>Sort:</span>
+          <select
+            className="assign-select"
+            style={{ minWidth: '150px' }}
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+          >
+            <option value="shipDate">Ship Date</option>
+            <option value="color">Color</option>
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
           </select>
         </div>
 
@@ -6764,13 +6799,13 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
               top: '100%',
               left: '0',
               marginTop: '8px',
-              background: '#1a1a2e',
-              border: '1px solid rgba(255, 159, 67, 0.3)',
+              background: '#ffffff',
+              border: '1px solid #d2d2d7',
               borderRadius: '12px',
               padding: '16px',
               width: '320px',
               zIndex: 100,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+              boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
             }}>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Description *</label>
@@ -6842,9 +6877,9 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                       width: '100%',
                       padding: '8px',
                       background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.2)',
+                      border: '1px solid #d2d2d7',
                       borderRadius: '6px',
-                      color: '#fff',
+                      color: '#1a1a2e',
                       fontSize: '0.85rem'
                     }}
                   >
@@ -6864,9 +6899,9 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     width: '100%',
                     padding: '8px',
                     background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.2)',
+                    border: '1px solid #d2d2d7',
                     borderRadius: '6px',
-                    color: '#fff',
+                    color: '#1a1a2e',
                     fontSize: '0.85rem'
                   }}
                 >
@@ -6884,7 +6919,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   background: 'linear-gradient(135deg, #ff9f43 0%, #ee5a24 100%)',
                   border: 'none',
                   borderRadius: '8px',
-                  color: '#fff',
+                  color: '#1a1a2e',
                   cursor: 'pointer',
                   fontSize: '0.85rem',
                   fontWeight: '600',
@@ -6900,27 +6935,21 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
           )}
         </div>
 
-        {/* Group by Buyer Toggle */}
-        <button
-          onClick={() => setGroupByBuyer(!groupByBuyer)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 12px',
-            background: groupByBuyer ? 'rgba(0, 204, 255, 0.2)' : 'rgba(0, 204, 255, 0.1)',
-            border: `1px solid ${groupByBuyer ? 'rgba(0, 204, 255, 0.6)' : 'rgba(0, 204, 255, 0.3)'}`,
-            borderRadius: '8px',
-            color: '#00ccff',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontWeight: '500'
-          }}
-        >
-          <Users size={16} />
-          Group by Buyer
-          {groupByBuyer && <Check size={14} />}
-        </button>
+        {/* Group By Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Box size={20} style={{ color: '#8b5cf6' }} />
+          <span style={{ color: '#888' }}>Group:</span>
+          <select
+            className="assign-select"
+            style={{ minWidth: '150px' }}
+            value={groupBy}
+            onChange={e => setGroupBy(e.target.value)}
+          >
+            <option value="shipDate">Ship Date</option>
+            <option value="buyer">Buyer</option>
+            <option value="none">None</option>
+          </select>
+        </div>
 
         {/* Delete All Orders Button */}
         <button
@@ -6981,57 +7010,106 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
           onClick={() => setStatusFilter('received')}
           style={{
             cursor: 'pointer',
-            border: statusFilter === 'received' ? '2px solid #ffc107' : '1px solid rgba(255,255,255,0.1)',
+            border: statusFilter === 'received' ? '2px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Received</div>
-          <div className="stat-value" style={{ color: statusFilter === 'received' ? '#ffc107' : undefined }}>{receivedCount}</div>
-          {statusFilter === 'received' && <div style={{ fontSize: '0.7rem', color: '#ffc107', marginTop: '4px' }}>Filtered</div>}
+          <div className="stat-value" style={{ color: statusFilter === 'received' ? '#f59e0b' : undefined }}>{receivedCount}</div>
+          {statusFilter === 'received' && <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '4px' }}>Filtered</div>}
         </div>
         <div
           className="stat-card"
           onClick={() => setStatusFilter('fulfilled')}
           style={{
             cursor: 'pointer',
-            border: statusFilter === 'fulfilled' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            border: statusFilter === 'fulfilled' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Fulfilled</div>
-          <div className="stat-value" style={{ color: statusFilter === 'fulfilled' ? '#00ff88' : undefined }}>{fulfilledCount}</div>
-          {statusFilter === 'fulfilled' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Filtered</div>}
+          <div className="stat-value" style={{ color: statusFilter === 'fulfilled' ? '#10b981' : undefined }}>{fulfilledCount}</div>
+          {statusFilter === 'fulfilled' && <div style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '4px' }}>Filtered</div>}
         </div>
         <div
           className="stat-card"
           onClick={() => setStatusFilter('shipped')}
           style={{
             cursor: 'pointer',
-            border: statusFilter === 'shipped' ? '2px solid #00ccff' : '1px solid rgba(255,255,255,0.1)',
+            border: statusFilter === 'shipped' ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Shipped</div>
-          <div className="stat-value" style={{ color: statusFilter === 'shipped' ? '#00ccff' : undefined }}>{shippedCount}</div>
-          {statusFilter === 'shipped' && <div style={{ fontSize: '0.7rem', color: '#00ccff', marginTop: '4px' }}>Filtered</div>}
+          <div className="stat-value" style={{ color: statusFilter === 'shipped' ? '#6366f1' : undefined }}>{shippedCount}</div>
+          {statusFilter === 'shipped' && <div style={{ fontSize: '0.7rem', color: '#6366f1', marginTop: '4px' }}>Filtered</div>}
         </div>
         <div
           className="stat-card"
           onClick={() => setStatusFilter('active')}
           style={{
             cursor: 'pointer',
-            border: statusFilter === 'active' ? '2px solid #a55eea' : '1px solid rgba(255,255,255,0.1)',
+            border: statusFilter === 'active' ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Total Active</div>
-          <div className="stat-value" style={{ color: statusFilter === 'active' ? '#a55eea' : undefined }}>{filteredOrders.filter(o => o.status !== 'shipped').length}</div>
-          {statusFilter === 'active' && <div style={{ fontSize: '0.7rem', color: '#a55eea', marginTop: '4px' }}>Showing All Active</div>}
+          <div className="stat-value" style={{ color: statusFilter === 'active' ? '#8b5cf6' : undefined }}>{filteredOrders.filter(o => o.status !== 'shipped').length}</div>
+          {statusFilter === 'active' && <div style={{ fontSize: '0.7rem', color: '#8b5cf6', marginTop: '4px' }}>Showing All Active</div>}
         </div>
       </div>
 
-      {/* Group orders by buyer name when enabled */}
+      {/* Group orders based on groupBy selection */}
       {(() => {
+        // Helper to get ship date category
+        const getShipDateCategory = (order) => {
+          const model = findModelForOrder(order);
+          const shipBy = order.overrideShipByDate
+            ? new Date(order.overrideShipByDate)
+            : calculateShipByDate(order.createdAt, model?.processingDays || 3);
+
+          if (!shipBy) return 'No Date';
+
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const dayAfterTomorrow = new Date(today);
+          dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+          const endOfWeek = new Date(today);
+          endOfWeek.setDate(endOfWeek.getDate() + (7 - today.getDay()));
+          const endOfNextWeek = new Date(endOfWeek);
+          endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+
+          const shipDate = new Date(shipBy.getFullYear(), shipBy.getMonth(), shipBy.getDate());
+
+          if (shipDate < today) return 'Overdue';
+          if (shipDate.getTime() === today.getTime()) return 'Today';
+          if (shipDate.getTime() === tomorrow.getTime()) return 'Tomorrow';
+          if (shipDate <= endOfWeek) return 'This Week';
+          if (shipDate <= endOfNextWeek) return 'Next Week';
+          return 'Later';
+        };
+
+        // Group orders by ship date
+        const ordersByShipDate = activeOrders.reduce((acc, order) => {
+          const category = getShipDateCategory(order);
+          if (!acc[category]) acc[category] = [];
+          acc[category].push(order);
+          return acc;
+        }, {});
+
+        const shipDateOrder = ['Overdue', 'Today', 'Tomorrow', 'This Week', 'Next Week', 'Later', 'No Date'];
+        const shipDateColors = {
+          'Overdue': { bg: '#fee2e2', border: '#fca5a5', text: '#dc2626', icon: '#dc2626' },
+          'Today': { bg: '#fef3c7', border: '#fcd34d', text: '#d97706', icon: '#f59e0b' },
+          'Tomorrow': { bg: '#dbeafe', border: '#93c5fd', text: '#2563eb', icon: '#3b82f6' },
+          'This Week': { bg: '#e0e7ff', border: '#a5b4fc', text: '#4f46e5', icon: '#6366f1' },
+          'Next Week': { bg: '#f3e8ff', border: '#d8b4fe', text: '#7c3aed', icon: '#8b5cf6' },
+          'Later': { bg: '#f1f5f9', border: '#cbd5e1', text: '#64748b', icon: '#94a3b8' },
+          'No Date': { bg: '#f1f5f9', border: '#cbd5e1', text: '#64748b', icon: '#94a3b8' }
+        };
+
         // Group orders by buyer name (normalized)
         const ordersByBuyer = activeOrders.reduce((acc, order) => {
           const buyerName = (order.buyerName || 'Unknown Buyer').trim();
@@ -7053,12 +7131,106 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         // Count buyers with multiple orders
         const multiBuyerCount = sortedBuyers.filter(b => ordersByBuyer[b].length > 1).length;
 
-        // Render grouped view
-        if (groupByBuyer) {
+        // Render Ship Date grouped view
+        if (groupBy === 'shipDate') {
           return (
             <div style={{ marginBottom: '2rem' }}>
               <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={20} style={{ color: '#00ccff' }} />
+                <Calendar size={20} style={{ color: '#007aff' }} />
+                Orders by Ship Date ({activeOrders.length} orders)
+              </h3>
+              {activeOrders.length === 0 ? (
+                <div className="empty-state">
+                  <Package />
+                  <p>No orders yet</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {shipDateOrder.filter(cat => ordersByShipDate[cat]?.length > 0).map(category => {
+                    const categoryOrders = ordersByShipDate[category];
+                    const colors = shipDateColors[category];
+
+                    return (
+                      <div key={category} style={{
+                        background: colors.bg,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: '16px',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Category Header */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '14px 20px',
+                          borderBottom: `1px solid ${colors.border}`
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <Clock size={20} style={{ color: colors.icon }} />
+                            <span style={{ fontWeight: '600', fontSize: '1.1rem', color: colors.text }}>
+                              {category}
+                            </span>
+                            <span style={{
+                              fontSize: '0.85rem',
+                              color: colors.text,
+                              background: 'rgba(255,255,255,0.6)',
+                              padding: '4px 12px',
+                              borderRadius: '20px',
+                              fontWeight: '500'
+                            }}>
+                              {categoryOrders.length} order{categoryOrders.length > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: colors.text }}>
+                            {categoryOrders.filter(o => o.status === 'fulfilled').length} of {categoryOrders.length} fulfilled
+                          </div>
+                        </div>
+
+                        {/* Category Orders */}
+                        <div style={{ padding: '16px' }}>
+                          <div className="orders-list">
+                            {categoryOrders.map(order => (
+                              <OrderCard
+                                key={order.orderId}
+                                order={order}
+                                orders={orders}
+                                setOrders={setOrders}
+                                teamMembers={teamMembers}
+                                stores={stores}
+                                printers={printers}
+                                models={models}
+                                filaments={filaments}
+                                externalParts={externalParts}
+                                updateOrderStatus={updateOrderStatus}
+                                initiateFulfillment={initiateFulfillment}
+                                reassignOrder={reassignOrder}
+                                togglePlateComplete={togglePlateComplete}
+                                reprintPart={reprintPart}
+                                deleteReprint={deleteReprint}
+                                fulfillLineItem={fulfillLineItem}
+                                unfulfillLineItem={unfulfillLineItem}
+                                showNotification={showNotification}
+                                toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                                uiMode={uiMode}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Render Buyer grouped view
+        if (groupBy === 'buyer') {
+          return (
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} style={{ color: '#6366f1' }} />
                 Orders by Buyer ({sortedBuyers.length} buyers, {activeOrders.length} orders)
                 {multiBuyerCount > 0 && (
                   <span style={{
@@ -7190,12 +7362,12 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
             <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {selectedPartnerFilter === 'unassigned' ? (
                 <>
-                  <AlertCircle size={20} style={{ color: '#ffc107' }} />
+                  <AlertCircle size={20} style={{ color: '#f59e0b' }} />
                   Unassigned Orders ({activeOrders.length})
                 </>
               ) : (
                 <>
-                  <Users size={20} style={{ color: '#00ff88' }} />
+                  <Users size={20} style={{ color: '#10b981' }} />
                   {teamMembers.find(m => m.id === selectedPartnerFilter)?.name}'s Orders ({activeOrders.length})
                 </>
               )}
@@ -7239,7 +7411,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
           /* Show all orders in a single grid when "All Partners" is selected */
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Package size={20} style={{ color: '#00ff88' }} />
+              <Package size={20} style={{ color: '#10b981' }} />
               All Orders ({activeOrders.length})
             </h3>
             <div className="orders-list">
@@ -7842,6 +8014,12 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             <div style={{ fontSize: '0.85rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {order.item}
             </div>
+            {/* Extra/Variant info */}
+            {order.extra && (
+              <div style={{ fontSize: '0.75rem', color: '#8b5cf6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                {order.extra}
+              </div>
+            )}
             {/* Bottom row: Color + Ship By + Price */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: '#888' }}>
               <span><Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />{order.color || 'No color'}</span>
@@ -7864,7 +8042,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               {order.status === 'received' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); initiateFulfillment(order); }}
-                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 136, 0.2)', color: '#00ff88', cursor: 'pointer' }}
+                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 136, 0.2)', color: '#10b981', cursor: 'pointer' }}
                 >
                   Fulfill
                 </button>
@@ -7872,7 +8050,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               {order.status === 'fulfilled' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowShippingModal(true); }}
-                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 204, 255, 0.2)', color: '#00ccff', cursor: 'pointer' }}
+                  style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(0, 204, 255, 0.2)', color: '#6366f1', cursor: 'pointer' }}
                 >
                   Ship
                 </button>
@@ -7899,12 +8077,12 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 placeholder="Shipping cost ($)"
                 value={shippingCostInput}
                 onChange={(e) => setShippingCostInput(e.target.value)}
-                style={{ width: '100%', padding: '10px', marginBottom: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
+                style={{ width: '100%', padding: '10px', marginBottom: '12px', borderRadius: '6px', border: '1px solid #d2d2d7', background: 'rgba(255,255,255,0.05)', color: '#1a1a2e' }}
                 autoFocus
               />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowShippingModal(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleShipOrder} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#00ff88', color: '#000', cursor: 'pointer', fontWeight: '600' }}>Confirm Ship</button>
+                <button onClick={() => setShowShippingModal(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d2d2d7', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleShipOrder} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#10b981', color: '#000', cursor: 'pointer', fontWeight: '600' }}>Confirm Ship</button>
               </div>
             </div>
           </div>
@@ -8002,7 +8180,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     padding: '2px 6px',
                     borderRadius: '8px',
                     backgroundColor: 'rgba(165, 94, 234, 0.2)',
-                    color: '#a55eea',
+                    color: '#8b5cf6',
                     border: '1px solid rgba(165, 94, 234, 0.4)',
                     fontWeight: '600'
                   }}>
@@ -8025,7 +8203,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               </div>
               {order.lineItems && order.lineItems.length > 1 ? (
                 <div className="order-items" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                  <div style={{ fontWeight: '500', marginBottom: '4px', color: '#a55eea' }}>
+                  <div style={{ fontWeight: '500', marginBottom: '4px', color: '#8b5cf6' }}>
                     Multi-item order ({(order.fulfilledItems || []).length}/{order.lineItems.length} fulfilled):
                   </div>
                   {order.lineItems.map((li, liIdx) => {
@@ -8070,7 +8248,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           alignItems: 'center',
                           gap: '8px',
                           marginLeft: '8px',
-                          color: isFulfilled ? '#00ff88' : '#ccc',
+                          color: isFulfilled ? '#10b981' : '#ccc',
                           fontSize: '0.8rem',
                           textDecoration: isFulfilled ? 'line-through' : 'none',
                           opacity: isFulfilled ? 0.7 : 1
@@ -8078,7 +8256,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           {hasPlates && !isFulfilled && (
                             <button
                               onClick={(e) => { e.stopPropagation(); toggleLiExpanded(); }}
-                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#a55eea', display: 'flex' }}
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#8b5cf6', display: 'flex' }}
                             >
                               {isLiExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                             </button>
@@ -8095,7 +8273,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 padding: '1px 4px',
                                 borderRadius: '4px',
                                 background: allPlatesComplete ? 'rgba(0, 255, 136, 0.2)' : 'rgba(0, 204, 255, 0.15)',
-                                color: allPlatesComplete ? '#00ff88' : '#00ccff'
+                                color: allPlatesComplete ? '#10b981' : '#6366f1'
                               }}>
                                 {liCompletedPlates.length}/{liPlates.length}
                               </span>
@@ -8124,7 +8302,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 border: 'none',
                                 cursor: 'pointer',
                                 background: isFulfilled ? 'rgba(255, 71, 87, 0.2)' : (hasPlates && !allPlatesComplete) ? 'rgba(128, 128, 128, 0.2)' : 'rgba(0, 255, 136, 0.2)',
-                                color: isFulfilled ? '#ff4757' : (hasPlates && !allPlatesComplete) ? '#888' : '#00ff88',
+                                color: isFulfilled ? '#ff4757' : (hasPlates && !allPlatesComplete) ? '#888' : '#10b981',
                                 fontWeight: '500'
                               }}
                               title={hasPlates && !allPlatesComplete ? 'Complete all plates first' : ''}
@@ -8132,7 +8310,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                               {isFulfilled ? 'Undo' : 'Fulfill'}
                             </button>
                           )}
-                          {isFulfilled && <Check size={14} style={{ color: '#00ff88' }} />}
+                          {isFulfilled && <Check size={14} style={{ color: '#10b981' }} />}
                         </div>
                         {/* Expandable plates section for this line item */}
                         {hasPlates && !isFulfilled && isLiExpanded && (
@@ -8144,7 +8322,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                             borderRadius: '6px',
                             border: '1px solid rgba(165, 94, 234, 0.2)'
                           }}>
-                            <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '6px' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#8b5cf6', marginBottom: '6px' }}>
                               Plates for {liModel?.name || 'this item'}:
                             </div>
                             {liPlates.map((plate, plateIdx) => {
@@ -8195,7 +8373,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     alignItems: 'center',
                                     gap: '6px',
                                     padding: '4px 6px',
-                                    background: isPlateComplete ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                    background: isPlateComplete ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 0, 0, 0.03)',
                                     borderRadius: '4px'
                                   }}>
                                     <input
@@ -8220,7 +8398,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     <span style={{
                                       flex: 1,
                                       fontSize: '0.75rem',
-                                      color: isPlateComplete ? '#00ff88' : '#e0e0e0',
+                                      color: isPlateComplete ? '#10b981' : '#e0e0e0',
                                       textDecoration: isPlateComplete ? 'line-through' : 'none'
                                     }}>
                                       {plate.name || `Plate ${plateIdx + 1}`}
@@ -8231,12 +8409,12 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     {hasMultiColorPart && !isPlateComplete && (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); togglePlateExpanded(); }}
-                                        style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: '#a55eea', display: 'flex' }}
+                                        style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: '#8b5cf6', display: 'flex' }}
                                       >
                                         {isPlateExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                                       </button>
                                     )}
-                                    {isPlateComplete && <Check size={12} style={{ color: '#00ff88' }} />}
+                                    {isPlateComplete && <Check size={12} style={{ color: '#10b981' }} />}
                                   </div>
                                   {/* Expanded parts with color selection */}
                                   {hasMultiColorPart && !isPlateComplete && isPlateExpanded && (
@@ -8255,7 +8433,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                           marginBottom: '4px',
                                           fontSize: '0.7rem'
                                         }}>
-                                          <Palette size={10} style={{ color: part.isMultiColor ? '#a55eea' : '#888' }} />
+                                          <Palette size={10} style={{ color: part.isMultiColor ? '#8b5cf6' : '#888' }} />
                                           <span style={{ flex: 1, color: '#ccc' }}>
                                             {part.name || `Part ${partIdx + 1}`}
                                             {(parseInt(part.quantity) || 1) > 1 && ` x${part.quantity}`}
@@ -8271,7 +8449,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                                 background: pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.2)' : 'rgba(165, 94, 234, 0.2)',
                                                 border: `1px solid ${pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.4)' : 'rgba(165, 94, 234, 0.4)'}`,
                                                 borderRadius: '3px',
-                                                color: '#fff',
+                                                color: '#1a1a2e',
                                                 cursor: 'pointer',
                                                 minWidth: '90px'
                                               }}
@@ -8286,7 +8464,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                               background: 'rgba(0, 204, 255, 0.15)',
                                               border: '1px solid rgba(0, 204, 255, 0.3)',
                                               borderRadius: '3px',
-                                              color: '#00ccff'
+                                              color: '#6366f1'
                                             }}>
                                               {itemColor || 'No color'}
                                             </span>
@@ -8310,7 +8488,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                           background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
                                           border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
                                           borderRadius: '3px',
-                                          color: allMultiColorPartsHaveColors ? '#00ff88' : '#888',
+                                          color: allMultiColorPartsHaveColors ? '#10b981' : '#888',
                                           cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
                                           width: '100%',
                                           display: 'flex',
@@ -8366,7 +8544,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             padding: '4px 10px',
             borderRadius: '12px',
             backgroundColor: 'rgba(0, 204, 255, 0.15)',
-            color: '#00ccff',
+            color: '#6366f1',
             border: '1px solid rgba(0, 204, 255, 0.3)'
           }}>
             <Users size={12} />
@@ -8381,7 +8559,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             padding: '4px 10px',
             borderRadius: '12px',
             backgroundColor: order.assignmentIssue ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 193, 7, 0.15)',
-            color: order.assignmentIssue ? '#ff6b6b' : '#ffc107',
+            color: order.assignmentIssue ? '#ef4444' : '#f59e0b',
             border: order.assignmentIssue ? '1px solid rgba(255, 107, 107, 0.4)' : '1px solid rgba(255, 193, 7, 0.3)'
           }}>
             <AlertCircle size={12} />
@@ -8399,7 +8577,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             padding: '4px 10px',
             borderRadius: '12px',
             backgroundColor: 'rgba(0, 255, 136, 0.15)',
-            color: '#00ff88',
+            color: '#10b981',
             border: '1px solid rgba(0, 255, 136, 0.3)',
             marginLeft: '8px'
           }}>
@@ -8456,7 +8634,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             const isDueTomorrow = shipByDay.getTime() === today.getTime() + 86400000;
             return (
               <span className="detail-value" style={{
-                color: isOverdue ? '#ff6b6b' : isDueToday ? '#ffc107' : isDueTomorrow ? '#ffcc00' : 'inherit',
+                color: isOverdue ? '#ef4444' : isDueToday ? '#f59e0b' : isDueTomorrow ? '#ffcc00' : 'inherit',
                 fontWeight: (isOverdue || isDueToday) ? '600' : 'normal'
               }}>
                 {shipByDate.toLocaleDateString()}
@@ -8491,7 +8669,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   padding: '2px 8px',
                   borderRadius: '4px',
                   background: 'rgba(165, 94, 234, 0.15)',
-                  color: '#a55eea',
+                  color: '#8b5cf6',
                   border: '1px solid rgba(165, 94, 234, 0.3)'
                 }}>
                   {c.color} ({c.filamentUsage}g)
@@ -8500,7 +8678,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#ff6b6b',
+                      color: '#ef4444',
                       cursor: 'pointer',
                       padding: '0',
                       display: 'flex',
@@ -8532,7 +8710,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     background: 'rgba(255,255,255,0.1)',
                     border: '1px solid rgba(165, 94, 234, 0.3)',
                     borderRadius: '4px',
-                    color: '#fff'
+                    color: '#1a1a2e'
                   }}
                 />
                 <input
@@ -8547,7 +8725,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     background: 'rgba(255,255,255,0.1)',
                     border: '1px solid rgba(165, 94, 234, 0.3)',
                     borderRadius: '4px',
-                    color: '#fff'
+                    color: '#1a1a2e'
                   }}
                 />
                 <button
@@ -8558,7 +8736,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     background: 'rgba(165, 94, 234, 0.2)',
                     border: '1px solid rgba(165, 94, 234, 0.4)',
                     borderRadius: '4px',
-                    color: '#a55eea',
+                    color: '#8b5cf6',
                     cursor: 'pointer'
                   }}
                 >
@@ -8591,7 +8769,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   background: 'rgba(165, 94, 234, 0.1)',
                   border: '1px solid rgba(165, 94, 234, 0.2)',
                   borderRadius: '4px',
-                  color: '#a55eea',
+                  color: '#8b5cf6',
                   cursor: 'pointer'
                 }}
               >
@@ -8610,7 +8788,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
         {order.shippingCost != null && order.shippingCost > 0 && (
           <div className="detail-item">
             <span className="detail-label">Shipping</span>
-            <span className="detail-value" style={{ color: '#ff6b6b' }}>${order.shippingCost.toFixed(2)}</span>
+            <span className="detail-value" style={{ color: '#ef4444' }}>${order.shippingCost.toFixed(2)}</span>
           </div>
         )}
       </div>
@@ -8624,7 +8802,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           borderRadius: '8px',
           border: '1px solid rgba(255, 193, 7, 0.3)'
         }}>
-          <div style={{ fontSize: '0.7rem', color: '#ffc107', marginBottom: '4px', fontWeight: '600' }}>
+          <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginBottom: '4px', fontWeight: '600' }}>
             Message from Buyer
           </div>
           <div style={{ fontSize: '0.85rem', color: '#e0e0e0', whiteSpace: 'pre-wrap' }}>
@@ -8650,7 +8828,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             <span style={{
               fontWeight: '600',
               fontSize: '1rem',
-              color: profitData.profit >= 0 ? '#00ff88' : '#ff6b6b'
+              color: profitData.profit >= 0 ? '#10b981' : '#ef4444'
             }}>
               {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
             </span>
@@ -8659,7 +8837,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             {profitData.orderTotal > 0 && <span>Order: ${profitData.orderTotal.toFixed(2)}</span>}
             {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
             {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
-            <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
+            <span style={{ color: profitData.filamentCost > 0 ? '#8b5cf6' : '#555' }}>
               Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
               {profitData.filamentCost === 0 && !matchingModel && ' (no model match)'}
               {profitData.filamentCost === 0 && matchingModel && !order.assignedTo && ' (unassigned)'}
@@ -8667,7 +8845,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (filament has no cost)'}
               {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no filament usage set)'}
             </span>
-            {profitData.partsCost > 0 && <span style={{ color: '#00ccff' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>}
+            {profitData.partsCost > 0 && <span style={{ color: '#6366f1' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>}
             {profitData.shippingCost > 0 && <span>Ship: -${profitData.shippingCost.toFixed(2)}</span>}
           </div>
         </div>
@@ -8758,7 +8936,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               <span style={{
                 fontSize: '0.8rem',
                 fontWeight: '600',
-                color: allPlatesComplete ? '#00ff88' : '#00ccff'
+                color: allPlatesComplete ? '#10b981' : '#6366f1'
               }}>
                 {completedCount}/{totalPlates} complete
               </span>
@@ -8799,7 +8977,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         padding: '6px 8px',
                         background: isComplete
                           ? 'rgba(0, 255, 136, 0.15)'
-                          : 'rgba(255, 255, 255, 0.05)',
+                          : 'rgba(0, 0, 0, 0.03)',
                         borderRadius: '6px',
                         transition: 'all 0.2s ease'
                       }}
@@ -8835,7 +9013,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         style={{
                           flex: 1,
                           fontSize: '0.8rem',
-                          color: isComplete ? '#00ff88' : '#e0e0e0',
+                          color: isComplete ? '#10b981' : '#e0e0e0',
                           textDecoration: isComplete ? 'line-through' : 'none',
                           cursor: 'pointer'
                         }}
@@ -8873,7 +9051,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                             background: 'rgba(165, 94, 234, 0.2)',
                             border: '1px solid rgba(165, 94, 234, 0.3)',
                             borderRadius: '4px',
-                            color: '#a55eea'
+                            color: '#8b5cf6'
                           }}>
                             {colors.join(', ')}
                           </span>
@@ -8894,7 +9072,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                             border: 'none',
                             padding: '2px',
                             cursor: 'pointer',
-                            color: '#a55eea',
+                            color: '#8b5cf6',
                             display: 'flex',
                             alignItems: 'center'
                           }}
@@ -8904,7 +9082,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         </button>
                       )}
 
-                      {isComplete && <Check size={14} style={{ color: '#00ff88' }} />}
+                      {isComplete && <Check size={14} style={{ color: '#10b981' }} />}
                     </div>
 
                     {/* Expanded section for parts - shows all parts with color selection */}
@@ -8953,7 +9131,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           borderRadius: '6px',
                           border: '1px solid rgba(165, 94, 234, 0.2)'
                         }}>
-                          <div style={{ fontSize: '0.7rem', color: '#a55eea', marginBottom: '8px' }}>
+                          <div style={{ fontSize: '0.7rem', color: '#8b5cf6', marginBottom: '8px' }}>
                             Part colors:
                           </div>
                           {allParts.map((part, partIdx) => {
@@ -8966,7 +9144,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 gap: '8px',
                                 marginBottom: '6px'
                               }}>
-                                <Palette size={12} style={{ color: part.isMultiColor ? '#a55eea' : '#888' }} />
+                                <Palette size={12} style={{ color: part.isMultiColor ? '#8b5cf6' : '#888' }} />
                                 <span style={{ fontSize: '0.8rem', color: '#e0e0e0', flex: 1 }}>
                                   {part.name || `Part ${partIdx + 1}`}
                                   {partQty > 1 && <span style={{ color: '#888' }}> x{partQty}</span>}
@@ -8984,7 +9162,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                       background: pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.2)' : 'rgba(165, 94, 234, 0.2)',
                                       border: `1px solid ${pendingColors[partIdx] ? 'rgba(0, 255, 136, 0.4)' : 'rgba(165, 94, 234, 0.4)'}`,
                                       borderRadius: '4px',
-                                      color: '#fff',
+                                      color: '#1a1a2e',
                                       cursor: 'pointer',
                                       minWidth: '120px'
                                     }}
@@ -9001,7 +9179,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     background: 'rgba(0, 204, 255, 0.15)',
                                     border: '1px solid rgba(0, 204, 255, 0.3)',
                                     borderRadius: '4px',
-                                    color: '#00ccff'
+                                    color: '#6366f1'
                                   }}>
                                     {orderColor || 'No color set'}
                                   </span>
@@ -9019,7 +9197,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                               background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
                               border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
                               borderRadius: '4px',
-                              color: allMultiColorPartsHaveColors ? '#00ff88' : '#888',
+                              color: allMultiColorPartsHaveColors ? '#10b981' : '#888',
                               cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
                               width: '100%',
                               display: 'flex',
@@ -9063,7 +9241,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                               background: 'rgba(255, 159, 67, 0.2)',
                               border: '1px solid rgba(255, 159, 67, 0.4)',
                               borderRadius: '4px',
-                              color: '#fff',
+                              color: '#1a1a2e',
                               cursor: 'pointer',
                               flex: 1,
                               minWidth: '120px'
@@ -9107,7 +9285,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     border: 'none',
                                     padding: '0 2px',
                                     cursor: 'pointer',
-                                    color: '#ff6b6b',
+                                    color: '#ef4444',
                                     fontSize: '0.7rem',
                                     lineHeight: 1,
                                     marginLeft: '2px'
@@ -9226,8 +9404,8 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             width: '100%',
             marginTop: '12px',
             padding: '8px',
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'rgba(0, 0, 0, 0.03)',
+            border: '1px solid rgba(0, 0, 0, 0.06)',
             borderRadius: '6px',
             cursor: 'pointer',
             color: '#888',
@@ -9350,7 +9528,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           padding: '4px 8px',
                           background: 'rgba(0, 0, 0, 0.2)',
                           borderRadius: '4px',
-                          color: '#fff'
+                          color: '#1a1a2e'
                         }}>
                           {sibling.orderId} - {sibling.item?.substring(0, 30)}{sibling.item?.length > 30 ? '...' : ''}
                           <span style={{
@@ -9359,7 +9537,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                             padding: '2px 6px',
                             borderRadius: '4px',
                             background: sibling.status === 'fulfilled' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 193, 7, 0.2)',
-                            color: sibling.status === 'fulfilled' ? '#00ff88' : '#ffc107'
+                            color: sibling.status === 'fulfilled' ? '#10b981' : '#f59e0b'
                           }}>
                             {sibling.status}
                           </span>
@@ -9479,7 +9657,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
 
 // Stores Tab Component
 function StoresTab({ stores, saveStores, orders, archivedOrders, showNotification }) {
-  const [newStore, setNewStore] = useState({ name: '', color: '#00ff88' });
+  const [newStore, setNewStore] = useState({ name: '', color: '#10b981' });
   const [editingStore, setEditingStore] = useState(null);
   const [expandedStore, setExpandedStore] = useState(null);
 
@@ -9499,7 +9677,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
     };
     
     saveStores([...stores, store]);
-    setNewStore({ name: '', color: '#00ff88' });
+    setNewStore({ name: '', color: '#10b981' });
     showNotification('Store added successfully');
   };
 
@@ -9575,7 +9753,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
       
       <div className="inventory-card" style={{ marginBottom: '2rem' }}>
         <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={20} style={{ color: '#00ff88' }} />
+          <Plus size={20} style={{ color: '#10b981' }} />
           Add New Store
         </h3>
         
@@ -9668,15 +9846,15 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', flexWrap: 'wrap' }}>
                   <div style={{ color: '#888' }}>
                     <ShoppingBag size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-                    <span style={{ color: '#fff' }}>{getOrderCount(store.id)}</span> active
+                    <span style={{ color: '#1a1a2e' }}>{getOrderCount(store.id)}</span> active
                   </div>
                   <div style={{ color: '#888' }}>
                     <Package size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-                    <span style={{ color: '#fff' }}>{analytics.totalOrders}</span> total orders
+                    <span style={{ color: '#1a1a2e' }}>{analytics.totalOrders}</span> total orders
                   </div>
                   <div style={{ color: '#888' }}>
                     <Box size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-                    <span style={{ color: '#fff' }}>{analytics.totalItems}</span> items sold
+                    <span style={{ color: '#1a1a2e' }}>{analytics.totalItems}</span> items sold
                   </div>
                 </div>
                 
@@ -9699,7 +9877,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                       <h4 style={{ 
                         margin: '0 0 12px 0', 
                         fontSize: '0.9rem', 
-                        color: '#00ff88',
+                        color: '#10b981',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px'
@@ -9769,7 +9947,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                       <h4 style={{ 
                         margin: '0 0 12px 0', 
                         fontSize: '0.9rem', 
-                        color: '#00ccff',
+                        color: '#6366f1',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px'
@@ -9792,7 +9970,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                                   left: 0,
                                   height: '100%',
                                   width: `${percentage}%`,
-                                  background: `linear-gradient(90deg, #00ccff40 0%, #00ccff10 100%)`,
+                                  background: `linear-gradient(90deg, #6366f140 0%, #6366f110 100%)`,
                                   borderRadius: '6px',
                                   zIndex: 0
                                 }} />
@@ -9826,7 +10004,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                                   </span>
                                   <span style={{ 
                                     fontWeight: 600, 
-                                    color: '#00ccff',
+                                    color: '#6366f1',
                                     fontSize: '0.9rem',
                                     marginLeft: '8px',
                                     flexShrink: 0
@@ -10100,9 +10278,9 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
             style={{
               padding: '8px 12px',
               background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
+              border: '1px solid #d2d2d7',
               borderRadius: '6px',
-              color: '#fff',
+              color: '#1a1a2e',
               fontSize: '0.9rem',
               cursor: 'pointer'
             }}
@@ -10118,7 +10296,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
       <div className="inventory-grid">
         {teamMembers.map(member => (
           <div key={member.id} className="inventory-card">
-            <h3><Palette size={20} style={{ color: '#00ff88' }} /> {member.name}</h3>
+            <h3><Palette size={20} style={{ color: '#10b981' }} /> {member.name}</h3>
             
             <div className="inventory-items">
               {(filaments[member.id] || []).length === 0 ? (
@@ -10142,7 +10320,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               padding: '2px 6px', 
                               borderRadius: '4px',
                               background: 'rgba(255, 193, 7, 0.2)',
-                              color: '#ffc107',
+                              color: '#f59e0b',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px'
@@ -10154,7 +10332,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         <div className="inventory-item-meta">
                           {fil.amount.toFixed(0)}g remaining
                           {fil.currentRollCost > 0 && (
-                            <span style={{ color: '#00ff88', marginLeft: '8px' }}>
+                            <span style={{ color: '#10b981', marginLeft: '8px' }}>
                               (${fil.currentRollCost.toFixed(2)} roll)
                             </span>
                           )}
@@ -10164,7 +10342,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         </div>
                         {(fil.backupRolls || []).length > 0 && (
                           <div style={{ marginTop: '4px', fontSize: '0.8rem' }}>
-                            <span style={{ color: '#00ccff' }}>
+                            <span style={{ color: '#6366f1' }}>
                               {fil.backupRolls.length} backup roll{fil.backupRolls.length !== 1 ? 's' : ''}:
                             </span>
                             <span style={{ color: '#888', marginLeft: '6px' }}>
@@ -10176,7 +10354,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                                     style={{
                                       background: 'none',
                                       border: 'none',
-                                      color: '#ff6b6b',
+                                      color: '#ef4444',
                                       cursor: 'pointer',
                                       padding: '0 2px',
                                       fontSize: '0.7rem',
@@ -10250,7 +10428,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                                 background: 'rgba(255,255,255,0.1)',
                                 border: '1px solid rgba(0, 204, 255, 0.4)',
                                 borderRadius: '4px',
-                                color: '#fff',
+                                color: '#1a1a2e',
                                 fontSize: '0.85rem'
                               }}
                               autoFocus
@@ -10284,7 +10462,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               background: 'rgba(0, 204, 255, 0.15)',
                               border: '1px solid rgba(0, 204, 255, 0.3)',
                               borderRadius: '6px',
-                              color: '#00ccff',
+                              color: '#6366f1',
                               cursor: 'pointer',
                               fontSize: '0.75rem'
                             }}
@@ -10305,7 +10483,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               borderRadius: '10px',
               border: '1px solid rgba(0, 255, 136, 0.2)'
             }}>
-              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#00ff88', marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#10b981', marginBottom: '12px' }}>
                 <Plus size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                 Add New Filament
               </div>
@@ -10999,7 +11177,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   {isFolderCollapsed(folder) ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
-                  <Box size={18} style={{ color: '#00ff88' }} />
+                  <Box size={18} style={{ color: '#10b981' }} />
                   {renamingFolder === folder ? (
                     <input
                       type="text"
@@ -11085,7 +11263,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           }}
                           onClick={() => toggleModelExpanded(model.id)}
                         >
-                          {isExpanded ? <ChevronDown size={16} style={{ color: '#00ff88' }} /> : <ChevronRight size={16} style={{ color: '#888' }} />}
+                          {isExpanded ? <ChevronDown size={16} style={{ color: '#10b981' }} /> : <ChevronRight size={16} style={{ color: '#888' }} />}
 
                           {/* Model Image Thumbnail */}
                           {model.imageUrl && (
@@ -11106,7 +11284,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                             <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>
                               {model.name}
                               {model.variantName && (
-                                <span style={{ color: '#00ccff', fontWeight: 'normal', marginLeft: '8px' }}>
+                                <span style={{ color: '#6366f1', fontWeight: 'normal', marginLeft: '8px' }}>
                                   — {model.variantName}
                                 </span>
                               )}
@@ -11120,7 +11298,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               {model.externalParts?.length > 0 && <span>{model.externalParts.length} part{model.externalParts.length !== 1 ? 's' : ''}</span>}
                               {model.stockCount !== null && model.stockCount !== undefined && (
                                 <span style={{
-                                  color: model.stockCount <= 3 ? '#ff6b6b' : model.stockCount <= 10 ? '#ffc107' : '#00ff88',
+                                  color: model.stockCount <= 3 ? '#ef4444' : model.stockCount <= 10 ? '#f59e0b' : '#10b981',
                                   fontWeight: model.stockCount <= 3 ? '600' : 'normal'
                                 }}>
                                   Stock: {model.stockCount}
@@ -11224,8 +11402,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                             fontSize: '0.85rem'
                                           }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                              <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
-                                              <div style={{ color: '#00ccff', fontSize: '0.8rem' }}>
+                                              <div style={{ fontWeight: '500', color: '#10b981' }}>{printer.name}</div>
+                                              <div style={{ color: '#6366f1', fontSize: '0.8rem' }}>
                                                 Total: {totals.totalFilament.toFixed(2)}g • {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                                               </div>
                                             </div>
@@ -11241,8 +11419,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                                       border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : 'none'
                                                     }}>
                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: (plate.parts?.length || 0) > 0 ? '6px' : 0 }}>
-                                                        {plate.isMultiColor && <Palette size={12} style={{ color: '#a55eea' }} />}
-                                                        <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#a55eea' : '#ccc', fontSize: '0.8rem' }}>
+                                                        {plate.isMultiColor && <Palette size={12} style={{ color: '#8b5cf6' }} />}
+                                                        <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#8b5cf6' : '#ccc', fontSize: '0.8rem' }}>
                                                           {plate.name}
                                                         </span>
                                                         <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
@@ -11258,7 +11436,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                                               padding: '2px 6px',
                                                               borderRadius: '3px',
                                                               fontSize: '0.65rem',
-                                                              color: '#00ccff'
+                                                              color: '#6366f1'
                                                             }}>
                                                               {part.name}{(part.quantity || 1) > 1 ? ` ×${part.quantity}` : ''} ({part.filamentUsage}g)
                                                             </span>
@@ -11455,7 +11633,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#ff6b6b',
+                          color: '#ef4444',
                           cursor: 'pointer',
                           padding: 0,
                           display: 'flex'
@@ -11517,7 +11695,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         height: '80px', 
                         objectFit: 'cover', 
                         borderRadius: '8px',
-                        border: '1px solid rgba(255,255,255,0.2)'
+                        border: '1px solid #d2d2d7'
                       }} 
                     />
                     <button
@@ -11609,7 +11787,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     border: '1px solid rgba(255,255,255,0.1)'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                      <div style={{ fontWeight: '500', color: '#10b981' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
                         <div style={{ fontSize: '0.8rem', color: '#888' }}>
                           Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
@@ -11651,7 +11829,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               border: '1px solid rgba(0, 204, 255, 0.2)',
                               borderRadius: '6px'
                             }}>
-                              <Clock size={12} style={{ color: '#00ccff' }} />
+                              <Clock size={12} style={{ color: '#6366f1' }} />
                               <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
                               <input
                                 type="number"
@@ -11683,7 +11861,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                             </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
-                              <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#6366f1', marginLeft: 'auto' }}>
                                 {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
@@ -11789,7 +11967,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
                                   border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
                                   fontSize: '0.7rem',
-                                  color: part.isMultiColor ? '#a55eea' : '#888'
+                                  color: part.isMultiColor ? '#8b5cf6' : '#888'
                                 }} title="When enabled, you'll choose the color when completing this part">
                                   <input
                                     type="checkbox"
@@ -12030,7 +12208,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         height: '80px', 
                         objectFit: 'cover', 
                         borderRadius: '8px',
-                        border: '1px solid rgba(255,255,255,0.2)'
+                        border: '1px solid #d2d2d7'
                       }} 
                     />
                     <button
@@ -12129,7 +12307,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#ff6b6b',
+                          color: '#ef4444',
                           cursor: 'pointer',
                           padding: 0,
                           display: 'flex'
@@ -12198,7 +12376,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     border: '1px solid rgba(255,255,255,0.1)'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div style={{ fontWeight: '500', color: '#00ff88' }}>{printer.name}</div>
+                      <div style={{ fontWeight: '500', color: '#10b981' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
                         <div style={{ fontSize: '0.8rem', color: '#888' }}>
                           Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
@@ -12240,7 +12418,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               border: '1px solid rgba(0, 204, 255, 0.2)',
                               borderRadius: '6px'
                             }}>
-                              <Clock size={12} style={{ color: '#00ccff' }} />
+                              <Clock size={12} style={{ color: '#6366f1' }} />
                               <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
                               <input
                                 type="number"
@@ -12272,7 +12450,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                             </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
-                              <span style={{ fontSize: '0.75rem', color: '#00ccff', marginLeft: 'auto' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#6366f1', marginLeft: 'auto' }}>
                                 {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                               </span>
                             )}
@@ -12378,7 +12556,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
                                   border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
                                   fontSize: '0.7rem',
-                                  color: part.isMultiColor ? '#a55eea' : '#888'
+                                  color: part.isMultiColor ? '#8b5cf6' : '#888'
                                 }} title="When enabled, you'll choose the color when completing this part">
                                   <input
                                     type="checkbox"
@@ -12663,7 +12841,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
           
           return (
           <div key={member.id} className="inventory-card">
-            <h3><Box size={20} style={{ color: '#00ccff' }} /> {member.name}</h3>
+            <h3><Box size={20} style={{ color: '#6366f1' }} /> {member.name}</h3>
             
             <div className="inventory-items">
               {filteredParts.length === 0 ? (
@@ -12673,7 +12851,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                   <div key={catId} style={{ marginBottom: '16px' }}>
                     <div style={{ 
                       fontSize: '0.75rem', 
-                      color: '#00ff88', 
+                      color: '#10b981', 
                       marginBottom: '8px',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px',
@@ -12700,7 +12878,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                                 padding: '2px 6px', 
                                 borderRadius: '4px',
                                 background: 'rgba(255, 193, 7, 0.2)',
-                                color: '#ffc107',
+                                color: '#f59e0b',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px'
@@ -12717,7 +12895,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                               </span>
                             )}
                             {part.costPerUnit > 0 && (
-                              <span style={{ color: '#00ff88', marginLeft: '8px' }}>
+                              <span style={{ color: '#10b981', marginLeft: '8px' }}>
                                 ${part.costPerUnit.toFixed(2)}/unit
                               </span>
                             )}
@@ -12871,7 +13049,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                         </>
                       ) : (
                         <>
-                          <span style={{ flex: 1, color: '#fff' }}>{cat.name}</span>
+                          <span style={{ flex: 1, color: '#1a1a2e' }}>{cat.name}</span>
                           <button className="btn btn-secondary btn-small" onClick={() => setEditingCategory(cat)}>
                             <Edit2 size={14} />
                           </button>
@@ -12958,19 +13136,19 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card">
           <div className="stat-label">Total Items to Restock</div>
-          <div className="stat-value" style={{ color: totalRestockCount > 0 ? '#ffc107' : '#00ff88' }}>
+          <div className="stat-value" style={{ color: totalRestockCount > 0 ? '#f59e0b' : '#10b981' }}>
             {totalRestockCount}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Supplies</div>
-          <div className="stat-value" style={{ color: restockSupplies.length > 0 ? '#ffc107' : '#00ff88' }}>
+          <div className="stat-value" style={{ color: restockSupplies.length > 0 ? '#f59e0b' : '#10b981' }}>
             {restockSupplies.length}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Filaments</div>
-          <div className="stat-value" style={{ color: restockFilaments.length > 0 ? '#ffc107' : '#00ff88' }}>
+          <div className="stat-value" style={{ color: restockFilaments.length > 0 ? '#f59e0b' : '#10b981' }}>
             {restockFilaments.length}
           </div>
         </div>
@@ -12978,7 +13156,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
 
       {totalRestockCount === 0 ? (
         <div className="empty-state">
-          <Check size={48} style={{ color: '#00ff88' }} />
+          <Check size={48} style={{ color: '#10b981' }} />
           <p>All inventory is well stocked!</p>
           <p style={{ fontSize: '0.85rem', color: '#666' }}>Items will appear here when they fall to or below their reorder level</p>
         </div>
@@ -12988,24 +13166,24 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
           {/* Filaments Section */}
           {restockFilaments.length > 0 && (
             <div style={{ 
-              background: 'rgba(255, 255, 255, 0.03)', 
+              background: 'rgba(0, 0, 0, 0.02)', 
               borderRadius: '12px', 
               padding: '20px',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              border: '1px solid rgba(0, 0, 0, 0.06)'
             }}>
               <h3 style={{ 
                 marginBottom: '16px', 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '10px',
-                color: '#00ff88'
+                color: '#10b981'
               }}>
                 <Palette size={20} />
                 Filament
                 <span style={{ 
                   fontSize: '0.75rem', 
                   background: 'rgba(255, 193, 7, 0.2)', 
-                  color: '#ffc107',
+                  color: '#f59e0b',
                   padding: '4px 10px',
                   borderRadius: '12px',
                   marginLeft: '8px'
@@ -13028,7 +13206,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                     <div>
                       <div style={{ 
                         fontWeight: '600', 
-                        color: '#fff',
+                        color: '#1a1a2e',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '10px'
@@ -13037,13 +13215,13 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                         {fil.color}
                       </div>
                       <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
-                        <span style={{ color: '#00ccff' }}>{fil.memberName}</span>
+                        <span style={{ color: '#6366f1' }}>{fil.memberName}</span>
                         <span style={{ margin: '0 8px' }}>•</span>
-                        <span style={{ color: '#ff6b6b' }}>{fil.amount.toFixed(0)}g</span> remaining
+                        <span style={{ color: '#ef4444' }}>{fil.amount.toFixed(0)}g</span> remaining
                         <span style={{ margin: '0 8px' }}>•</span>
                         <span style={{ color: '#888' }}>0 backup rolls</span>
                         <span style={{ margin: '0 8px' }}>•</span>
-                        <span style={{ color: '#ffc107' }}>Reorder at {fil.threshold}g</span>
+                        <span style={{ color: '#f59e0b' }}>Reorder at {fil.threshold}g</span>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -13057,7 +13235,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                       <div style={{ 
                         fontSize: '1.25rem', 
                         fontWeight: '700', 
-                        color: '#00ff88',
+                        color: '#10b981',
                         fontFamily: 'JetBrains Mono, monospace'
                       }}>
                         +1 roll
@@ -13072,24 +13250,24 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
           {/* Supplies by Category */}
           {Object.entries(groupedSupplies).map(([catId, items]) => (
             <div key={catId} style={{ 
-              background: 'rgba(255, 255, 255, 0.03)', 
+              background: 'rgba(0, 0, 0, 0.02)', 
               borderRadius: '12px', 
               padding: '20px',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              border: '1px solid rgba(0, 0, 0, 0.06)'
             }}>
               <h3 style={{ 
                 marginBottom: '16px', 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '10px',
-                color: '#00ff88'
+                color: '#10b981'
               }}>
                 <Box size={20} />
                 {getCategoryName(catId)}
                 <span style={{ 
                   fontSize: '0.75rem', 
                   background: 'rgba(255, 193, 7, 0.2)', 
-                  color: '#ffc107',
+                  color: '#f59e0b',
                   padding: '4px 10px',
                   borderRadius: '12px',
                   marginLeft: '8px'
@@ -13114,20 +13292,20 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                       <div>
                         <div style={{ 
                           fontWeight: '600', 
-                          color: '#fff',
+                          color: '#1a1a2e',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '10px'
                         }}>
-                          <AlertCircle size={16} style={{ color: '#ffc107' }} />
+                          <AlertCircle size={16} style={{ color: '#f59e0b' }} />
                           {item.name}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
-                          <span style={{ color: '#00ccff' }}>{item.memberName}</span>
+                          <span style={{ color: '#6366f1' }}>{item.memberName}</span>
                           <span style={{ margin: '0 8px' }}>•</span>
-                          <span style={{ color: '#ff6b6b' }}>{item.quantity}</span> in stock
+                          <span style={{ color: '#ef4444' }}>{item.quantity}</span> in stock
                           <span style={{ margin: '0 8px' }}>•</span>
-                          Reorder at <span style={{ color: '#ffc107' }}>{item.reorderAt}</span>
+                          Reorder at <span style={{ color: '#f59e0b' }}>{item.reorderAt}</span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -13141,7 +13319,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                         <div style={{ 
                           fontSize: '1.25rem', 
                           fontWeight: '700', 
-                          color: '#00ff88',
+                          color: '#10b981',
                           fontFamily: 'JetBrains Mono, monospace'
                         }}>
                           +{suggestedOrder}
@@ -13270,12 +13448,12 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
   const dailySubCost = yearlySubCost / 365;
 
   const categories = [
-    { id: 'filament', name: 'Filament', color: '#00ff88' },
-    { id: 'parts', name: 'External Parts', color: '#00ccff' },
+    { id: 'filament', name: 'Filament', color: '#10b981' },
+    { id: 'parts', name: 'External Parts', color: '#6366f1' },
     { id: 'packaging', name: 'Packaging', color: '#ff9f43' },
-    { id: 'electronics', name: 'Electronics', color: '#a55eea' },
-    { id: 'hardware', name: 'Hardware', color: '#ff6b6b' },
-    { id: 'shipping', name: 'Shipping Supplies', color: '#ffc107' },
+    { id: 'electronics', name: 'Electronics', color: '#8b5cf6' },
+    { id: 'hardware', name: 'Hardware', color: '#ef4444' },
+    { id: 'shipping', name: 'Shipping Supplies', color: '#f59e0b' },
     { id: 'other', name: 'Other', color: '#888' }
   ];
 
@@ -13371,20 +13549,20 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
 
       {/* Subscriptions Section */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(0, 0, 0, 0.02)',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
-            <RefreshCw size={20} style={{ color: '#a55eea' }} />
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#1a1a2e', margin: 0 }}>
+            <RefreshCw size={20} style={{ color: '#8b5cf6' }} />
             Subscriptions
             <span style={{
               fontSize: '0.75rem',
               background: 'rgba(165, 94, 234, 0.2)',
-              color: '#a55eea',
+              color: '#8b5cf6',
               padding: '4px 10px',
               borderRadius: '12px',
               marginLeft: '8px'
@@ -13420,11 +13598,11 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: '600', color: '#fff' }}>{sub.name}</span>
+                      <span style={{ fontWeight: '600', color: '#1a1a2e' }}>{sub.name}</span>
                       <span style={{
                         fontSize: '0.7rem',
                         background: 'rgba(165, 94, 234, 0.3)',
-                        color: '#a55eea',
+                        color: '#8b5cf6',
                         padding: '2px 8px',
                         borderRadius: '4px',
                         textTransform: 'capitalize'
@@ -13438,7 +13616,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                           href={sub.url.startsWith('http') ? sub.url : `https://${sub.url}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ color: '#00ccff', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          style={{ color: '#6366f1', display: 'flex', alignItems: 'center', gap: '4px' }}
                         >
                           <ExternalLink size={12} /> Manage
                         </a>
@@ -13448,7 +13626,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                         ${sub.price.toFixed(2)}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#666' }}>
@@ -13465,7 +13643,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                     <button
                       className="qty-btn"
                       onClick={() => deleteSubscription(sub.id)}
-                      style={{ color: '#ff6b6b' }}
+                      style={{ color: '#ef4444' }}
                       title="Delete subscription"
                     >
                       <Trash2 size={14} />
@@ -13487,25 +13665,25 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
             }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Daily</div>
-                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${dailySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Weekly</div>
-                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${weeklySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Monthly</div>
-                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${monthlySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Yearly</div>
-                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#a55eea', fontFamily: 'JetBrains Mono, monospace' }}>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${yearlySubCost.toFixed(2)}
                 </div>
               </div>
@@ -13525,14 +13703,14 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
 
         return (
           <div style={{
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'rgba(0, 0, 0, 0.02)',
+            border: '1px solid rgba(0, 0, 0, 0.06)',
             borderRadius: '12px',
             padding: '20px',
             marginBottom: '24px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#1a1a2e', margin: 0 }}>
                 <Printer size={20} style={{ color: '#ff9f43' }} />
                 Printer Payments
               </h3>
@@ -13578,7 +13756,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                           <span style={{ color: '#888' }}>
                             Total: ${(printer.totalPrice || 0).toFixed(2)}
                           </span>
-                          <span style={{ color: '#ff6b6b' }}>
+                          <span style={{ color: '#ef4444' }}>
                             Remaining: ${(printer.remainingBalance || 0).toFixed(2)}
                           </span>
                         </div>
@@ -13592,7 +13770,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                             <div style={{
                               height: '100%',
                               width: `${progress}%`,
-                              background: 'linear-gradient(90deg, #ff9f43 0%, #00ff88 100%)',
+                              background: 'linear-gradient(90deg, #ff9f43 0%, #10b981 100%)',
                               borderRadius: '3px',
                               transition: 'width 0.3s ease'
                             }} />
@@ -13628,7 +13806,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                         gap: '8px'
                       }}
                     >
-                      <Check size={14} style={{ color: '#00ff88' }} />
+                      <Check size={14} style={{ color: '#10b981' }} />
                       <span style={{ fontWeight: '500' }}>{printer.name}</span>
                       <span style={{ fontSize: '0.85rem', color: '#888' }}>
                         (${(printer.totalPrice || 0).toFixed(2)})
@@ -13651,8 +13829,8 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <span style={{ color: '#ff6b6b', fontWeight: '500' }}>Total Remaining Balance</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+                <span style={{ color: '#ef4444', fontWeight: '500' }}>Total Remaining Balance</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ef4444', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${totalRemainingBalance.toFixed(2)}
                 </span>
               </div>
@@ -13707,9 +13885,9 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                       width: '100%',
                       padding: '12px',
                       background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.2)',
+                      border: '1px solid #d2d2d7',
                       borderRadius: '8px',
-                      color: '#fff',
+                      color: '#1a1a2e',
                       fontSize: '1rem'
                     }}
                   >
@@ -13763,13 +13941,13 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
     try {
       const saved = localStorage.getItem('financeAllocations');
       return saved ? JSON.parse(saved) : [
-        { id: 'savings', name: 'Savings', percentage: 20, color: '#00ff88' },
-        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#00ccff', isSplit: true }
+        { id: 'savings', name: 'Savings', percentage: 20, color: '#10b981' },
+        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#6366f1', isSplit: true }
       ];
     } catch {
       return [
-        { id: 'savings', name: 'Savings', percentage: 20, color: '#00ff88' },
-        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#00ccff', isSplit: true }
+        { id: 'savings', name: 'Savings', percentage: 20, color: '#10b981' },
+        { id: 'partners', name: 'Partner Split', percentage: 80, color: '#6366f1', isSplit: true }
       ];
     }
   });
@@ -13921,7 +14099,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
     const currentTotal = allocations.reduce((sum, a) => sum + a.percentage, 0);
     const percentage = Math.min(parseFloat(newAllocation.percentage) || 0, 100 - currentTotal);
 
-    const colors = ['#ff9f43', '#a55eea', '#ff6b6b', '#ffc107', '#00ff88', '#00ccff'];
+    const colors = ['#ff9f43', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981', '#6366f1'];
     const usedColors = allocations.map(a => a.color);
     const availableColor = colors.find(c => !usedColors.includes(c)) || '#888';
 
@@ -14004,7 +14182,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue ({periodLabels[timePeriod]})</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             {formatCurrency(totalRevenue)}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
@@ -14019,7 +14197,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           padding: '20px'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Costs ({periodLabels[timePeriod]})</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ef4444', fontFamily: 'JetBrains Mono, monospace' }}>
             {formatCurrency(totalCosts)}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
@@ -14039,7 +14217,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           <div style={{
             fontSize: '1.75rem',
             fontWeight: '700',
-            color: netProfit >= 0 ? '#00ccff' : '#ff6b6b',
+            color: netProfit >= 0 ? '#6366f1' : '#ef4444',
             fontFamily: 'JetBrains Mono, monospace'
           }}>
             {formatCurrency(netProfit)}
@@ -14052,22 +14230,22 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 
       {/* Cost Breakdown */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(0, 0, 0, 0.02)',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px'
       }}>
-        <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
-          <DollarSign size={20} style={{ color: '#ff6b6b' }} />
+        <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1a1a2e' }}>
+          <DollarSign size={20} style={{ color: '#ef4444' }} />
           Cost Breakdown
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {[
             { name: 'Purchases', amount: totalPurchaseCosts, color: '#ff9f43' },
-            { name: 'Subscriptions', amount: totalSubscriptionCosts, color: '#a55eea' },
-            { name: 'Printer Payments', amount: totalPrinterPayments, color: '#00ccff' },
-            { name: 'Material Costs', amount: totalMaterialCosts, color: '#00ff88' }
+            { name: 'Subscriptions', amount: totalSubscriptionCosts, color: '#8b5cf6' },
+            { name: 'Printer Payments', amount: totalPrinterPayments, color: '#6366f1' },
+            { name: 'Material Costs', amount: totalMaterialCosts, color: '#10b981' }
           ].filter(item => item.amount > 0).map(item => {
             const percentage = totalCosts > 0 ? (item.amount / totalCosts) * 100 : 0;
             return (
@@ -14111,21 +14289,21 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 
       {/* Profit Allocations */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(0, 0, 0, 0.02)',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', margin: 0 }}>
-            <PieChart size={20} style={{ color: '#00ff88' }} />
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#1a1a2e', margin: 0 }}>
+            <PieChart size={20} style={{ color: '#10b981' }} />
             Profit Allocations
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{
               fontSize: '0.8rem',
-              color: totalAllocatedPercentage === 100 ? '#00ff88' : '#ff9f43'
+              color: totalAllocatedPercentage === 100 ? '#10b981' : '#ff9f43'
             }}>
               {totalAllocatedPercentage}% allocated
             </span>
@@ -14165,7 +14343,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                       background: 'rgba(0, 204, 255, 0.2)',
                       border: '1px solid rgba(0, 204, 255, 0.3)',
                       borderRadius: '4px',
-                      color: '#00ccff'
+                      color: '#6366f1'
                     }}>
                       Split {partnerCount} ways
                     </span>
@@ -14184,9 +14362,9 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                           width: '60px',
                           padding: '4px 8px',
                           background: 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
+                          border: '1px solid #d2d2d7',
                           borderRadius: '4px',
-                          color: '#fff',
+                          color: '#1a1a2e',
                           textAlign: 'center'
                         }}
                       />
@@ -14244,7 +14422,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                     <div style={{
                       fontSize: '1.25rem',
                       fontWeight: '700',
-                      color: '#fff',
+                      color: '#1a1a2e',
                       fontFamily: 'JetBrains Mono, monospace'
                     }}>
                       {formatCurrency(alloc.perPerson)}
@@ -14300,13 +14478,13 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
       {/* Partner Breakdown */}
       {teamMembers.length > 0 && (
         <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'rgba(0, 0, 0, 0.02)',
+          border: '1px solid rgba(0, 0, 0, 0.06)',
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#fff' }}>
-            <Users size={20} style={{ color: '#00ccff' }} />
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1a1a2e' }}>
+            <Users size={20} style={{ color: '#6366f1' }} />
             Partner Earnings ({periodLabels[timePeriod]})
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
@@ -14329,14 +14507,14 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                     width: '48px',
                     height: '48px',
                     borderRadius: '50%',
-                    background: member.color || '#00ccff',
+                    background: member.color || '#6366f1',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     margin: '0 auto 12px',
                     fontSize: '1.25rem',
                     fontWeight: '700',
-                    color: '#fff'
+                    color: '#1a1a2e'
                   }}>
                     {member.name?.charAt(0)?.toUpperCase() || '?'}
                   </div>
@@ -14344,7 +14522,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                   <div style={{
                     fontSize: '1.5rem',
                     fontWeight: '700',
-                    color: '#00ccff',
+                    color: '#6366f1',
                     fontFamily: 'JetBrains Mono, monospace'
                   }}>
                     {formatCurrency(partnerEarnings)}
@@ -14751,7 +14929,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
             <button
               className="btn btn-secondary"
               onClick={deleteHistoricalOrders}
-              style={{ marginLeft: '8px', color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' }}
+              style={{ marginLeft: '8px', color: '#ef4444', borderColor: 'rgba(255, 107, 107, 0.3)' }}
             >
               <Trash2 size={18} /> Delete Historical ({historicalCount})
             </button>
@@ -14766,39 +14944,39 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
           onClick={() => setTypeFilter('all')}
           style={{
             cursor: 'pointer',
-            border: typeFilter === 'all' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            border: typeFilter === 'all' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Total Archived</div>
           <div className="stat-value">{archivedOrders.length}</div>
-          {typeFilter === 'all' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Showing All</div>}
+          {typeFilter === 'all' && <div style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '4px' }}>Showing All</div>}
         </div>
         <div
           className="stat-card"
           onClick={() => setTypeFilter('regular')}
           style={{
             cursor: 'pointer',
-            border: typeFilter === 'regular' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.1)',
+            border: typeFilter === 'regular' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Regular Orders</div>
           <div className="stat-value">{regularCount}</div>
-          {typeFilter === 'regular' && <div style={{ fontSize: '0.7rem', color: '#00ff88', marginTop: '4px' }}>Filtered</div>}
+          {typeFilter === 'regular' && <div style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '4px' }}>Filtered</div>}
         </div>
         <div
           className="stat-card"
           onClick={() => setTypeFilter('historical')}
           style={{
             cursor: 'pointer',
-            border: typeFilter === 'historical' ? '2px solid #00ccff' : '1px solid rgba(255,255,255,0.1)',
+            border: typeFilter === 'historical' ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.1)',
             transition: 'all 0.2s ease'
           }}
         >
           <div className="stat-label">Historical Imports</div>
-          <div className="stat-value" style={{ color: '#00ccff' }}>{historicalCount}</div>
-          {typeFilter === 'historical' && <div style={{ fontSize: '0.7rem', color: '#00ccff', marginTop: '4px' }}>Filtered</div>}
+          <div className="stat-value" style={{ color: '#6366f1' }}>{historicalCount}</div>
+          {typeFilter === 'historical' && <div style={{ fontSize: '0.7rem', color: '#6366f1', marginTop: '4px' }}>Filtered</div>}
         </div>
       </div>
 
@@ -14838,7 +15016,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
             <div style={{ padding: '20px' }}>
               {/* Store Selection */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', color: '#00ff88', fontSize: '0.9rem', fontWeight: '600' }}>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#10b981', fontSize: '0.9rem', fontWeight: '600' }}>
                   <Store size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                   Import to Store *
                 </label>
@@ -14851,7 +15029,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     background: 'rgba(0, 255, 136, 0.1)',
                     border: '1px solid rgba(0, 255, 136, 0.3)',
                     borderRadius: '6px',
-                    color: '#fff',
+                    color: '#1a1a2e',
                     fontSize: '1rem'
                   }}
                 >
@@ -14878,9 +15056,9 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     height: '150px',
                     padding: '12px',
                     background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.2)',
+                    border: '1px solid #d2d2d7',
                     borderRadius: '8px',
-                    color: '#fff',
+                    color: '#1a1a2e',
                     fontFamily: 'monospace',
                     fontSize: '0.85rem',
                     resize: 'vertical'
@@ -14891,7 +15069,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
               {/* Preview */}
               {parsedOrders.length > 0 && (
                 <div style={{ marginBottom: '20px' }}>
-                  <h4 style={{ marginBottom: '8px', color: '#00ff88' }}>
+                  <h4 style={{ marginBottom: '8px', color: '#10b981' }}>
                     Preview ({parsedOrders.length} orders found)
                   </h4>
                   <div style={{
@@ -14918,9 +15096,9 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                             <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontFamily: 'monospace' }}>{order.transactionId}</td>
                             <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.product}</td>
                             <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{order.quantity}</td>
-                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00ccff' }}>{order.color || '-'}</td>
-                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#ffc107' }}>{order.extra || '-'}</td>
-                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00ff88' }}>{order.price}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#6366f1' }}>{order.color || '-'}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f59e0b' }}>{order.extra || '-'}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#10b981' }}>{order.price}</td>
                             <td style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#ff9f43' }}>${order.salesTax?.toFixed(2) || '0.00'}</td>
                           </tr>
                         ))}
@@ -14942,7 +15120,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                 padding: '12px',
                 marginBottom: '20px'
               }}>
-                <p style={{ color: '#ffc107', fontSize: '0.85rem', margin: 0 }}>
+                <p style={{ color: '#f59e0b', fontSize: '0.85rem', margin: 0 }}>
                   <AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                   These orders will be imported as historical data and won't appear in active orders.
                 </p>
@@ -15019,7 +15197,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                         padding: '2px 6px',
                         borderRadius: '4px',
                         background: 'rgba(0, 204, 255, 0.2)',
-                        color: '#00ccff',
+                        color: '#6366f1',
                         border: '1px solid rgba(0, 204, 255, 0.3)',
                         whiteSpace: 'nowrap'
                       }}>
@@ -15041,7 +15219,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                 {order.price && (
                   <div className="detail-item">
                     <span className="detail-label">Price</span>
-                    <span className="detail-value" style={{ color: '#00ff88' }}>{order.price}</span>
+                    <span className="detail-value" style={{ color: '#10b981' }}>{order.price}</span>
                   </div>
                 )}
                 {(order.shippingCost !== null && order.shippingCost !== undefined) && (
@@ -15088,7 +15266,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     <span style={{
                       fontSize: '1rem',
                       fontWeight: '600',
-                      color: profitData.profit >= 0 ? '#00ff88' : '#ff6b6b'
+                      color: profitData.profit >= 0 ? '#10b981' : '#ef4444'
                     }}>
                       {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
                     </span>
@@ -15098,11 +15276,11 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     {profitData.shippingCost > 0 && <span style={{ color: '#ff9f43' }}>Shipping: -${profitData.shippingCost.toFixed(2)}</span>}
                     {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
                     {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
-                    <span style={{ color: profitData.filamentCost > 0 ? '#a55eea' : '#555' }}>
+                    <span style={{ color: profitData.filamentCost > 0 ? '#8b5cf6' : '#555' }}>
                       Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
                     </span>
                     {profitData.partsCost > 0 && (
-                      <span style={{ color: '#00ccff' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>
+                      <span style={{ color: '#6366f1' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>
                     )}
                   </div>
                 </div>
@@ -15122,7 +15300,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                         padding: '3px 8px',
                         borderRadius: '4px',
                         background: 'rgba(0, 204, 255, 0.15)',
-                        color: '#00ccff',
+                        color: '#6366f1',
                         border: '1px solid rgba(0, 204, 255, 0.3)'
                       }}>
                         {part.name} x{part.quantity * (order.quantity || 1)}
@@ -15167,7 +15345,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   className="qty-btn"
                   onClick={() => deleteOrder(order.id)}
                   title="Delete order"
-                  style={{ color: '#ff6b6b' }}
+                  style={{ color: '#ef4444' }}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -15194,7 +15372,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                 padding: '10px 12px',
                 borderRadius: '8px',
                 fontSize: '0.85rem',
-                color: '#00ccff'
+                color: '#6366f1'
               }}>
                 TXN: {editingOrder.orderId}
               </div>
@@ -15293,9 +15471,9 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     width: '100%',
                     padding: '12px',
                     background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.2)',
+                    border: '1px solid #d2d2d7',
                     borderRadius: '8px',
-                    color: '#fff',
+                    color: '#1a1a2e',
                     fontSize: '1rem'
                   }}
                 >
@@ -15402,7 +15580,7 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
                 </div>
               ) : (
                 <div className="team-member-name">
-                  <Users size={24} style={{ color: '#00ff88' }} />
+                  <Users size={24} style={{ color: '#10b981' }} />
                   {member.name}
                 </div>
               )}
@@ -15667,7 +15845,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
           marginBottom: '24px'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ color: '#00ccff', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+            <h3 style={{ color: '#6366f1', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
               <Zap size={24} /> Smart Queue Optimizer
             </h3>
             {optimizedQueue.timeSaved > 0 && (
@@ -15676,7 +15854,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                 border: '1px solid rgba(0, 255, 136, 0.4)',
                 borderRadius: '8px',
                 padding: '8px 16px',
-                color: '#00ff88',
+                color: '#10b981',
                 fontWeight: '600'
               }}>
                 Save ~{optimizedQueue.timeSaved} min by batching colors
@@ -15705,7 +15883,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{
                         background: 'rgba(0,204,255,0.2)',
-                        color: '#00ccff',
+                        color: '#6366f1',
                         padding: '4px 12px',
                         borderRadius: '12px',
                         fontSize: '0.8rem',
@@ -15723,7 +15901,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                           height: '16px',
                           borderRadius: '4px',
                           background: '#888',
-                          border: '1px solid rgba(255,255,255,0.2)'
+                          border: '1px solid #d2d2d7'
                         }} />
                         <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{group.color}</span>
                       </div>
@@ -15743,12 +15921,12 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                         alignItems: 'center',
                         gap: '6px'
                       }}>
-                        <span style={{ color: '#00ff88' }}>#{order.orderId.slice(-4)}</span>
+                        <span style={{ color: '#10b981' }}>#{order.orderId.slice(-4)}</span>
                         <span style={{ color: '#666' }}>•</span>
-                        <span style={{ color: '#fff', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ color: '#1a1a2e', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {order.item?.slice(0, 25)}{order.item?.length > 25 ? '...' : ''}
                         </span>
-                        <span style={{ color: '#00ccff' }}>x{order.quantity}</span>
+                        <span style={{ color: '#6366f1' }}>x{order.quantity}</span>
                       </div>
                     ))}
                   </div>
@@ -15765,7 +15943,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
         return (
           <div key={member.id} style={{ marginBottom: '2rem' }}>
             <h3 style={{
-              color: '#00ff88',
+              color: '#10b981',
               marginBottom: '1rem',
               display: 'flex',
               alignItems: 'center',
@@ -15815,7 +15993,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                       width: '24px',
                       height: '24px',
                       borderRadius: '50%',
-                      background: '#00ff88',
+                      background: '#10b981',
                       color: '#0a0a0f',
                       display: 'flex',
                       alignItems: 'center',
@@ -15838,7 +16016,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                           <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>
                             {order.item}
                             {order.extra && (
-                              <span style={{ color: '#00ccff', marginLeft: '8px', fontWeight: 'normal' }}>
+                              <span style={{ color: '#6366f1', marginLeft: '8px', fontWeight: 'normal' }}>
                                 {order.extra}
                               </span>
                             )}
@@ -15855,7 +16033,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                               padding: '4px 12px',
                               borderRadius: '20px',
                               fontSize: '0.8rem',
-                              color: '#00ccff',
+                              color: '#6366f1',
                               marginBottom: '6px',
                               display: 'flex',
                               alignItems: 'center',
@@ -15870,7 +16048,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                             padding: '4px 12px',
                             borderRadius: '20px',
                             fontSize: '0.85rem',
-                            color: '#00ff88'
+                            color: '#10b981'
                           }}>
                             {formatDuration(order.printDuration)}
                           </div>
@@ -15915,12 +16093,12 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ color: '#888' }}>Start:</span>
-                          <span style={{ color: '#00ff88' }}>{formatDateTime(order.calculatedStart)}</span>
+                          <span style={{ color: '#10b981' }}>{formatDateTime(order.calculatedStart)}</span>
                         </div>
                         <ChevronRight size={16} style={{ color: '#444' }} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ color: '#888' }}>End:</span>
-                          <span style={{ color: '#00ccff' }}>{formatDateTime(order.calculatedEnd)}</span>
+                          <span style={{ color: '#6366f1' }}>{formatDateTime(order.calculatedEnd)}</span>
                         </div>
                       </div>
 
@@ -16123,7 +16301,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                <Printer size={24} style={{ color: '#00ff88' }} />
+                <Printer size={24} style={{ color: '#10b981' }} />
                 {editingPrinter === printer.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
                     <input
@@ -16236,7 +16414,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                               fontSize: '0.75rem',
                               background: 'rgba(0, 255, 136, 0.2)',
                               border: '1px solid rgba(0, 255, 136, 0.3)',
-                              color: '#00ff88'
+                              color: '#10b981'
                             }}
                           >
                             Mark Paid Off
@@ -16274,7 +16452,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                           padding: '2px 8px',
                           borderRadius: '10px',
                           background: 'rgba(0, 255, 136, 0.2)',
-                          color: '#00ff88',
+                          color: '#10b981',
                           border: '1px solid rgba(0, 255, 136, 0.3)'
                         }}>
                           PAID OFF
@@ -16283,7 +16461,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span>{getOrderCount(printer.id)} active prints</span>
-                      <span style={{ color: '#00ccff' }}>
+                      <span style={{ color: '#6366f1' }}>
                         <Clock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
                         {formatHours(printer.totalHours || 0)} total
                       </span>
@@ -16292,7 +16470,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                         {getOwnerName(printer.ownerId)}
                       </span>
                       {printer.remainingBalance > 0 && !printer.isPaidOff && (
-                        <span style={{ color: '#ff6b6b' }}>
+                        <span style={{ color: '#ef4444' }}>
                           <DollarSign size={14} style={{ verticalAlign: 'middle', marginRight: '2px' }} />
                           ${printer.remainingBalance.toFixed(2)} remaining
                         </span>
