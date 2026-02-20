@@ -9,12 +9,11 @@ CREATE POLICY "Users can view company profiles" ON user_profiles
     OR company_id IN (SELECT up.company_id FROM user_profiles up WHERE up.user_id = auth.uid())
   );
 
--- Fix companies - new users need to SELECT after INSERT to get the created company
+-- Fix companies - allow any authenticated user to SELECT (needed for invite code lookup)
 DROP POLICY IF EXISTS "Users can view own company" ON companies;
 CREATE POLICY "Users can view own company" ON companies
   FOR SELECT USING (
-    created_by = auth.uid()
-    OR id IN (SELECT company_id FROM user_profiles WHERE user_id = auth.uid())
+    auth.uid() IS NOT NULL  -- Any authenticated user can query companies (for invite code lookup)
   );
 
 -- Make sure companies INSERT works
