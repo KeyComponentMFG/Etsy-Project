@@ -8377,7 +8377,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                 showNotification={showNotification}
                                 toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                                 deleteOrder={deleteOrder}
-                                canDeleteOrder={canDelete(order.owner_id)}
+                                canDeleteOrder={isAdmin}
                                 uiMode={uiMode}
                               />
                             ))}
@@ -8514,7 +8514,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   showNotification={showNotification}
                                   toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                                   deleteOrder={deleteOrder}
-                                  canDeleteOrder={canDelete(order.owner_id)}
+                                  canDeleteOrder={isAdmin}
                                   uiMode={uiMode}
                                 />
                               ))}
@@ -8576,7 +8576,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                     deleteOrder={deleteOrder}
-                    canDeleteOrder={canDelete(order.owner_id)}
+                    canDeleteOrder={isAdmin}
                     uiMode={uiMode}
                   />
                 ))
@@ -8620,7 +8620,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
                     deleteOrder={deleteOrder}
-                    canDeleteOrder={canDelete(order.owner_id)}
+                    canDeleteOrder={isAdmin}
                     uiMode={uiMode}
                   />
                 ))
