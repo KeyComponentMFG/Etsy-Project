@@ -1523,7 +1523,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
 export default function EtsyOrderManager() {
   // Auth state - must be first
   const { user, loading: authLoading, signOut, profile, profileLoading, refreshProfile } = useAuth();
-  const { isAdmin, canEdit, companyId } = usePermissions();
+  const { isAdmin, canEdit, canDelete, companyId } = usePermissions();
   const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
@@ -5195,6 +5195,28 @@ export default function EtsyOrderManager() {
     saveOrders(updated);
   };
 
+  // Delete order
+  const deleteOrder = async (orderIdOrDbId) => {
+    // Find the order to delete
+    const orderToDelete = orders.find(o => o.id === orderIdOrDbId || o.orderId === orderIdOrDbId);
+    if (!orderToDelete) return;
+
+    // Remove from local state
+    const updated = orders.filter(o => o.id !== orderIdOrDbId && o.orderId !== orderIdOrDbId);
+    saveOrders(updated);
+
+    // Delete from database if it has a database ID
+    if (orderToDelete.id) {
+      const { error } = await supabase.from('orders').delete().eq('id', orderToDelete.id);
+      if (error) {
+        console.error('Error deleting order from database:', error);
+        showNotification('Error deleting order from database', 'error');
+      }
+    }
+
+    showNotification(`Deleted order: ${orderToDelete.orderId}`);
+  };
+
   // Auth loading check
   if (authLoading || profileLoading) {
     return (
@@ -8354,6 +8376,8 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                 unfulfillLineItem={unfulfillLineItem}
                                 showNotification={showNotification}
                                 toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                                deleteOrder={deleteOrder}
+                                canDeleteOrder={canDelete(order.owner_id)}
                                 uiMode={uiMode}
                               />
                             ))}
@@ -8489,6 +8513,8 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   unfulfillLineItem={unfulfillLineItem}
                                   showNotification={showNotification}
                                   toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                                  deleteOrder={deleteOrder}
+                                  canDeleteOrder={canDelete(order.owner_id)}
                                   uiMode={uiMode}
                                 />
                               ))}
@@ -8549,6 +8575,8 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     unfulfillLineItem={unfulfillLineItem}
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                    deleteOrder={deleteOrder}
+                    canDeleteOrder={canDelete(order.owner_id)}
                     uiMode={uiMode}
                   />
                 ))
@@ -8591,6 +8619,8 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     unfulfillLineItem={unfulfillLineItem}
                     showNotification={showNotification}
                     toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                    deleteOrder={deleteOrder}
+                    canDeleteOrder={canDelete(order.owner_id)}
                     uiMode={uiMode}
                   />
                 ))
@@ -8604,7 +8634,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 }
 
 // Order Card Component
-function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, showNotification, toggleLineItemPlateComplete, uiMode = 'advanced' }) {
+function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, updateOrderStatus, initiateFulfillment, reassignOrder, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, showNotification, toggleLineItemPlateComplete, deleteOrder, canDeleteOrder, uiMode = 'advanced' }) {
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [showAddColor, setShowAddColor] = useState(false);
@@ -9307,6 +9337,29 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 >
                   <Edit2 size={12} />
                 </button>
+                {canDeleteOrder && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Delete order ${order.orderId}?`)) {
+                        deleteOrder(order.id || order.orderId);
+                      }
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Delete order"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
                 {store && (
                   <span style={{
                     fontSize: '0.65rem',
