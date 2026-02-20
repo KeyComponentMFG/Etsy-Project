@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown, Search, HelpCircle, Bell, Undo2, GripVertical, CheckSquare, Square, Info, LogOut } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
-
-// Initialize Supabase client
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from './lib/supabase';
+import { useAuth } from './contexts/AuthContext';
+import LoginPage from './components/auth/LoginPage';
+import SignupPage from './components/auth/SignupPage';
+import CompanySetup from './components/auth/CompanySetup';
+import AdminPanel from './components/admin/AdminPanel';
+import { usePermissions } from './hooks/usePermissions';
 
 // Default supply categories
 const DEFAULT_SUPPLY_CATEGORIES = [
@@ -119,7 +119,7 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
             style={{
               background: 'none',
               border: 'none',
-              color: '#888',
+              color: '#6e6e73',
               cursor: 'pointer',
               padding: '4px'
             }}
@@ -142,7 +142,7 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
             </span>
           ))}
           {lowStockItems.length > 5 && (
-            <span style={{ color: '#888', fontSize: '0.8rem', padding: '4px 10px' }}>
+            <span style={{ color: '#6e6e73', fontSize: '0.8rem', padding: '4px 10px' }}>
               +{lowStockItems.length - 5} more
             </span>
           )}
@@ -170,6 +170,20 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
 // Dashboard Tab Component
 function DashboardTab({ orders, archivedOrders, purchases, models, stores, filaments, externalParts }) {
   const [timeRange, setTimeRange] = useState('month'); // week, month, year, all
+  const [showWidgetConfig, setShowWidgetConfig] = useState(false);
+
+  // Widget visibility (saved to localStorage)
+  const defaultWidgets = { revenue: true, orders: true, fees: true, inventory: true, charts: true };
+  const [visibleWidgets, setVisibleWidgets] = useState(() => {
+    const saved = localStorage.getItem('dashboardWidgets');
+    return saved ? JSON.parse(saved) : defaultWidgets;
+  });
+
+  const toggleWidget = (widgetId) => {
+    const updated = { ...visibleWidgets, [widgetId]: !visibleWidgets[widgetId] };
+    setVisibleWidgets(updated);
+    localStorage.setItem('dashboardWidgets', JSON.stringify(updated));
+  };
 
   // Combine orders and archived orders for revenue calculation
   const allOrders = [...(orders || []), ...(archivedOrders || [])];
@@ -490,6 +504,13 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             className="btn btn-secondary"
+            onClick={() => setShowWidgetConfig(!showWidgetConfig)}
+            title="Customize dashboard"
+          >
+            <Settings size={16} />
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={exportOrdersCSV}
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -516,7 +537,55 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
         </div>
       </div>
 
-      {/* Key Metrics */}
+      {/* Widget Configuration Panel */}
+      {showWidgetConfig && (
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e5e5e5',
+          borderRadius: '12px',
+          padding: '16px',
+          marginBottom: '20px',
+          display: 'flex',
+          gap: '16px',
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }}>
+          <span style={{ fontWeight: '500', color: '#6e6e73' }}>Show widgets:</span>
+          {[
+            { id: 'revenue', label: 'Revenue' },
+            { id: 'orders', label: 'Orders' },
+            { id: 'fees', label: 'Fees' },
+            { id: 'inventory', label: 'Inventory' },
+            { id: 'charts', label: 'Charts' }
+          ].map(widget => (
+            <label key={widget.id} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: visibleWidgets[widget.id] ? '#e8f5e9' : '#f5f5f7',
+              border: `1px solid ${visibleWidgets[widget.id] ? '#34c759' : '#e5e5e5'}`,
+              transition: 'all 0.15s ease'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleWidgets[widget.id]}
+                onChange={() => toggleWidget(widget.id)}
+                style={{ display: 'none' }}
+              />
+              {visibleWidgets[widget.id] ? <CheckSquare size={16} color="#34c759" /> : <Square size={16} color="#86868b" />}
+              <span style={{ fontSize: '0.85rem', color: visibleWidgets[widget.id] ? '#1d1d1f' : '#86868b' }}>
+                {widget.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* Key Metrics - Revenue */}
+      {visibleWidgets.revenue && (
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -529,11 +598,11 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue (after tax)</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Revenue (after tax)</div>
           <div style={{ fontSize: '2rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             ${revenueData.actualRevenue.toFixed(2)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
             ${revenueData.orderTotal.toFixed(2)} total - ${revenueData.salesTax.toFixed(2)} tax
           </div>
         </div>
@@ -544,11 +613,11 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Etsy Fees</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Etsy Fees</div>
           <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
             ${revenueData.totalFees.toFixed(2)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
             6.5% + 3% + $0.25/order
           </div>
         </div>
@@ -559,11 +628,11 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Material Expenses</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Material Expenses</div>
           <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ef4444', fontFamily: 'JetBrains Mono, monospace' }}>
             ${expenses.toFixed(2)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
             From purchases & materials
           </div>
         </div>
@@ -574,11 +643,11 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Shipping Costs</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Shipping Costs</div>
           <div style={{ fontSize: '2rem', fontWeight: '700', color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>
             ${shippingCosts.toFixed(2)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
             Avg ${(shippingCosts / (orderCounts.shipped || 1)).toFixed(2)}/order
           </div>
         </div>
@@ -591,7 +660,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Net Profit</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Net Profit</div>
           <div style={{
             fontSize: '2rem',
             fontWeight: '700',
@@ -600,13 +669,15 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
           }}>
             {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
             {revenueData.actualRevenue > 0 ? `${((netProfit / revenueData.actualRevenue) * 100).toFixed(1)}% margin` : 'No revenue yet'}
           </div>
         </div>
       </div>
+      )}
 
       {/* Order Status Summary */}
+      {visibleWidgets.orders && (
       <div style={{
         background: 'rgba(0, 0, 0, 0.02)',
         borderRadius: '12px',
@@ -620,24 +691,26 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a1a2e' }}>{orderCounts.total}</div>
-            <div style={{ fontSize: '0.85rem', color: '#888' }}>Total Orders</div>
+            <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>Total Orders</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: '700', color: '#f59e0b' }}>{orderCounts.pending}</div>
-            <div style={{ fontSize: '0.85rem', color: '#888' }}>In Progress</div>
+            <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>In Progress</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: '700', color: '#6366f1' }}>{orderCounts.fulfilled}</div>
-            <div style={{ fontSize: '0.85rem', color: '#888' }}>Ready to Ship</div>
+            <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>Ready to Ship</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: '700', color: '#10b981' }}>{orderCounts.shipped}</div>
-            <div style={{ fontSize: '0.85rem', color: '#888' }}>Shipped</div>
+            <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>Shipped</div>
           </div>
         </div>
       </div>
+      )}
 
       {/* Charts Row */}
+      {visibleWidgets.charts && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Revenue Trend Chart */}
         <div style={{
@@ -665,11 +738,11 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
                 <XAxis
                   dataKey="date"
-                  stroke="#666"
-                  tick={{ fill: '#888', fontSize: 10 }}
+                  stroke="#94a3b8"
+                  tick={{ fill: '#64748b', fontSize: 10 }}
                   tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 />
-                <YAxis stroke="#666" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(val) => `$${val}`} />
+                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(val) => `$${val}`} />
                 <Tooltip
                   contentStyle={{ background: '#ffffff', border: '1px solid #d2d2d7', borderRadius: '8px' }}
                   labelStyle={{ color: '#1a1a2e' }}
@@ -681,7 +754,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86868b' }}>
               No revenue data yet
             </div>
           )}
@@ -709,7 +782,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                   paddingAngle={5}
                   dataKey="value"
                   label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={{ stroke: '#666' }}
+                  labelLine={{ stroke: '#94a3b8' }}
                 >
                   {orderStatusData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -722,7 +795,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
               </RechartsPieChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86868b' }}>
               No orders yet
             </div>
           )}
@@ -730,12 +803,13 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
             {orderStatusData.map((entry) => (
               <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <div style={{ width: 12, height: 12, borderRadius: '50%', background: entry.color }} />
-                <span style={{ fontSize: '0.8rem', color: '#888' }}>{entry.name}</span>
+                <span style={{ fontSize: '0.8rem', color: '#6e6e73' }}>{entry.name}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
         {/* Top Selling Items */}
@@ -749,7 +823,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
             <Star size={20} /> Top Selling Items
           </h3>
           {topModels.length === 0 ? (
-            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No orders yet</div>
+            <div style={{ color: '#86868b', textAlign: 'center', padding: '20px' }}>No orders yet</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {topModels.map((model, idx) => (
@@ -758,13 +832,13 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '10px 12px',
-                  background: 'rgba(0, 0, 0, 0.2)',
+                  background: '#f5f5f7',
                   borderRadius: '8px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{
                       background: idx === 0 ? 'rgba(255, 193, 7, 0.3)' : 'rgba(0, 0, 0, 0.06)',
-                      color: idx === 0 ? '#f59e0b' : '#888',
+                      color: idx === 0 ? '#f59e0b' : '#6e6e73',
                       padding: '4px 8px',
                       borderRadius: '4px',
                       fontSize: '0.8rem',
@@ -776,7 +850,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                       <div style={{ fontWeight: '500', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {model.name?.slice(0, 30)}{model.name?.length > 30 ? '...' : ''}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6e6e73' }}>
                         {model.count} orders • {model.quantity} items
                       </div>
                     </div>
@@ -801,7 +875,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
             <Store size={20} /> Revenue by Store
           </h3>
           {revenueByStore.length === 0 ? (
-            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No store data yet</div>
+            <div style={{ color: '#86868b', textAlign: 'center', padding: '20px' }}>No store data yet</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {revenueByStore.map((store, idx) => {
@@ -809,7 +883,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                 return (
                   <div key={store.id} style={{
                     padding: '10px 12px',
-                    background: 'rgba(0, 0, 0, 0.2)',
+                    background: '#f5f5f7',
                     borderRadius: '8px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -831,7 +905,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                         borderRadius: '3px'
                       }} />
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#6e6e73', marginTop: '4px' }}>
                       {store.orders} orders • {percentage.toFixed(1)}% of revenue
                     </div>
                   </div>
@@ -852,7 +926,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
             <Palette size={20} /> Best Selling Colors
           </h3>
           {topColors.length === 0 ? (
-            <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No color data yet</div>
+            <div style={{ color: '#86868b', textAlign: 'center', padding: '20px' }}>No color data yet</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {topColors.map((color, idx) => {
@@ -861,14 +935,14 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                 return (
                   <div key={color.name} style={{
                     padding: '10px 12px',
-                    background: 'rgba(0, 0, 0, 0.2)',
+                    background: '#f5f5f7',
                     borderRadius: '8px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{
                           background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : 'rgba(0, 0, 0, 0.06)',
-                          color: idx === 0 ? '#8b5cf6' : '#888',
+                          color: idx === 0 ? '#8b5cf6' : '#6e6e73',
                           padding: '3px 8px',
                           borderRadius: '4px',
                           fontSize: '0.75rem',
@@ -895,10 +969,10 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
                         borderRadius: '2px'
                       }} />
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '4px' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#86868b', marginTop: '4px' }}>
                       {color.count} orders • ${color.revenue.toFixed(2)} revenue
                       {color.filamentWeight > 0 && (
-                        <span style={{ color: '#6366f1' }}> • {color.filamentWeight.toFixed(0)}g filament</span>
+                        <span style={{ color: '#6366f1' }}> • {color.filamentWeight.toFixed(0)}g material</span>
                       )}
                     </div>
                   </div>
@@ -912,7 +986,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
   );
 }
 
-// Analytics Tab Component - Color stats and filament usage tracking
+// Analytics Tab Component - Color stats and material usage tracking
 function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, models, filaments, teamMembers, filamentUsageHistory, showNotification }) {
   const [timeRange, setTimeRange] = useState('all'); // week, month, year, all
   const [sortBy, setSortBy] = useState('quantity'); // quantity, weight, revenue
@@ -1188,7 +1262,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Colors Tracked</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Total Colors Tracked</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
             {colorStats.length}
           </div>
@@ -1200,7 +1274,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Items Sold</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Total Items Sold</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>
             {totalQuantity.toLocaleString()}
           </div>
@@ -1212,7 +1286,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Filament Used</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Total Material Used</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             {(totalFilamentUsed / 1000).toFixed(2)} kg
           </div>
@@ -1224,7 +1298,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Total Revenue</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Total Revenue</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f59e0b', fontFamily: 'JetBrains Mono, monospace' }}>
             ${totalRevenue.toFixed(2)}
           </div>
@@ -1243,7 +1317,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
         </h3>
 
         {colorStats.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          <div style={{ textAlign: 'center', padding: '40px', color: '#86868b' }}>
             <Palette size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
             <p>No color data available yet</p>
             <p style={{ fontSize: '0.85rem' }}>Import orders with color information to see analytics</p>
@@ -1253,15 +1327,15 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Rank</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Color</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Qty Sold</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Orders</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Filament Used</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Revenue</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Inventory</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Usage Rate</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase' }}>Reorder In</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Rank</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Color</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Qty Sold</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Orders</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Material Used</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Revenue</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Inventory</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Usage Rate</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', color: '#6e6e73', fontSize: '0.8rem', textTransform: 'uppercase' }}>Reorder In</th>
                 </tr>
               </thead>
               <tbody>
@@ -1280,7 +1354,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                       <td style={{ padding: '12px 8px' }}>
                         <span style={{
                           background: idx === 0 ? 'rgba(165, 94, 234, 0.3)' : idx < 3 ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0, 0, 0, 0.06)',
-                          color: idx === 0 ? '#8b5cf6' : idx < 3 ? '#c084fc' : '#888',
+                          color: idx === 0 ? '#8b5cf6' : idx < 3 ? '#c084fc' : '#6e6e73',
                           padding: '4px 10px',
                           borderRadius: '4px',
                           fontSize: '0.8rem',
@@ -1308,7 +1382,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#6366f1' }}>
                         {color.quantity.toLocaleString()}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#888' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#6e6e73' }}>
                         {color.orderCount}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', color: '#10b981' }}>
@@ -1318,13 +1392,13 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                         ${color.revenue.toFixed(2)}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
-                        {inventory > 0 ? `${inventory.toFixed(0)}g` : <span style={{ color: '#666' }}>-</span>}
+                        {inventory > 0 ? `${inventory.toFixed(0)}g` : <span style={{ color: '#86868b' }}>-</span>}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }}>
                         {usageRate ? (
                           <span style={{ color: '#6366f1' }}>{usageRate.weekly.toFixed(0)}g/wk</span>
                         ) : (
-                          <span style={{ color: '#666' }}>-</span>
+                          <span style={{ color: '#86868b' }}>-</span>
                         )}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', fontFamily: 'JetBrains Mono, monospace' }}>
@@ -1336,7 +1410,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                             {daysUntilReorder === 0 ? 'Now!' : `${daysUntilReorder} days`}
                           </span>
                         ) : (
-                          <span style={{ color: '#666' }}>-</span>
+                          <span style={{ color: '#86868b' }}>-</span>
                         )}
                       </td>
                     </tr>
@@ -1360,8 +1434,8 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
           <AlertCircle size={18} style={{ color: '#6366f1' }} />
           <strong style={{ color: '#6366f1' }}>About Usage Rates & Reorder Predictions</strong>
         </div>
-        <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>
-          Usage rates and reorder predictions are calculated from filament deductions when orders are fulfilled.
+        <p style={{ color: '#6e6e73', fontSize: '0.85rem', margin: 0 }}>
+          Usage rates and reorder predictions are calculated from material deductions when orders are fulfilled.
           The more orders you process, the more accurate these predictions become.
           {(filamentUsageHistory || []).length > 0 ? (
             <span style={{ color: '#10b981' }}> Currently tracking {(filamentUsageHistory || []).length} usage events.</span>
@@ -1389,15 +1463,15 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                 borderRadius: '8px',
                 fontSize: '0.9rem'
               }}>
-                <span style={{ color: '#888' }}>Current color: </span>
+                <span style={{ color: '#6e6e73' }}>Current color: </span>
                 <span style={{ color: '#8b5cf6', fontWeight: '600', textTransform: 'capitalize' }}>{editingColor}</span>
-                <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#86868b', marginTop: '4px' }}>
                   This will update all orders with this color
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>
                   New Color Name
                 </label>
                 <input
@@ -1427,7 +1501,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
                 paddingTop: '16px',
                 marginTop: '8px'
               }}>
-                <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '12px' }}>
+                <p style={{ color: '#6e6e73', fontSize: '0.8rem', marginBottom: '12px' }}>
                   Not a real color? Remove it from all orders:
                 </p>
                 <button
@@ -1447,6 +1521,13 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
 }
 
 export default function EtsyOrderManager() {
+  // Auth state - must be first
+  const { user, loading: authLoading, signOut, profile, profileLoading, refreshProfile } = useAuth();
+  const { isAdmin, canEdit, companyId } = usePermissions();
+  const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  // ALL hooks must be declared before any conditional returns
   const [activeTab, setActiveTab] = useState('finance'); // Default to dashboard
   const [orders, setOrders] = useState([]);
   const [archivedOrders, setArchivedOrders] = useState([]);
@@ -1483,6 +1564,17 @@ export default function EtsyOrderManager() {
   const [inventorySubTab, setInventorySubTab] = useState('filament'); // 'filament', 'supplies', or 'restock'
   const [equipmentSubTab, setEquipmentSubTab] = useState('printers'); // 'printers' or 'stores'
   const [financeSubTab, setFinanceSubTab] = useState('dashboard'); // 'dashboard', 'costs', 'finance', or 'analytics'
+
+  // UX Enhancement States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [undoStack, setUndoStack] = useState([]); // For undo functionality
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [selectedItems, setSelectedItems] = useState([]); // For bulk actions
+  const [bulkMode, setBulkMode] = useState(false);
+  const [lastUsedCategory, setLastUsedCategory] = useState(''); // Smart defaults
+  const searchInputRef = useRef(null);
 
   // Helper function to parse color field
   const parseColorField = (colorField) => {
@@ -2048,6 +2140,8 @@ export default function EtsyOrderManager() {
         if (orders.length > 0) {
           const dbFormat = orders.map(o => ({
             id: o.id || o.orderId,
+            company_id: companyId,
+            owner_id: user.id,
             order_id: o.orderId,
             buyer_name: o.buyerName,
             item: o.item,
@@ -2128,6 +2222,8 @@ export default function EtsyOrderManager() {
       if (archivedOrders.length > 0) {
         const dbFormat = archivedOrders.map(o => ({
           id: o.id || o.orderId,
+          company_id: companyId,
+            owner_id: user.id,
           order_id: o.orderId,
           buyer_name: o.buyerName,
           item: o.item,
@@ -2176,6 +2272,8 @@ export default function EtsyOrderManager() {
         memberFilaments.forEach(f => {
           allFilaments.push({
             id: f.id,
+            company_id: companyId,
+            owner_id: user.id,
             member_id: memberId,
             color: f.color,
             color_hex: f.colorHex,
@@ -2205,7 +2303,7 @@ export default function EtsyOrderManager() {
           // Show user-visible error
           const errorDiv = document.createElement('div');
           errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#ff4444;color:white;padding:12px 20px;border-radius:8px;z-index:99999;font-weight:500;max-width:400px;';
-          errorDiv.textContent = `Filament save failed: ${error.message}`;
+          errorDiv.textContent = `Material save failed: ${error.message}`;
           document.body.appendChild(errorDiv);
           setTimeout(() => errorDiv.remove(), 5000);
         } else {
@@ -2247,6 +2345,8 @@ export default function EtsyOrderManager() {
         if (models.length > 0) {
           const dbFormat = models.map(m => ({
             id: m.id,
+            company_id: companyId,
+            owner_id: user.id,
             name: m.name,
             variant_name: m.variantName || '',
             filament_usage: m.filamentUsage,
@@ -2300,7 +2400,8 @@ export default function EtsyOrderManager() {
       }
 
       if (stores.length > 0) {
-        await supabase.from('stores').upsert(stores);
+        const dbFormat = stores.map(s => ({ ...s, company_id: companyId, owner_id: user.id }));
+        await supabase.from('stores').upsert(dbFormat);
       }
     };
     syncStores();
@@ -2327,6 +2428,7 @@ export default function EtsyOrderManager() {
       if (printers.length > 0) {
         const dbFormat = printers.map(p => ({
           id: p.id,
+          company_id: companyId,
           name: p.name,
           total_hours: p.totalHours || 0,
           owner_id: p.ownerId || null,
@@ -2357,6 +2459,8 @@ export default function EtsyOrderManager() {
         memberParts.forEach(p => {
           allParts.push({
             id: p.id,
+            company_id: companyId,
+            owner_id: user.id,
             member_id: memberId,
             name: p.name,
             quantity: p.quantity,
@@ -2402,7 +2506,8 @@ export default function EtsyOrderManager() {
       }
 
       if (teamMembers.length > 0) {
-        await supabase.from('team_members').upsert(teamMembers);
+        const dbFormat = teamMembers.map(t => ({ ...t, company_id: companyId, owner_id: user.id }));
+        await supabase.from('team_members').upsert(dbFormat);
       }
     };
     syncTeam();
@@ -2427,7 +2532,8 @@ export default function EtsyOrderManager() {
       }
 
       if (supplyCategories.length > 0) {
-        await supabase.from('supply_categories').upsert(supplyCategories);
+        const dbFormat = supplyCategories.map(c => ({ ...c, company_id: companyId, owner_id: user.id }));
+        await supabase.from('supply_categories').upsert(dbFormat);
       }
     };
     syncCategories();
@@ -2454,6 +2560,8 @@ export default function EtsyOrderManager() {
       if (purchases.length > 0) {
         const dbFormat = purchases.map(p => ({
           id: p.id,
+          company_id: companyId,
+            owner_id: user.id,
           name: p.name,
           category: p.category,
           total_cost: p.totalCost,
@@ -2484,6 +2592,8 @@ export default function EtsyOrderManager() {
       if (filamentUsageHistory.length > 0) {
         const dbFormat = filamentUsageHistory.map(h => ({
           id: h.id,
+          company_id: companyId,
+            owner_id: user.id,
           color: h.color,
           amount: h.amount,
           date: h.date,
@@ -2522,6 +2632,8 @@ export default function EtsyOrderManager() {
       if (subscriptions.length > 0) {
         const dbFormat = subscriptions.map(s => ({
           id: s.id,
+          company_id: companyId,
+            owner_id: user.id,
           name: s.name,
           price: s.price,
           frequency: s.frequency,
@@ -2810,10 +2922,10 @@ export default function EtsyOrderManager() {
         supabase.from('stores').delete().neq('id', '')
       ]);
 
-      // Re-insert default data
-      await supabase.from('team_members').insert(DEFAULT_TEAM);
-      await supabase.from('stores').insert(DEFAULT_STORES);
-      await supabase.from('supply_categories').insert(DEFAULT_SUPPLY_CATEGORIES);
+      // Re-insert default data with company_id and owner_id
+      await supabase.from('team_members').insert(DEFAULT_TEAM.map(t => ({ ...t, company_id: companyId, owner_id: user.id })));
+      await supabase.from('stores').insert(DEFAULT_STORES.map(s => ({ ...s, company_id: companyId, owner_id: user.id })));
+      await supabase.from('supply_categories').insert(DEFAULT_SUPPLY_CATEGORIES.map(c => ({ ...c, company_id: companyId, owner_id: user.id })));
 
       setOrders([]);
       setArchivedOrders([]);
@@ -2854,6 +2966,150 @@ export default function EtsyOrderManager() {
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Undo notification with action
+  const showUndoNotification = (message, undoAction) => {
+    const undoId = Date.now();
+    setUndoStack(prev => [...prev, { id: undoId, message, undoAction }]);
+    setTimeout(() => {
+      setUndoStack(prev => prev.filter(u => u.id !== undoId));
+    }, 5000);
+  };
+
+  // Global search function
+  const getSearchResults = () => {
+    if (!searchQuery.trim()) return { orders: [], supplies: [], products: [], filaments: [] };
+    const query = searchQuery.toLowerCase();
+
+    // Search orders
+    const matchingOrders = orders.filter(o =>
+      o.orderId?.toLowerCase().includes(query) ||
+      o.product?.toLowerCase().includes(query) ||
+      o.buyer?.toLowerCase().includes(query) ||
+      o.color?.toLowerCase().includes(query)
+    ).slice(0, 5);
+
+    // Search supplies
+    const matchingSupplies = [];
+    teamMembers.forEach(member => {
+      const memberParts = externalParts[member.id] || [];
+      memberParts.forEach(part => {
+        if (part.name?.toLowerCase().includes(query)) {
+          matchingSupplies.push({ ...part, memberName: member.name, memberId: member.id });
+        }
+      });
+    });
+
+    // Search products/models
+    const matchingProducts = models.filter(m =>
+      m.name?.toLowerCase().includes(query) ||
+      m.aliases?.some(a => a.toLowerCase().includes(query))
+    ).slice(0, 5);
+
+    // Search filaments
+    const matchingFilaments = [];
+    teamMembers.forEach(member => {
+      const memberFilaments = filaments[member.id] || [];
+      memberFilaments.forEach(fil => {
+        if (fil.color?.toLowerCase().includes(query) || fil.material?.toLowerCase().includes(query)) {
+          matchingFilaments.push({ ...fil, memberName: member.name, memberId: member.id });
+        }
+      });
+    });
+
+    return {
+      orders: matchingOrders,
+      supplies: matchingSupplies.slice(0, 5),
+      products: matchingProducts,
+      filaments: matchingFilaments.slice(0, 5)
+    };
+  };
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't trigger shortcuts when typing in inputs
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        // Allow Escape to close search
+        if (e.key === 'Escape' && searchOpen) {
+          setSearchOpen(false);
+          setSearchQuery('');
+        }
+        return;
+      }
+
+      // Cmd/Ctrl + K for search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
+
+      // Escape to close search
+      if (e.key === 'Escape' && searchOpen) {
+        setSearchOpen(false);
+        setSearchQuery('');
+      }
+
+      // Number keys for tabs (1-7)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        const tabMap = { '1': 'orders', '2': 'inventory', '3': 'products', '4': 'equipment', '5': 'finance', '6': 'history', '7': 'team' };
+        if (tabMap[e.key]) {
+          setActiveTab(tabMap[e.key]);
+        }
+
+        // N for new (context-dependent)
+        if (e.key === 'n' && !searchOpen) {
+          if (activeTab === 'orders') setShowCsvModal(true);
+        }
+
+        // B for bulk mode toggle
+        if (e.key === 'b') {
+          setBulkMode(prev => !prev);
+          if (bulkMode) setSelectedItems([]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchOpen, activeTab, bulkMode]);
+
+  // Check if first visit for onboarding
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+    if (!hasSeenOnboarding && initialLoadComplete && orders.length === 0) {
+      setShowOnboarding(true);
+    }
+  }, [initialLoadComplete, orders.length]);
+
+  const completeOnboarding = () => {
+    localStorage.setItem('hasSeenOnboarding', 'true');
+    setShowOnboarding(false);
+    setOnboardingStep(0);
+  };
+
+  // Request notification permission
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      // We'll ask for permission when user enables notifications
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        showNotification('Notifications enabled!');
+      }
+    }
+  };
+
+  const sendBrowserNotification = (title, body) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/vite.svg' });
+    }
   };
 
   // Helper function to find a model by name or alias
@@ -3770,7 +4026,7 @@ export default function EtsyOrderManager() {
               }
 
               if (filamentChanged && filamentToAddBack > 0) {
-                showNotification(`Added back ${filamentToAddBack.toFixed(2)}g of filament`);
+                showNotification(`Added back ${filamentToAddBack.toFixed(2)}g of material`);
               }
 
               // Add back external parts
@@ -4428,7 +4684,7 @@ export default function EtsyOrderManager() {
     saveOrders(updated);
 
     const itemName = lineItem.item.length > 30 ? lineItem.item.substring(0, 30) + '...' : lineItem.item;
-    showNotification(`Unfulfilled "${itemName}" - filament and parts restored`);
+    showNotification(`Unfulfilled "${itemName}" - material and parts restored`);
   };
 
   // Toggle plate completion and deduct/add filament
@@ -4939,6 +5195,53 @@ export default function EtsyOrderManager() {
     saveOrders(updated);
   };
 
+  // Auth loading check
+  if (authLoading || profileLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #f8f9fc 0%, #e2e8f0 100%)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid #e2e8f0',
+            borderTopColor: '#10b981',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <p style={{ color: '#64748b', fontSize: '1rem' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth pages if not logged in
+  if (!user) {
+    if (authView === 'signup') {
+      return <SignupPage onSwitchToLogin={() => setAuthView('login')} />;
+    }
+    return <LoginPage onSwitchToSignup={() => setAuthView('signup')} />;
+  }
+
+  // Show company setup if user has no profile (needs to create or join company)
+  if (!profile) {
+    return (
+      <CompanySetup
+        user={user}
+        onComplete={async () => {
+          await refreshProfile();
+        }}
+      />
+    );
+  }
+
+  // Data loading check
   if (loading) {
     return (
       <div className="loading-screen">
@@ -5729,12 +6032,787 @@ export default function EtsyOrderManager() {
           align-items: center;
           margin-bottom: 1.5rem;
         }
+
+        /* Search Overlay */
+        .search-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.5);
+          backdrop-filter: blur(4px);
+          z-index: 2000;
+          display: flex;
+          justify-content: center;
+          padding-top: 100px;
+          animation: fadeIn 0.15s ease;
+        }
+
+        .search-modal {
+          background: #ffffff;
+          border-radius: 16px;
+          width: 90%;
+          max-width: 600px;
+          max-height: 70vh;
+          overflow: hidden;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          animation: slideDown 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .search-input-container {
+          display: flex;
+          align-items: center;
+          padding: 16px 20px;
+          border-bottom: 1px solid #e5e5e5;
+          gap: 12px;
+        }
+
+        .search-input {
+          flex: 1;
+          border: none;
+          outline: none;
+          font-size: 1.1rem;
+          background: transparent;
+          color: #1d1d1f;
+        }
+
+        .search-input::placeholder {
+          color: #86868b;
+        }
+
+        .search-shortcut {
+          background: #e8e8ed;
+          padding: 4px 8px;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          color: #6e6e73;
+          font-weight: 500;
+        }
+
+        .search-results {
+          max-height: calc(70vh - 60px);
+          overflow-y: auto;
+          padding: 12px;
+        }
+
+        .search-category {
+          margin-bottom: 16px;
+        }
+
+        .search-category-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #86868b;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          padding: 8px 12px;
+        }
+
+        .search-result-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .search-result-item:hover {
+          background: #f5f5f7;
+        }
+
+        .search-result-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .search-result-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .search-result-title {
+          font-weight: 500;
+          color: #1d1d1f;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .search-result-meta {
+          font-size: 0.8rem;
+          color: #86868b;
+        }
+
+        /* Undo Toast */
+        .undo-toast {
+          position: fixed;
+          bottom: 24px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #1d1d1f;
+          color: white;
+          padding: 14px 20px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          z-index: 2001;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from { opacity: 0; transform: translate(-50%, 20px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        .undo-toast button {
+          background: #007aff;
+          border: none;
+          color: white;
+          padding: 6px 14px;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 0.85rem;
+        }
+
+        .undo-toast button:hover {
+          background: #0066d6;
+        }
+
+        /* Onboarding Modal */
+        .onboarding-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.7);
+          backdrop-filter: blur(8px);
+          z-index: 3000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .onboarding-modal {
+          background: #ffffff;
+          border-radius: 20px;
+          width: 90%;
+          max-width: 500px;
+          padding: 32px;
+          text-align: center;
+          animation: scaleIn 0.3s ease;
+        }
+
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+
+        .onboarding-icon {
+          width: 80px;
+          height: 80px;
+          background: linear-gradient(135deg, #007aff, #5856d6);
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 24px;
+          color: white;
+        }
+
+        .onboarding-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1d1d1f;
+          margin-bottom: 12px;
+        }
+
+        .onboarding-text {
+          color: #6e6e73;
+          margin-bottom: 24px;
+          line-height: 1.6;
+        }
+
+        .onboarding-steps {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 24px;
+        }
+
+        .onboarding-step {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #e5e5e5;
+          transition: all 0.2s ease;
+        }
+
+        .onboarding-step.active {
+          width: 24px;
+          border-radius: 4px;
+          background: #007aff;
+        }
+
+        /* Bulk Selection */
+        .bulk-checkbox {
+          width: 20px;
+          height: 20px;
+          border: 2px solid #d2d2d7;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+
+        .bulk-checkbox.selected {
+          background: #007aff;
+          border-color: #007aff;
+          color: white;
+        }
+
+        .bulk-checkbox:hover {
+          border-color: #007aff;
+        }
+
+        .bulk-actions-bar {
+          position: fixed;
+          bottom: 24px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #1d1d1f;
+          color: white;
+          padding: 12px 20px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          z-index: 1000;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+
+        .bulk-actions-bar button {
+          background: rgba(255,255,255,0.1);
+          border: none;
+          color: white;
+          padding: 8px 16px;
+          border-radius: 8px;
+          font-weight: 500;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .bulk-actions-bar button:hover {
+          background: rgba(255,255,255,0.2);
+        }
+
+        .bulk-actions-bar button.primary {
+          background: #007aff;
+        }
+
+        /* Collapsible Section */
+        .collapsible-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          padding: 8px 0;
+          color: #6e6e73;
+          font-size: 0.85rem;
+          font-weight: 500;
+        }
+
+        .collapsible-header:hover {
+          color: #007aff;
+        }
+
+        .collapsible-content {
+          overflow: hidden;
+          transition: max-height 0.3s ease;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+          opacity: 0;
+          transition: opacity 0.15s ease;
+          display: flex;
+          gap: 4px;
+        }
+
+        .inventory-item:hover .quick-actions,
+        .order-card:hover .quick-actions {
+          opacity: 1;
+        }
+
+        .quick-action-btn {
+          background: #f5f5f7;
+          border: none;
+          border-radius: 6px;
+          padding: 6px;
+          cursor: pointer;
+          color: #6e6e73;
+          transition: all 0.15s ease;
+        }
+
+        .quick-action-btn:hover {
+          background: #007aff;
+          color: white;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+          height: 4px;
+          background: #e5e5e5;
+          border-radius: 2px;
+          overflow: hidden;
+          margin-top: 8px;
+        }
+
+        .progress-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #007aff, #5856d6);
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+
+        /* Mobile Bottom Nav */
+        @media (max-width: 768px) {
+          .sidebar {
+            display: none;
+          }
+
+          .mobile-bottom-nav {
+            display: flex !important;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border-top: 1px solid #e5e5e5;
+            padding: 8px 0;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
+            z-index: 1000;
+            justify-content: space-around;
+          }
+
+          .mobile-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            color: #86868b;
+            font-size: 0.65rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+          }
+
+          .mobile-nav-item.active {
+            color: #007aff;
+          }
+
+          .content-area {
+            padding-bottom: 80px;
+          }
+
+          .header {
+            padding: 0.75rem 1rem;
+          }
+
+          .header-actions {
+            display: none;
+          }
+
+          .mobile-header-actions {
+            display: flex !important;
+            gap: 8px;
+          }
+        }
+
+        .mobile-bottom-nav {
+          display: none;
+        }
+
+        .mobile-header-actions {
+          display: none;
+        }
+
+        /* Keyboard Shortcut Hints */
+        .shortcut-hint {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: #f5f5f7;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 0.7rem;
+          color: #86868b;
+          margin-left: 8px;
+        }
+
+        /* Empty State Enhanced */
+        .empty-state-card {
+          background: #ffffff;
+          border: 2px dashed #d2d2d7;
+          border-radius: 16px;
+          padding: 3rem 2rem;
+          text-align: center;
+          margin: 2rem 0;
+        }
+
+        .empty-state-icon {
+          width: 80px;
+          height: 80px;
+          background: #f5f5f7;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 20px;
+          color: #86868b;
+        }
+
+        .empty-state-title {
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: #1d1d1f;
+          margin-bottom: 8px;
+        }
+
+        .empty-state-text {
+          color: #6e6e73;
+          margin-bottom: 20px;
+          max-width: 300px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        /* Draggable Item */
+        .draggable {
+          cursor: grab;
+        }
+
+        .draggable:active {
+          cursor: grabbing;
+        }
+
+        .drag-handle {
+          color: #d2d2d7;
+          cursor: grab;
+        }
+
+        .drag-handle:hover {
+          color: #86868b;
+        }
       `}</style>
 
       {notification && (
         <div className={`notification ${notification.type}`}>
           {notification.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
           {notification.message}
+        </div>
+      )}
+
+      {/* Undo Toast */}
+      {undoStack.length > 0 && (
+        <div className="undo-toast">
+          <Undo2 size={18} />
+          <span>{undoStack[undoStack.length - 1].message}</span>
+          <button onClick={() => {
+            const item = undoStack[undoStack.length - 1];
+            item.undoAction();
+            setUndoStack(prev => prev.filter(u => u.id !== item.id));
+            showNotification('Action undone');
+          }}>
+            Undo
+          </button>
+        </div>
+      )}
+
+      {/* Global Search Modal */}
+      {searchOpen && (
+        <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>
+          <div className="search-modal" onClick={e => e.stopPropagation()}>
+            <div className="search-input-container">
+              <Search size={20} color="#86868b" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="search-input"
+                placeholder="Search orders, supplies, products..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              <span className="search-shortcut">ESC</span>
+            </div>
+            <div className="search-results">
+              {searchQuery.trim() ? (
+                <>
+                  {(() => {
+                    const results = getSearchResults();
+                    const hasResults = results.orders.length || results.supplies.length || results.products.length || results.filaments.length;
+
+                    if (!hasResults) {
+                      return (
+                        <div style={{ padding: '40px 20px', textAlign: 'center', color: '#86868b' }}>
+                          <Search size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
+                          <p>No results found for "{searchQuery}"</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {results.orders.length > 0 && (
+                          <div className="search-category">
+                            <div className="search-category-title">Orders</div>
+                            {results.orders.map(order => (
+                              <div
+                                key={order.orderId}
+                                className="search-result-item"
+                                onClick={() => {
+                                  setActiveTab('orders');
+                                  setSearchOpen(false);
+                                  setSearchQuery('');
+                                }}
+                              >
+                                <div className="search-result-icon" style={{ background: '#e8f5e9' }}>
+                                  <Package size={18} color="#34c759" />
+                                </div>
+                                <div className="search-result-info">
+                                  <div className="search-result-title">{order.product}</div>
+                                  <div className="search-result-meta">#{order.orderId} • {order.buyer} • {order.color}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {results.supplies.length > 0 && (
+                          <div className="search-category">
+                            <div className="search-category-title">Supplies</div>
+                            {results.supplies.map((supply, idx) => (
+                              <div
+                                key={`${supply.memberId}-${supply.id}-${idx}`}
+                                className="search-result-item"
+                                onClick={() => {
+                                  setActiveTab('inventory');
+                                  setInventorySubTab('supplies');
+                                  setSearchOpen(false);
+                                  setSearchQuery('');
+                                }}
+                              >
+                                <div className="search-result-icon" style={{ background: '#fff3e0' }}>
+                                  <Box size={18} color="#f59e0b" />
+                                </div>
+                                <div className="search-result-info">
+                                  <div className="search-result-title">{supply.name}</div>
+                                  <div className="search-result-meta">{supply.quantity} in stock • {supply.memberName}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {results.products.length > 0 && (
+                          <div className="search-category">
+                            <div className="search-category-title">Products</div>
+                            {results.products.map(product => (
+                              <div
+                                key={product.id}
+                                className="search-result-item"
+                                onClick={() => {
+                                  setActiveTab('products');
+                                  setSearchOpen(false);
+                                  setSearchQuery('');
+                                }}
+                              >
+                                <div className="search-result-icon" style={{ background: '#e3f2fd' }}>
+                                  <Printer size={18} color="#007aff" />
+                                </div>
+                                <div className="search-result-info">
+                                  <div className="search-result-title">{product.name}</div>
+                                  <div className="search-result-meta">{product.printTime}min • {product.filamentUsage}g</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {results.filaments.length > 0 && (
+                          <div className="search-category">
+                            <div className="search-category-title">Materials</div>
+                            {results.filaments.map((fil, idx) => (
+                              <div
+                                key={`${fil.memberId}-${fil.id}-${idx}`}
+                                className="search-result-item"
+                                onClick={() => {
+                                  setActiveTab('inventory');
+                                  setInventorySubTab('filament');
+                                  setSearchOpen(false);
+                                  setSearchQuery('');
+                                }}
+                              >
+                                <div className="search-result-icon" style={{ background: '#f3e5f5' }}>
+                                  <Palette size={18} color="#8b5cf6" />
+                                </div>
+                                <div className="search-result-info">
+                                  <div className="search-result-title">{fil.color} {fil.material}</div>
+                                  <div className="search-result-meta">{fil.amount}g • {fil.memberName}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <div style={{ padding: '20px', color: '#86868b', fontSize: '0.9rem' }}>
+                  <p style={{ marginBottom: '16px' }}>Quick tips:</p>
+                  <ul style={{ listStyle: 'none', padding: 0 }}>
+                    <li style={{ marginBottom: '8px' }}>• Search by order ID, product name, or buyer</li>
+                    <li style={{ marginBottom: '8px' }}>• Search supplies by name</li>
+                    <li style={{ marginBottom: '8px' }}>• Search materials by color</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Onboarding Modal */}
+      {showOnboarding && (
+        <div className="onboarding-overlay">
+          <div className="onboarding-modal">
+            {onboardingStep === 0 && (
+              <>
+                <div className="onboarding-icon">
+                  <Printer size={40} />
+                </div>
+                <h2 className="onboarding-title">Welcome to Business Manager</h2>
+                <p className="onboarding-text">
+                  Let's get you started! This app helps you manage orders, track inventory, and monitor your business performance.
+                </p>
+              </>
+            )}
+            {onboardingStep === 1 && (
+              <>
+                <div className="onboarding-icon" style={{ background: 'linear-gradient(135deg, #34c759, #30d158)' }}>
+                  <Package size={40} />
+                </div>
+                <h2 className="onboarding-title">Import Your Orders</h2>
+                <p className="onboarding-text">
+                  Click "Import" in the header to paste orders from Etsy or set up Google Sheets sync for automatic updates.
+                </p>
+              </>
+            )}
+            {onboardingStep === 2 && (
+              <>
+                <div className="onboarding-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
+                  <Box size={40} />
+                </div>
+                <h2 className="onboarding-title">Track Your Inventory</h2>
+                <p className="onboarding-text">
+                  Add your materials and supplies in the Inventory tab. Set reorder alerts to never run out of stock.
+                </p>
+              </>
+            )}
+            {onboardingStep === 3 && (
+              <>
+                <div className="onboarding-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #a855f7)' }}>
+                  <HelpCircle size={40} />
+                </div>
+                <h2 className="onboarding-title">Keyboard Shortcuts</h2>
+                <p className="onboarding-text">
+                  Press <strong>⌘K</strong> to search anywhere. Use number keys <strong>1-7</strong> to switch tabs. Press <strong>B</strong> to toggle bulk selection mode.
+                </p>
+              </>
+            )}
+            <div className="onboarding-steps">
+              {[0, 1, 2, 3].map(step => (
+                <div key={step} className={`onboarding-step ${onboardingStep === step ? 'active' : ''}`} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              {onboardingStep > 0 && (
+                <button className="btn btn-secondary" onClick={() => setOnboardingStep(prev => prev - 1)}>
+                  Back
+                </button>
+              )}
+              {onboardingStep < 3 ? (
+                <button className="btn btn-primary" onClick={() => setOnboardingStep(prev => prev + 1)}>
+                  Next
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={completeOnboarding}>
+                  Get Started
+                </button>
+              )}
+            </div>
+            <button
+              onClick={completeOnboarding}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#86868b',
+                marginTop: '16px',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              Skip tour
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Actions Bar */}
+      {bulkMode && selectedItems.length > 0 && (
+        <div className="bulk-actions-bar">
+          <span style={{ fontWeight: '500' }}>{selectedItems.length} selected</span>
+          <button onClick={() => {
+            // Mark all selected as shipped
+            const updated = orders.map(o =>
+              selectedItems.includes(o.orderId) ? { ...o, status: 'shipped' } : o
+            );
+            saveOrders(updated);
+            setSelectedItems([]);
+            showNotification(`${selectedItems.length} orders marked as shipped`);
+          }} className="primary">
+            <Truck size={16} /> Mark Shipped
+          </button>
+          <button onClick={() => {
+            setSelectedItems([]);
+            setBulkMode(false);
+          }}>
+            <X size={16} /> Cancel
+          </button>
         </div>
       )}
 
@@ -5758,7 +6836,7 @@ export default function EtsyOrderManager() {
           {lastRefresh && (
             <span style={{ 
               fontSize: '0.65rem', 
-              color: '#888', 
+              color: '#6e6e73', 
               marginLeft: '12px',
               display: 'flex',
               alignItems: 'center',
@@ -5769,6 +6847,17 @@ export default function EtsyOrderManager() {
           )}
         </div>
         <div className="header-actions">
+          {/* Search Button */}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setSearchOpen(true)}
+            style={{ marginRight: '8px' }}
+            title="Search (⌘K)"
+          >
+            <Search size={18} />
+            <span className="shortcut-hint">⌘K</span>
+          </button>
+
           {/* Simple/Advanced Mode Toggle */}
           <div className="mode-toggle" style={{ marginRight: '16px' }}>
             <button
@@ -5815,6 +6904,26 @@ export default function EtsyOrderManager() {
           <button className="btn btn-primary" onClick={() => setShowCsvModal(true)}>
             <Upload size={18} />
             Import
+          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowAdminPanel(true)}
+              style={{ marginLeft: '8px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', borderColor: '#f59e0b' }}
+              title="Admin Panel"
+            >
+              <Users size={18} />
+              Admin
+            </button>
+          )}
+          <button
+            className="btn btn-secondary"
+            onClick={signOut}
+            style={{ marginLeft: '8px' }}
+            title={`Signed in as ${user?.email}${profile?.role ? ` (${profile.role})` : ''}`}
+          >
+            <LogOut size={18} />
+            Logout
           </button>
         </div>
       </header>
@@ -5957,7 +7066,7 @@ export default function EtsyOrderManager() {
             </>
           )}
 
-          {/* INVENTORY TAB (Filament + Supplies + Restock) */}
+          {/* INVENTORY TAB (Material + Supplies + Restock) */}
           {activeTab === 'inventory' && (
             <>
               <div className="sub-nav">
@@ -5966,7 +7075,7 @@ export default function EtsyOrderManager() {
                   onClick={() => setInventorySubTab('filament')}
                 >
                   <Palette size={16} style={{ marginRight: '6px' }} />
-                  Filament
+                  Material
                 </button>
                 <button
                   className={inventorySubTab === 'supplies' ? 'active' : ''}
@@ -6180,6 +7289,35 @@ export default function EtsyOrderManager() {
         </main>
       </div>
 
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-bottom-nav">
+        {tabs.slice(0, 5).map(tab => (
+          <div
+            key={tab.id}
+            className={`mobile-nav-item ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <tab.icon size={22} />
+            <span>{tab.label}</span>
+          </div>
+        ))}
+        <div
+          className="mobile-nav-item"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search size={22} />
+          <span>Search</span>
+        </div>
+      </nav>
+
+      {/* Admin Panel Modal */}
+      {showAdminPanel && profile?.company_id && (
+        <AdminPanel
+          companyId={profile.company_id}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
       {showCsvModal && (
         <div className="modal-overlay" onClick={() => { setShowCsvModal(false); setCsvPreview(null); setCsvInput(''); setImportStoreId(''); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -6203,7 +7341,7 @@ export default function EtsyOrderManager() {
                 <strong style={{ color: '#6366f1' }}>Google Sheets Sync</strong>
                 {googleSheetUrl && <Check size={16} style={{ color: '#10b981' }} />}
               </div>
-              <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: '12px' }}>
+              <p style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '12px' }}>
                 Connect your Google Sheet to auto-import orders. Make sure the sheet is shared as "Anyone with the link can view".
               </p>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -6253,7 +7391,7 @@ export default function EtsyOrderManager() {
               </p>
             </div>
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#888', fontSize: '0.9rem' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#6e6e73', fontSize: '0.9rem' }}>
                 <Store size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                 Import to Store:
               </label>
@@ -6276,7 +7414,7 @@ export default function EtsyOrderManager() {
               placeholder="Paste CSV data here..."
             />
             {csvPreview && (
-              <div style={{ background: 'rgba(0,255,136,0.1)', padding: '12px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem' }}>
+              <div style={{ background: 'rgba(16,185,129,0.1)', padding: '12px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem' }}>
                 <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <span><strong>Format:</strong> {csvPreview.format || 'AUTO'}</span>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -6298,52 +7436,52 @@ export default function EtsyOrderManager() {
                   </div>
                 </div>
                 
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '6px' }}>
-                  <div style={{ marginBottom: '6px', color: '#888', fontSize: '0.75rem', textTransform: 'uppercase' }}>First Order Preview</div>
+                <div style={{ background: 'rgba(0,0,0,0.05)', padding: '10px', borderRadius: '6px' }}>
+                  <div style={{ marginBottom: '6px', color: '#6e6e73', fontSize: '0.75rem', textTransform: 'uppercase' }}>First Order Preview</div>
                   {csvPreview.transactionId && (
                     <div style={{ marginBottom: '4px' }}>
-                      <span style={{ color: '#888' }}>TXN: </span>
+                      <span style={{ color: '#6e6e73' }}>TXN: </span>
                       <span style={{ color: '#6366f1', fontFamily: 'JetBrains Mono, monospace' }}>{csvPreview.transactionId}</span>
                     </div>
                   )}
                   {csvPreview.extractedProduct && (
                     <div style={{ marginBottom: '4px' }}>
-                      <span style={{ color: '#888' }}>Product: </span>
+                      <span style={{ color: '#6e6e73' }}>Product: </span>
                       <span style={{ color: '#10b981' }}>{csvPreview.extractedProduct.substring(0, 60)}{csvPreview.extractedProduct.length > 60 ? '...' : ''}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <div>
-                      <span style={{ color: '#888' }}>Qty: </span>
+                      <span style={{ color: '#6e6e73' }}>Qty: </span>
                       <span style={{ color: '#1a1a2e' }}>{csvPreview.extractedQuantity || 1}</span>
                     </div>
                     <div>
-                      <span style={{ color: '#888' }}>Color: </span>
+                      <span style={{ color: '#6e6e73' }}>Color: </span>
                       <span style={{ color: csvPreview.extractedColor ? '#10b981' : '#ff4757' }}>
                         {csvPreview.extractedColor || 'not detected'}
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: '#888' }}>Extra: </span>
-                      <span style={{ color: csvPreview.extractedExtra ? '#10b981' : '#888' }}>
+                      <span style={{ color: '#6e6e73' }}>Extra: </span>
+                      <span style={{ color: csvPreview.extractedExtra ? '#10b981' : '#6e6e73' }}>
                         {csvPreview.extractedExtra || 'none'}
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: '#888' }}>Price: </span>
-                      <span style={{ color: csvPreview.price && csvPreview.price !== '$0' ? '#10b981' : '#888' }}>
+                      <span style={{ color: '#6e6e73' }}>Price: </span>
+                      <span style={{ color: csvPreview.price && csvPreview.price !== '$0' ? '#10b981' : '#6e6e73' }}>
                         {csvPreview.price?.startsWith('$') ? csvPreview.price : `$${csvPreview.price || '0'}`}
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: '#888' }}>Tax: </span>
-                      <span style={{ color: csvPreview.salesTax > 0 ? '#ff9f43' : '#888' }}>
+                      <span style={{ color: '#6e6e73' }}>Tax: </span>
+                      <span style={{ color: csvPreview.salesTax > 0 ? '#ff9f43' : '#6e6e73' }}>
                         ${csvPreview.salesTax?.toFixed(2) || '0.00'}
                       </span>
                     </div>
                   </div>
                   {csvPreview.colorField && (
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: '#666' }}>
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: '#86868b' }}>
                       Raw variations: {csvPreview.colorField.substring(0, 80)}{csvPreview.colorField.length > 80 ? '...' : ''}
                     </div>
                   )}
@@ -6384,7 +7522,7 @@ export default function EtsyOrderManager() {
                 <X size={24} />
               </button>
             </div>
-            <p style={{ marginBottom: '16px', color: '#888' }}>
+            <p style={{ marginBottom: '16px', color: '#6e6e73' }}>
               Which external parts were used for this order? Select parts and quantities.
             </p>
             {(() => {
@@ -6451,7 +7589,7 @@ export default function EtsyOrderManager() {
                             <span style={{
                               marginLeft: '8px',
                               fontSize: '0.8rem',
-                              color: isOutOfStock ? '#ff4444' : stock <= 5 ? '#ff9f43' : '#888'
+                              color: isOutOfStock ? '#ff4444' : stock <= 5 ? '#ff9f43' : '#6e6e73'
                             }}>
                               ({stock} in stock)
                             </span>
@@ -6463,7 +7601,7 @@ export default function EtsyOrderManager() {
                           </div>
                           {selectedFulfillmentParts[partName] > 0 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ color: '#888', fontSize: '0.85rem' }}>Qty:</span>
+                              <span style={{ color: '#6e6e73', fontSize: '0.85rem' }}>Qty:</span>
                               <input
                                 type="number"
                                 min="1"
@@ -6476,8 +7614,8 @@ export default function EtsyOrderManager() {
                                 style={{
                                   width: '60px',
                                   padding: '6px 10px',
-                                  background: exceedsStock ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.3)',
-                                  border: exceedsStock ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.2)',
+                                  background: exceedsStock ? 'rgba(255,0,0,0.1)' : '#ffffff',
+                                  border: exceedsStock ? '1px solid #ff4444' : '1px solid #d2d2d7',
                                   borderRadius: '6px',
                                   color: '#1a1a2e',
                                   fontSize: '1rem',
@@ -6575,7 +7713,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
   // Add extra print to queue
   const addExtraPrint = () => {
     if (!extraPrint.name || !extraPrint.filamentUsage || !extraPrint.color) {
-      showNotification('Please fill in name, color, and filament usage', 'error');
+      showNotification('Please fill in name, color, and material usage', 'error');
       return;
     }
 
@@ -6702,7 +7840,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 
   const getStoreColor = (storeId) => {
     const store = stores?.find(s => s.id === storeId);
-    return store?.color || '#888';
+    return store?.color || '#94a3b8';
   };
 
   return (
@@ -6714,7 +7852,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         {/* Store Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Store size={20} style={{ color: '#10b981' }} />
-          <span style={{ color: '#888' }}>Store:</span>
+          <span style={{ color: '#6e6e73' }}>Store:</span>
           <select
             className="assign-select"
             style={{ minWidth: '150px' }}
@@ -6731,7 +7869,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         {/* Partner Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Users size={20} style={{ color: '#6366f1' }} />
-          <span style={{ color: '#888' }}>Partner:</span>
+          <span style={{ color: '#6e6e73' }}>Partner:</span>
           <select
             className="assign-select"
             style={{ minWidth: '150px' }}
@@ -6749,7 +7887,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         {/* Sort By */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <ArrowUpDown size={20} style={{ color: '#007aff' }} />
-          <span style={{ color: '#888' }}>Sort:</span>
+          <span style={{ color: '#6e6e73' }}>Sort:</span>
           <select
             className="assign-select"
             style={{ minWidth: '150px' }}
@@ -6808,7 +7946,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
               boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
             }}>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Description *</label>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Description *</label>
                 <input
                   type="text"
                   className="add-item-input"
@@ -6820,7 +7958,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Color *</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Color *</label>
                   <input
                     type="text"
                     className="add-item-input"
@@ -6831,7 +7969,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Filament (g) *</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Material (g) *</label>
                   <input
                     type="number"
                     className="add-item-input"
@@ -6845,7 +7983,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Time (h:m)</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Time (h:m)</label>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     <input
                       type="number"
@@ -6869,7 +8007,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Assign To</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Assign To</label>
                   <select
                     value={extraPrint.assignedTo}
                     onChange={e => setExtraPrint({ ...extraPrint, assignedTo: e.target.value })}
@@ -6891,7 +8029,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                 </div>
               </div>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.75rem' }}>Printer</label>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.75rem' }}>Printer</label>
                 <select
                   value={extraPrint.printerId}
                   onChange={e => setExtraPrint({ ...extraPrint, printerId: e.target.value })}
@@ -6938,7 +8076,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
         {/* Group By Dropdown */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Box size={20} style={{ color: '#8b5cf6' }} />
-          <span style={{ color: '#888' }}>Group:</span>
+          <span style={{ color: '#6e6e73' }}>Group:</span>
           <select
             className="assign-select"
             style={{ minWidth: '150px' }}
@@ -7140,9 +8278,14 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                 Orders by Ship Date ({activeOrders.length} orders)
               </h3>
               {activeOrders.length === 0 ? (
-                <div className="empty-state">
-                  <Package />
-                  <p>No orders yet</p>
+                <div className="empty-state-card">
+                  <div className="empty-state-icon">
+                    <Package size={36} />
+                  </div>
+                  <h3 className="empty-state-title">No orders yet</h3>
+                  <p className="empty-state-text">
+                    Import orders from Etsy or set up Google Sheets sync to get started.
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -7246,9 +8389,14 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                 )}
               </h3>
               {activeOrders.length === 0 ? (
-                <div className="empty-state">
-                  <Package />
-                  <p>No orders yet</p>
+                <div className="empty-state-card">
+                  <div className="empty-state-icon">
+                    <Users size={36} />
+                  </div>
+                  <h3 className="empty-state-title">No orders yet</h3>
+                  <p className="empty-state-text">
+                    Orders grouped by buyer will appear here after you import them.
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -7283,14 +8431,14 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                             {isMultiOrder && (
                               isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />
                             )}
-                            <User size={18} style={{ color: isMultiOrder ? '#ff9f43' : '#888' }} />
-                            <span style={{ fontWeight: isMultiOrder ? '600' : '400', color: isMultiOrder ? '#ff9f43' : '#ccc' }}>
+                            <User size={18} style={{ color: isMultiOrder ? '#ff9f43' : '#6e6e73' }} />
+                            <span style={{ fontWeight: isMultiOrder ? '600' : '400', color: isMultiOrder ? '#ff9f43' : '#86868b' }}>
                               {buyerName}
                             </span>
                             <span style={{
                               fontSize: '0.75rem',
-                              color: '#888',
-                              background: 'rgba(0,0,0,0.3)',
+                              color: '#6e6e73',
+                              background: 'rgba(0,0,0,0.05)',
                               padding: '2px 8px',
                               borderRadius: '10px'
                             }}>
@@ -7309,7 +8457,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                             )}
                           </div>
                           {isMultiOrder && (
-                            <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#6e6e73' }}>
                               {buyerOrders.filter(o => o.status === 'fulfilled').length}/{buyerOrders.length} fulfilled
                             </div>
                           )}
@@ -8006,7 +9154,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Top row: ID + Item */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', color: '#888' }}>{order.orderId}</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', color: '#6e6e73' }}>{order.orderId}</span>
               {store && (
                 <span style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: '6px', backgroundColor: store.color + '20', color: store.color }}>{store.name}</span>
               )}
@@ -8021,10 +9169,10 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               </div>
             )}
             {/* Bottom row: Color + Ship By + Price */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: '#888' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: '#6e6e73' }}>
               <span><Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />{order.color || 'No color'}</span>
               {shipByDate && (
-                <span style={{ color: isOverdue ? 'var(--color-error)' : isDueSoon ? 'var(--color-warning)' : '#888' }}>
+                <span style={{ color: isOverdue ? 'var(--color-error)' : isDueSoon ? 'var(--color-warning)' : '#6e6e73' }}>
                   <Clock size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
                   {shipByDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </span>
@@ -8034,10 +9182,20 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           </div>
 
           {/* Right side: Status + Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', minWidth: '100px' }}>
             <span className={`status-badge status-${order.status}`} style={{ fontSize: '0.7rem', padding: '3px 8px' }}>
               {statusIcons[order.status]} {order.status}
             </span>
+            {/* Progress Bar */}
+            <div className="progress-bar" style={{ width: '100%' }}>
+              <div
+                className="progress-bar-fill"
+                style={{
+                  width: order.status === 'received' ? '33%' : order.status === 'fulfilled' ? '66%' : '100%',
+                  background: order.status === 'shipped' ? '#34c759' : undefined
+                }}
+              />
+            </div>
             <div style={{ display: 'flex', gap: '4px' }}>
               {order.status === 'received' && (
                 <button
@@ -8057,7 +9215,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
-                style={{ padding: '4px 6px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#888', cursor: 'pointer' }}
+                style={{ padding: '4px 6px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#6e6e73', cursor: 'pointer' }}
                 title="Expand details"
               >
                 <ChevronDown size={14} />
@@ -8081,7 +9239,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 autoFocus
               />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowShippingModal(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d2d2d7', background: 'transparent', color: '#888', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowShippingModal(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d2d2d7', background: 'transparent', color: '#6e6e73', cursor: 'pointer' }}>Cancel</button>
                 <button onClick={handleShipOrder} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#10b981', color: '#000', cursor: 'pointer', fontWeight: '600' }}>Confirm Ship</button>
               </div>
             </div>
@@ -8139,7 +9297,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#888',
+                    color: '#6e6e73',
                     cursor: 'pointer',
                     padding: '2px',
                     display: 'flex',
@@ -8248,7 +9406,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                           alignItems: 'center',
                           gap: '8px',
                           marginLeft: '8px',
-                          color: isFulfilled ? '#10b981' : '#ccc',
+                          color: isFulfilled ? '#10b981' : '#86868b',
                           fontSize: '0.8rem',
                           textDecoration: isFulfilled ? 'line-through' : 'none',
                           opacity: isFulfilled ? 0.7 : 1
@@ -8302,7 +9460,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 border: 'none',
                                 cursor: 'pointer',
                                 background: isFulfilled ? 'rgba(255, 71, 87, 0.2)' : (hasPlates && !allPlatesComplete) ? 'rgba(128, 128, 128, 0.2)' : 'rgba(0, 255, 136, 0.2)',
-                                color: isFulfilled ? '#ff4757' : (hasPlates && !allPlatesComplete) ? '#888' : '#10b981',
+                                color: isFulfilled ? '#ff4757' : (hasPlates && !allPlatesComplete) ? '#6e6e73' : '#10b981',
                                 fontWeight: '500'
                               }}
                               title={hasPlates && !allPlatesComplete ? 'Complete all plates first' : ''}
@@ -8403,7 +9561,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                     }}>
                                       {plate.name || `Plate ${plateIdx + 1}`}
                                     </span>
-                                    <span style={{ fontSize: '0.65rem', color: '#888' }}>
+                                    <span style={{ fontSize: '0.65rem', color: '#6e6e73' }}>
                                       {plateFilament.toFixed(1)}g
                                     </span>
                                     {hasMultiColorPart && !isPlateComplete && (
@@ -8433,8 +9591,8 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                           marginBottom: '4px',
                                           fontSize: '0.7rem'
                                         }}>
-                                          <Palette size={10} style={{ color: part.isMultiColor ? '#8b5cf6' : '#888' }} />
-                                          <span style={{ flex: 1, color: '#ccc' }}>
+                                          <Palette size={10} style={{ color: part.isMultiColor ? '#8b5cf6' : '#6e6e73' }} />
+                                          <span style={{ flex: 1, color: '#1d1d1f' }}>
                                             {part.name || `Part ${partIdx + 1}`}
                                             {(parseInt(part.quantity) || 1) > 1 && ` x${part.quantity}`}
                                           </span>
@@ -8488,7 +9646,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                           background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
                                           border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
                                           borderRadius: '3px',
-                                          color: allMultiColorPartsHaveColors ? '#10b981' : '#888',
+                                          color: allMultiColorPartsHaveColors ? '#10b981' : '#6e6e73',
                                           cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
                                           width: '100%',
                                           display: 'flex',
@@ -8593,7 +9751,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             padding: '4px 10px',
             borderRadius: '12px',
             backgroundColor: 'rgba(136, 136, 136, 0.15)',
-            color: '#888',
+            color: '#6e6e73',
             border: '1px solid rgba(136, 136, 136, 0.3)',
             marginLeft: '8px'
           }}>
@@ -8750,7 +9908,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: '4px',
-                    color: '#888',
+                    color: '#6e6e73',
                     cursor: 'pointer'
                   }}
                 >
@@ -8821,7 +9979,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           border: `1px solid ${profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#888' }}>
+            <span style={{ fontSize: '0.75rem', color: '#6e6e73' }}>
               <TrendingUp size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
               Profit Analysis
             </span>
@@ -8833,17 +9991,17 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
             </span>
           </div>
-          <div style={{ fontSize: '0.7rem', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '0.7rem', color: '#86868b', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {profitData.orderTotal > 0 && <span>Order: ${profitData.orderTotal.toFixed(2)}</span>}
-            {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
+            {profitData.salesTax > 0 && <span style={{ color: '#6e6e73' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
             {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
             <span style={{ color: profitData.filamentCost > 0 ? '#8b5cf6' : '#555' }}>
               Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
               {profitData.filamentCost === 0 && !matchingModel && ' (no model match)'}
               {profitData.filamentCost === 0 && matchingModel && !order.assignedTo && ' (unassigned)'}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noFilamentMatch && ` (no "${order.color}" filament)`}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (filament has no cost)'}
-              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no filament usage set)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noFilamentMatch && ` (no "${order.color}" material)`}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noRollCost && ' (material has no cost)'}
+              {profitData.filamentCost === 0 && matchingModel && order.assignedTo && profitData.noPlates && ' (no material usage set)'}
             </span>
             {profitData.partsCost > 0 && <span style={{ color: '#6366f1' }}>Parts: -${profitData.partsCost.toFixed(2)}</span>}
             {profitData.shippingCost > 0 && <span>Ship: -${profitData.shippingCost.toFixed(2)}</span>}
@@ -8928,7 +10086,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 marginBottom: isPlatesCollapsed ? '0' : '8px'
               }}
             >
-              <span style={{ fontSize: '0.75rem', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6e6e73', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {isPlatesCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                 <Printer size={12} />
                 Plates
@@ -9059,7 +10217,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                       })()}
 
                       {/* Stats */}
-                      <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#6e6e73' }}>
                         {plateFilament.toFixed(2)}g{!isComplete && ` • ${plateTime}`}
                       </span>
 
@@ -9144,11 +10302,11 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                                 gap: '8px',
                                 marginBottom: '6px'
                               }}>
-                                <Palette size={12} style={{ color: part.isMultiColor ? '#8b5cf6' : '#888' }} />
+                                <Palette size={12} style={{ color: part.isMultiColor ? '#8b5cf6' : '#6e6e73' }} />
                                 <span style={{ fontSize: '0.8rem', color: '#e0e0e0', flex: 1 }}>
                                   {part.name || `Part ${partIdx + 1}`}
-                                  {partQty > 1 && <span style={{ color: '#888' }}> x{partQty}</span>}
-                                  <span style={{ color: '#666', fontSize: '0.7rem', marginLeft: '4px' }}>
+                                  {partQty > 1 && <span style={{ color: '#6e6e73' }}> x{partQty}</span>}
+                                  <span style={{ color: '#86868b', fontSize: '0.7rem', marginLeft: '4px' }}>
                                     ({partFilament.toFixed(1)}g)
                                   </span>
                                 </span>
@@ -9197,7 +10355,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                               background: allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.2)' : 'rgba(128, 128, 128, 0.2)',
                               border: `1px solid ${allMultiColorPartsHaveColors ? 'rgba(0, 255, 136, 0.4)' : 'rgba(128, 128, 128, 0.3)'}`,
                               borderRadius: '4px',
-                              color: allMultiColorPartsHaveColors ? '#10b981' : '#888',
+                              color: allMultiColorPartsHaveColors ? '#10b981' : '#6e6e73',
                               cursor: allMultiColorPartsHaveColors ? 'pointer' : 'not-allowed',
                               width: '100%',
                               display: 'flex',
@@ -9261,7 +10419,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         </div>
                         {/* Show reprint history for this plate */}
                         {plateReprintsForThis.length > 0 && (
-                          <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#888' }}>
+                          <div style={{ marginTop: '4px', fontSize: '0.65rem', color: '#6e6e73' }}>
                             Reprints: {plateReprintsForThis.map((r, i) => (
                               <span key={r.id || i} style={{
                                 background: 'rgba(255, 159, 67, 0.15)',
@@ -9380,7 +10538,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
           </button>
         )}
         {order.status === 'shipped' && (
-          <span style={{ fontSize: '0.8rem', color: '#888' }}>
+          <span style={{ fontSize: '0.8rem', color: '#6e6e73' }}>
             Will auto-archive in 2 days
           </span>
         )}
@@ -9408,7 +10566,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
             border: '1px solid rgba(0, 0, 0, 0.06)',
             borderRadius: '6px',
             cursor: 'pointer',
-            color: '#888',
+            color: '#6e6e73',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -9434,15 +10592,15 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
               <p style={{ marginBottom: '16px', color: '#aaa' }}>
                 Creating reprint for: <strong>{order.item}</strong>
               </p>
-              <p style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#888' }}>
+              <p style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#6e6e73' }}>
                 Color: {order.color || 'Not specified'} • Assigned: {teamMembers?.find(m => m.id === order.assignedTo)?.name || 'Unassigned'}
               </p>
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Filament Usage (grams) *</label>
+                <label>Material Usage (grams) *</label>
                 <input
                   type="number"
                   min="0"
-                  placeholder="Enter filament usage"
+                  placeholder="Enter material usage"
                   value={reprintData.filamentUsage}
                   onChange={e => setReprintData({ ...reprintData, filamentUsage: e.target.value })}
                   autoFocus
@@ -9518,7 +10676,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                     <div style={{ fontWeight: '600', color: '#ff9f43', marginBottom: '4px' }}>
                       Group Order Alert
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#ccc' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#1d1d1f' }}>
                       This buyer has {buyerGroupInfo.unshippedSiblings.length} other order{buyerGroupInfo.unshippedSiblings.length > 1 ? 's' : ''} that should ship together:
                     </div>
                     <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -9526,7 +10684,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                         <div key={sibling.orderId} style={{
                           fontSize: '0.8rem',
                           padding: '4px 8px',
-                          background: 'rgba(0, 0, 0, 0.2)',
+                          background: '#f5f5f7',
                           borderRadius: '4px',
                           color: '#1a1a2e'
                         }}>
@@ -9635,7 +10793,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                   value={editData.overrideShipByDate}
                   onChange={e => setEditData({ ...editData, overrideShipByDate: e.target.value })}
                 />
-                <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.75rem', color: '#6e6e73', marginTop: '4px' }}>
                   Leave empty to use calculated date from model processing time
                 </p>
               </div>
@@ -9759,7 +10917,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Store Name</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Store Name</label>
             <input
               type="text"
               className="add-item-input"
@@ -9770,7 +10928,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
             />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Color</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Color</label>
             <input
               type="color"
               value={newStore.color}
@@ -9844,15 +11002,15 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                 
                 {/* Quick Stats */}
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ color: '#888' }}>
+                  <div style={{ color: '#6e6e73' }}>
                     <ShoppingBag size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     <span style={{ color: '#1a1a2e' }}>{getOrderCount(store.id)}</span> active
                   </div>
-                  <div style={{ color: '#888' }}>
+                  <div style={{ color: '#6e6e73' }}>
                     <Package size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     <span style={{ color: '#1a1a2e' }}>{analytics.totalOrders}</span> total orders
                   </div>
-                  <div style={{ color: '#888' }}>
+                  <div style={{ color: '#6e6e73' }}>
                     <Box size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
                     <span style={{ color: '#1a1a2e' }}>{analytics.totalItems}</span> items sold
                   </div>
@@ -9870,7 +11028,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                   }}>
                     {/* Top Colors */}
                     <div style={{ 
-                      background: 'rgba(0,0,0,0.2)', 
+                      background: 'rgba(0,0,0,0.05)', 
                       padding: '16px', 
                       borderRadius: '12px' 
                     }}>
@@ -9886,7 +11044,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                         Top Selling Colors
                       </h4>
                       {analytics.topColors.length === 0 ? (
-                        <p style={{ color: '#666', fontSize: '0.85rem' }}>No color data yet</p>
+                        <p style={{ color: '#86868b', fontSize: '0.85rem' }}>No color data yet</p>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {analytics.topColors.map(([color, count], idx) => {
@@ -9919,7 +11077,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                                     fontSize: '0.9rem'
                                   }}>
                                     <span style={{ 
-                                      color: '#888', 
+                                      color: '#6e6e73', 
                                       fontSize: '0.75rem',
                                       width: '18px'
                                     }}>#{idx + 1}</span>
@@ -9940,7 +11098,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                     
                     {/* Top Products */}
                     <div style={{ 
-                      background: 'rgba(0,0,0,0.2)', 
+                      background: 'rgba(0,0,0,0.05)', 
                       padding: '16px', 
                       borderRadius: '12px' 
                     }}>
@@ -9956,7 +11114,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                         Top Selling Products
                       </h4>
                       {analytics.topProducts.length === 0 ? (
-                        <p style={{ color: '#666', fontSize: '0.85rem' }}>No product data yet</p>
+                        <p style={{ color: '#86868b', fontSize: '0.85rem' }}>No product data yet</p>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {analytics.topProducts.map(([product, count], idx) => {
@@ -9991,7 +11149,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                                     minWidth: 0
                                   }}>
                                     <span style={{ 
-                                      color: '#888', 
+                                      color: '#6e6e73', 
                                       fontSize: '0.75rem',
                                       width: '18px',
                                       flexShrink: 0
@@ -10025,7 +11183,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
                     paddingTop: '16px',
                     borderTop: '1px solid rgba(255,255,255,0.1)',
                     textAlign: 'center',
-                    color: '#666'
+                    color: '#86868b'
                   }}>
                     <BarChart3 size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
                     <p>No order data yet for this store</p>
@@ -10058,7 +11216,7 @@ function StoresTab({ stores, saveStores, orders, archivedOrders, showNotificatio
           <div className="empty-state">
             <Store size={48} />
             <p>No stores added yet</p>
-            <p style={{ fontSize: '0.9rem', color: '#666' }}>Add your Etsy stores to organize orders</p>
+            <p style={{ fontSize: '0.9rem', color: '#86868b' }}>Add your Etsy stores to organize orders</p>
           </div>
         )}
       </div>
@@ -10075,6 +11233,28 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
   const [newRollCost, setNewRollCost] = useState('');
   const [sortBy, setSortBy] = useState('custom'); // 'custom', 'alpha', 'most', 'least'
   const ROLL_SIZE = 1000; // grams per roll
+
+  // View mode: 'colored' (full color boxes) or 'classic' (color dot only)
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('filamentViewMode') || 'colored';
+  });
+
+  const toggleViewMode = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('filamentViewMode', mode);
+  };
+
+  // Helper to determine if a color is light or dark
+  const isLightColor = (hexColor) => {
+    if (!hexColor) return true;
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5;
+  };
 
   // Sort filaments based on selected sort option
   const sortFilaments = (filamentList) => {
@@ -10169,7 +11349,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 
     saveFilaments({ ...filaments, [memberId]: memberFilaments });
     setNewFilament({ color: '', amount: '', colorHex: '#ffffff', rollCost: '', reorderAt: '250' });
-    showNotification('Filament added successfully');
+    showNotification('Material added successfully');
   };
 
   const updateAmount = (memberId, filamentId, delta) => {
@@ -10236,7 +11416,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
   const removeFilament = (memberId, filamentId) => {
     const memberFilaments = (filaments[memberId] || []).filter(f => f.id !== filamentId);
     saveFilaments({ ...filaments, [memberId]: memberFilaments });
-    showNotification('Filament removed');
+    showNotification('Material removed');
   };
 
   const startEdit = (memberId, filament) => {
@@ -10260,7 +11440,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
         reorderAt: parseInt(editingFilament.reorderAt) || 250
       };
       saveFilaments({ ...filaments, [editingMemberId]: memberFilaments });
-      showNotification('Filament updated');
+      showNotification('Material updated');
     }
     setEditingFilament(null);
     setEditingMemberId(null);
@@ -10269,27 +11449,47 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
-        <h2 className="page-title" style={{ margin: 0 }}><Palette size={28} /> Filament Inventory</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: '#888', fontSize: '0.85rem' }}>Sort by:</span>
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid #d2d2d7',
-              borderRadius: '6px',
-              color: '#1a1a2e',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="custom">Custom Order</option>
-            <option value="alpha">Alphabetical</option>
-            <option value="most">Most Stock</option>
-            <option value="least">Least Stock</option>
-          </select>
+        <h2 className="page-title" style={{ margin: 0 }}><Palette size={28} /> Material Inventory</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* View Mode Toggle */}
+          <div className="mode-toggle">
+            <button
+              className={viewMode === 'colored' ? 'active' : ''}
+              onClick={() => toggleViewMode('colored')}
+              title="Show colored boxes"
+            >
+              <Palette size={14} /> Colored
+            </button>
+            <button
+              className={viewMode === 'classic' ? 'active' : ''}
+              onClick={() => toggleViewMode('classic')}
+              title="Show classic view with color dots"
+            >
+              Classic
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#6e6e73', fontSize: '0.85rem' }}>Sort:</span>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid #d2d2d7',
+                borderRadius: '6px',
+                color: '#1a1a2e',
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="custom">Custom Order</option>
+              <option value="alpha">Alphabetical</option>
+              <option value="most">Most Stock</option>
+              <option value="least">Least Stock</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -10300,52 +11500,83 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
             
             <div className="inventory-items">
               {(filaments[member.id] || []).length === 0 ? (
-                <p style={{ color: '#666', fontSize: '0.9rem' }}>No filament added</p>
+                <p style={{ color: '#86868b', fontSize: '0.9rem' }}>No material added</p>
               ) : (
                 sortFilaments(filaments[member.id] || []).map((fil, filIdx, sortedList) => {
                   const lowStock = needsRestock(fil);
+                  const isColored = viewMode === 'colored';
+                  const isLight = isColored ? isLightColor(fil.colorHex) : true;
+                  const textColor = isColored ? (isLight ? '#1d1d1f' : '#ffffff') : '#1d1d1f';
+                  const metaColor = isColored ? (isLight ? '#6e6e73' : 'rgba(255,255,255,0.7)') : '#6e6e73';
                   return (
-                  <div key={fil.id} className="inventory-item" style={lowStock ? {
-                    borderColor: 'rgba(255, 193, 7, 0.5)',
-                    background: 'rgba(255, 193, 7, 0.1)'
-                  } : {}}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                  <div key={fil.id} style={{
+                    position: 'relative',
+                    padding: lowStock ? '6px' : '0',
+                    background: lowStock ? 'rgba(255, 50, 50, 0.35)' : 'transparent',
+                    borderRadius: lowStock ? '14px' : '0',
+                    marginBottom: lowStock ? '4px' : '0'
+                  }}>
+                    {/* Low Stock Label */}
+                    {lowStock && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: '#ef4444',
+                        color: '#fff',
+                        padding: '3px 12px',
+                        borderRadius: '10px',
+                        fontSize: '0.7rem',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        zIndex: 10,
+                        boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <AlertCircle size={12} /> LOW STOCK
+                      </div>
+                    )}
+                  <div className="inventory-item" style={{
+                    background: isColored ? (fil.colorHex || '#f5f5f7') : '#ffffff',
+                    borderColor: isColored ? (isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)') : '#e5e5e5',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    position: 'relative'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', position: 'relative', zIndex: 1 }}>
                       <div className="inventory-item-info">
-                        <div className="inventory-item-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div className="color-dot" style={{ backgroundColor: fil.colorHex }} />
-                          {fil.color}
-                          {lowStock && (
-                            <span style={{ 
-                              fontSize: '0.65rem', 
-                              padding: '2px 6px', 
-                              borderRadius: '4px',
-                              background: 'rgba(255, 193, 7, 0.2)',
-                              color: '#f59e0b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
-                              <AlertCircle size={10} /> Low Stock
-                            </span>
+                        <div className="inventory-item-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: textColor }}>
+                          {!isColored && (
+                            <div style={{
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '50%',
+                              backgroundColor: fil.colorHex || '#ccc',
+                              border: '2px solid rgba(0,0,0,0.1)',
+                              flexShrink: 0
+                            }} />
                           )}
+                          {fil.color}
                         </div>
-                        <div className="inventory-item-meta">
+                        <div className="inventory-item-meta" style={{ color: metaColor }}>
                           {fil.amount.toFixed(0)}g remaining
                           {fil.currentRollCost > 0 && (
-                            <span style={{ color: '#10b981', marginLeft: '8px' }}>
+                            <span style={{ color: isLight ? '#059669' : '#6ee7b7', marginLeft: '8px' }}>
                               (${fil.currentRollCost.toFixed(2)} roll)
                             </span>
                           )}
-                          <span style={{ color: '#888', marginLeft: '8px' }}>
+                          <span style={{ color: metaColor, marginLeft: '8px' }}>
                             | reorder at {fil.reorderAt ?? 250}g
                           </span>
                         </div>
                         {(fil.backupRolls || []).length > 0 && (
                           <div style={{ marginTop: '4px', fontSize: '0.8rem' }}>
-                            <span style={{ color: '#6366f1' }}>
+                            <span style={{ color: isLight ? '#6366f1' : '#a5b4fc' }}>
                               {fil.backupRolls.length} backup roll{fil.backupRolls.length !== 1 ? 's' : ''}:
                             </span>
-                            <span style={{ color: '#888', marginLeft: '6px' }}>
+                            <span style={{ color: metaColor, marginLeft: '6px' }}>
                               {fil.backupRolls.map((r, i) => (
                                 <span key={r.id} style={{ marginRight: '8px' }}>
                                   ${r.cost.toFixed(2)}
@@ -10379,7 +11610,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               onClick={() => moveFilament(member.id, fil.id, 'up')}
                               title="Move up"
                               disabled={filIdx === 0}
-                              style={{ opacity: filIdx === 0 ? 0.3 : 1 }}
+                              style={{ opacity: filIdx === 0 ? 0.3 : 1, background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}
                             >
                               <ChevronUp size={14} />
                             </button>
@@ -10388,35 +11619,35 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               onClick={() => moveFilament(member.id, fil.id, 'down')}
                               title="Move down"
                               disabled={filIdx === sortedList.length - 1}
-                              style={{ opacity: filIdx === sortedList.length - 1 ? 0.3 : 1 }}
+                              style={{ opacity: filIdx === sortedList.length - 1 ? 0.3 : 1, background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}
                             >
                               <ChevronDown size={14} />
                             </button>
                           </>
                         )}
-                        <button className="qty-btn" onClick={() => startEdit(member.id, fil)} title="Edit filament">
+                        <button className="qty-btn" onClick={() => startEdit(member.id, fil)} title="Edit filament" style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}>
                           <Edit2 size={14} />
                         </button>
-                        <button className="qty-btn" onClick={() => removeFilament(member.id, fil.id)} title="Remove filament">
+                        <button className="qty-btn" onClick={() => removeFilament(member.id, fil.id)} title="Remove filament" style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}>
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
-                    <div className="inventory-item-controls" style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div className="inventory-item-controls" style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', position: 'relative', zIndex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#888', minWidth: '55px' }}>Amount:</span>
-                        <button className="qty-btn" onClick={() => updateAmount(member.id, fil.id, -50)}>
+                        <span style={{ fontSize: '0.75rem', color: metaColor, minWidth: '55px' }}>Amount:</span>
+                        <button className="qty-btn" onClick={() => updateAmount(member.id, fil.id, -50)} style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}>
                           <Minus size={14} />
                         </button>
-                        <span className="qty-value" style={{ minWidth: '60px', textAlign: 'center' }}>{fil.amount.toFixed(0)}g</span>
-                        <button className="qty-btn" onClick={() => updateAmount(member.id, fil.id, 50)}>
+                        <span className="qty-value" style={{ minWidth: '60px', textAlign: 'center', color: textColor }}>{fil.amount.toFixed(0)}g</span>
+                        <button className="qty-btn" onClick={() => updateAmount(member.id, fil.id, 50)} style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)', color: textColor }}>
                           <Plus size={14} />
                         </button>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {addingRollTo?.memberId === member.id && addingRollTo?.filamentId === fil.id ? (
                           <>
-                            <span style={{ fontSize: '0.75rem', color: '#888' }}>$</span>
+                            <span style={{ fontSize: '0.75rem', color: metaColor }}>$</span>
                             <input
                               type="number"
                               placeholder="Cost"
@@ -10425,10 +11656,10 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               style={{
                                 width: '70px',
                                 padding: '4px 8px',
-                                background: 'rgba(255,255,255,0.1)',
-                                border: '1px solid rgba(0, 204, 255, 0.4)',
+                                background: isLight ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.3)',
+                                border: '1px solid ' + (isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.3)'),
                                 borderRadius: '4px',
-                                color: '#1a1a2e',
+                                color: textColor,
                                 fontSize: '0.85rem'
                               }}
                               autoFocus
@@ -10440,13 +11671,14 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                             <button
                               className="qty-btn"
                               onClick={() => addRoll(member.id, fil.id, newRollCost)}
-                              style={{ background: 'rgba(0, 255, 136, 0.2)' }}
+                              style={{ background: 'rgba(0, 255, 136, 0.3)', color: '#fff' }}
                             >
                               <Check size={14} />
                             </button>
                             <button
                               className="qty-btn"
                               onClick={() => { setAddingRollTo(null); setNewRollCost(''); }}
+                              style={{ background: 'rgba(255, 100, 100, 0.3)', color: '#fff' }}
                             >
                               <X size={14} />
                             </button>
@@ -10459,10 +11691,10 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                               alignItems: 'center',
                               gap: '4px',
                               padding: '6px 10px',
-                              background: 'rgba(0, 204, 255, 0.15)',
-                              border: '1px solid rgba(0, 204, 255, 0.3)',
+                              background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)',
+                              border: '1px solid ' + (isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.3)'),
                               borderRadius: '6px',
-                              color: '#6366f1',
+                              color: textColor,
                               cursor: 'pointer',
                               fontSize: '0.75rem'
                             }}
@@ -10472,6 +11704,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                         )}
                       </div>
                     </div>
+                  </div>
                   </div>
                 );})
               )}
@@ -10490,7 +11723,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 
               {/* Color Name + Color Picker */}
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Color Name</label>
+                <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.8rem' }}>Color Name</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
                     type="text"
@@ -10513,7 +11746,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
               {/* Other fields in a grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Amount (grams)</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.8rem' }}>Amount (grams)</label>
                   <input
                     type="number"
                     className="add-item-input"
@@ -10524,7 +11757,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Roll Cost ($)</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.8rem' }}>Roll Cost ($)</label>
                   <input
                     type="number"
                     className="add-item-input"
@@ -10537,7 +11770,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.8rem' }}>Reorder At (g)</label>
+                  <label style={{ display: 'block', marginBottom: '4px', color: '#6e6e73', fontSize: '0.8rem' }}>Reorder At (g)</label>
                   <input
                     type="number"
                     className="add-item-input"
@@ -10611,7 +11844,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                 placeholder="Cost of the roll currently in use"
               />
               {editingFilament.currentRollCost > 0 && (
-                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginTop: '4px' }}>
                   Cost per gram: ${(editingFilament.currentRollCost / 1000).toFixed(4)}
                 </p>
               )}
@@ -10620,14 +11853,14 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
             {(editingFilament.backupRolls || []).length > 0 && (
               <div className="form-group">
                 <label className="form-label">Backup Rolls ({editingFilament.backupRolls.length})</label>
-                <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>
                   {editingFilament.backupRolls.map((r, i) => (
                     <span key={r.id} style={{ marginRight: '8px' }}>
                       ${r.cost.toFixed(2)}{i < editingFilament.backupRolls.length - 1 ? ',' : ''}
                     </span>
                   ))}
                 </div>
-                <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '4px' }}>
                   Manage backup rolls from the main inventory view
                 </p>
               </div>
@@ -10643,7 +11876,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
                 min="0"
                 placeholder="Alert when at or below this amount"
               />
-              <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginTop: '4px' }}>
                 Alert triggers when amount falls to {editingFilament.reorderAt ?? 250}g or below with 0 backup rolls
               </p>
             </div>
@@ -10978,7 +12211,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
   const getStoreColor = (storeId) => {
     const store = stores?.find(s => s.id === storeId);
-    return store?.color || '#888';
+    return store?.color || '#94a3b8';
   };
 
   // Convert file to base64
@@ -11200,8 +12433,8 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   )}
                   <span style={{
                     fontSize: '0.75rem',
-                    color: '#888',
-                    background: 'rgba(0,0,0,0.3)',
+                    color: '#6e6e73',
+                    background: 'rgba(0,0,0,0.05)',
                     padding: '2px 8px',
                     borderRadius: '10px'
                   }}>
@@ -11263,7 +12496,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           }}
                           onClick={() => toggleModelExpanded(model.id)}
                         >
-                          {isExpanded ? <ChevronDown size={16} style={{ color: '#10b981' }} /> : <ChevronRight size={16} style={{ color: '#888' }} />}
+                          {isExpanded ? <ChevronDown size={16} style={{ color: '#10b981' }} /> : <ChevronRight size={16} style={{ color: '#6e6e73' }} />}
 
                           {/* Model Image Thumbnail */}
                           {model.imageUrl && (
@@ -11289,7 +12522,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', gap: '12px', marginTop: '2px' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#6e6e73', display: 'flex', gap: '12px', marginTop: '2px' }}>
                               {model.defaultColor && <span>Color: {model.defaultColor}</span>}
                               {model.printerSettings?.[0] && (() => {
                                 const totals = calculatePrinterTotals(model.printerSettings[0]);
@@ -11389,14 +12622,14 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 {/* Printer Settings with Plates */}
                                 {model.printerSettings?.length > 0 && (
                                   <div>
-                                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Printer Settings:</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '8px' }}>Printer Settings:</div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                       {model.printerSettings.map(setting => {
                                         const printer = printers.find(p => p.id === setting.printerId);
                                         const totals = calculatePrinterTotals(setting);
                                         return printer ? (
                                           <div key={setting.printerId} style={{
-                                            background: 'rgba(0,255,136,0.1)',
+                                            background: 'rgba(16,185,129,0.1)',
                                             padding: '10px 12px',
                                             borderRadius: '8px',
                                             fontSize: '0.85rem'
@@ -11413,17 +12646,17 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                                   const plateTotals = calculatePlateTotals(plate);
                                                   return (
                                                     <div key={idx} style={{
-                                                      background: plate.isMultiColor ? 'rgba(165, 94, 234, 0.15)' : 'rgba(0,0,0,0.2)',
+                                                      background: plate.isMultiColor ? 'rgba(139, 92, 246, 0.1)' : '#f5f5f7',
                                                       padding: '8px 10px',
                                                       borderRadius: '6px',
-                                                      border: plate.isMultiColor ? '1px solid rgba(165, 94, 234, 0.3)' : 'none'
+                                                      border: plate.isMultiColor ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid #e5e5e5'
                                                     }}>
                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: (plate.parts?.length || 0) > 0 ? '6px' : 0 }}>
                                                         {plate.isMultiColor && <Palette size={12} style={{ color: '#8b5cf6' }} />}
-                                                        <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#8b5cf6' : '#ccc', fontSize: '0.8rem' }}>
+                                                        <span style={{ fontWeight: '500', color: plate.isMultiColor ? '#8b5cf6' : '#1d1d1f', fontSize: '0.8rem' }}>
                                                           {plate.name}
                                                         </span>
-                                                        <span style={{ fontSize: '0.7rem', color: '#888', marginLeft: 'auto' }}>
+                                                        <span style={{ fontSize: '0.7rem', color: '#6e6e73', marginLeft: 'auto' }}>
                                                           {plateTotals.totalFilament.toFixed(2)}g • {Math.floor(plateTotals.totalMinutes / 60)}h {plateTotals.totalMinutes % 60}m
                                                         </span>
                                                       </div>
@@ -11459,7 +12692,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
                             {model.externalParts?.length > 0 && (
                               <div style={{ marginTop: '12px' }}>
-                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Required Parts:</div>
+                                <div style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '8px' }}>Required Parts:</div>
                                 <div className="parts-list">
                                   {model.externalParts.map((part, idx) => (
                                     <span key={idx} className="part-tag">
@@ -11472,7 +12705,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
                             {model.aliases?.length > 0 && (
                               <div style={{ marginTop: '12px' }}>
-                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>Aliases:</div>
+                                <div style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '8px' }}>Aliases:</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                   {model.aliases.map((alias, idx) => (
                                     <span key={idx} style={{
@@ -11601,13 +12834,13 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   min="0"
                   placeholder="Optional"
                 />
-                <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>Leave blank if not tracking</p>
+                <p style={{ fontSize: '0.7rem', color: '#6e6e73', marginTop: '4px' }}>Leave blank if not tracking</p>
               </div>
             </div>
 
             <div className="form-group">
               <label className="form-label">Product Title Aliases</label>
-              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '8px' }}>
                 Add alternate Etsy listing titles that should match to this model
               </p>
               {(newModel.aliases || []).length > 0 && (
@@ -11737,7 +12970,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <Upload size={16} />
                     {newModel.imageUrl ? 'Change Image' : 'Upload Image'}
                   </label>
-                  <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>Max 500KB. JPG, PNG, or GIF.</p>
+                  <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '6px' }}>Max 500KB. JPG, PNG, or GIF.</p>
                 </div>
               </div>
             </div>
@@ -11751,7 +12984,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                 onChange={e => setNewModel({ ...newModel, file3mfUrl: e.target.value })}
                 placeholder="/Users/you/3DPrinting/Model.3mf"
               />
-              <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
+              <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '6px' }}>
                 Local file path or server URL
               </p>
             </div>
@@ -11770,7 +13003,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
             {/* Printer Settings with Plates */}
             <div className="form-group">
               <label className="form-label">Printer Settings & Plates</label>
-              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '12px' }}>
                 Add plates for each printer with their filament usage and print time
               </p>
               {printers.map(printer => {
@@ -11789,7 +13022,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <div style={{ fontWeight: '500', color: '#10b981' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
-                        <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#6e6e73' }}>
                           Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                         </div>
                       )}
@@ -11800,7 +13033,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       const plateTotals = calculatePlateTotals(plate);
                       return (
                         <div key={plateIdx} style={{
-                          background: 'rgba(0,0,0,0.2)',
+                          background: 'rgba(0,0,0,0.05)',
                           padding: '12px',
                           borderRadius: '6px',
                           marginBottom: '10px',
@@ -11830,7 +13063,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               borderRadius: '6px'
                             }}>
                               <Clock size={12} style={{ color: '#6366f1' }} />
-                              <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
+                              <span style={{ fontSize: '0.7rem', color: '#6e6e73' }}>Plate time:</span>
                               <input
                                 type="number"
                                 className="form-input"
@@ -11843,7 +13076,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 min="0"
                                 style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
                               />
-                              <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                              <span style={{ color: '#6e6e73', fontSize: '0.75rem' }}>h</span>
                               <input
                                 type="number"
                                 className="form-input"
@@ -11857,7 +13090,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 max="59"
                                 style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
                               />
-                              <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                              <span style={{ color: '#6e6e73', fontSize: '0.75rem' }}>m</span>
                             </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
@@ -11880,7 +13113,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           {/* Parts list */}
                           <div style={{ marginLeft: '12px', borderLeft: '2px solid rgba(0, 204, 255, 0.3)', paddingLeft: '12px' }}>
                             {(plate.parts || []).length === 0 && (
-                              <p style={{ fontSize: '0.75rem', color: '#666', margin: '8px 0' }}>No parts added yet</p>
+                              <p style={{ fontSize: '0.75rem', color: '#86868b', margin: '8px 0' }}>No parts added yet</p>
                             )}
                             {(plate.parts || []).map((part, partIdx) => (
                               <div key={partIdx} style={{
@@ -11905,7 +13138,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="Part name"
                                   style={{ width: '110px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>×</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>×</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -11929,7 +13162,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="0"
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>g</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -11942,7 +13175,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   min="0"
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>h</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>h</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -11956,7 +13189,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   max="59"
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>m</span>
                                 <label style={{
                                   display: 'flex',
                                   alignItems: 'center',
@@ -11967,7 +13200,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
                                   border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
                                   fontSize: '0.7rem',
-                                  color: part.isMultiColor ? '#8b5cf6' : '#888'
+                                  color: part.isMultiColor ? '#8b5cf6' : '#6e6e73'
                                 }} title="When enabled, you'll choose the color when completing this part">
                                   <input
                                     type="checkbox"
@@ -12191,7 +13424,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                   min="0"
                   placeholder="Optional"
                 />
-                <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>Leave blank if not tracking</p>
+                <p style={{ fontSize: '0.7rem', color: '#6e6e73', marginTop: '4px' }}>Leave blank if not tracking</p>
               </div>
             </div>
 
@@ -12250,7 +13483,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <Upload size={16} />
                     {editingModel.imageUrl ? 'Change Image' : 'Upload Image'}
                   </label>
-                  <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>Max 500KB. JPG, PNG, or GIF.</p>
+                  <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '6px' }}>Max 500KB. JPG, PNG, or GIF.</p>
                 </div>
               </div>
             </div>
@@ -12264,7 +13497,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                 onChange={e => setEditingModel({ ...editingModel, file3mfUrl: e.target.value })}
                 placeholder="/Users/you/3DPrinting/Model.3mf"
               />
-              <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
+              <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '6px' }}>
                 Local file path or server URL
               </p>
             </div>
@@ -12281,7 +13514,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
             <div className="form-group">
               <label className="form-label">Product Title Aliases</label>
-              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '8px' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '8px' }}>
                 Add alternate Etsy listing titles that should match to this model
               </p>
               {(editingModel.aliases || []).length > 0 && (
@@ -12359,7 +13592,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
             {/* Printer Settings with Plates */}
             <div className="form-group">
               <label className="form-label">Printer Settings & Plates</label>
-              <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '12px' }}>
                 Add plates for each printer with their filament usage and print time
               </p>
               {printers.map(printer => {
@@ -12378,7 +13611,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <div style={{ fontWeight: '500', color: '#10b981' }}>{printer.name}</div>
                       {setting.plates?.length > 0 && (
-                        <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#6e6e73' }}>
                           Total: {totals.totalFilament.toFixed(2)}g | {Math.floor(totals.totalMinutes / 60)}h {totals.totalMinutes % 60}m
                         </div>
                       )}
@@ -12389,7 +13622,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                       const plateTotals = calculatePlateTotals(plate);
                       return (
                         <div key={plateIdx} style={{
-                          background: 'rgba(0,0,0,0.2)',
+                          background: 'rgba(0,0,0,0.05)',
                           padding: '12px',
                           borderRadius: '6px',
                           marginBottom: '10px',
@@ -12419,7 +13652,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                               borderRadius: '6px'
                             }}>
                               <Clock size={12} style={{ color: '#6366f1' }} />
-                              <span style={{ fontSize: '0.7rem', color: '#888' }}>Plate time:</span>
+                              <span style={{ fontSize: '0.7rem', color: '#6e6e73' }}>Plate time:</span>
                               <input
                                 type="number"
                                 className="form-input"
@@ -12432,7 +13665,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 min="0"
                                 style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
                               />
-                              <span style={{ color: '#888', fontSize: '0.75rem' }}>h</span>
+                              <span style={{ color: '#6e6e73', fontSize: '0.75rem' }}>h</span>
                               <input
                                 type="number"
                                 className="form-input"
@@ -12446,7 +13679,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 max="59"
                                 style={{ width: '45px', padding: '4px 6px', fontSize: '0.85rem', textAlign: 'center' }}
                               />
-                              <span style={{ color: '#888', fontSize: '0.75rem' }}>m</span>
+                              <span style={{ color: '#6e6e73', fontSize: '0.75rem' }}>m</span>
                             </div>
                             {/* Plate totals */}
                             {(plate.parts?.length || 0) > 0 && (
@@ -12469,7 +13702,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           {/* Parts list */}
                           <div style={{ marginLeft: '12px', borderLeft: '2px solid rgba(0, 204, 255, 0.3)', paddingLeft: '12px' }}>
                             {(plate.parts || []).length === 0 && (
-                              <p style={{ fontSize: '0.75rem', color: '#666', margin: '8px 0' }}>No parts added yet</p>
+                              <p style={{ fontSize: '0.75rem', color: '#86868b', margin: '8px 0' }}>No parts added yet</p>
                             )}
                             {(plate.parts || []).map((part, partIdx) => (
                               <div key={partIdx} style={{
@@ -12494,7 +13727,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="Part name"
                                   style={{ width: '110px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>×</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>×</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -12518,7 +13751,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   placeholder="0"
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>g</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>g</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -12531,7 +13764,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   min="0"
                                   style={{ width: '50px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>h</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>h</span>
                                 <input
                                   type="number"
                                   className="form-input"
@@ -12545,7 +13778,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   max="59"
                                   style={{ width: '60px', fontSize: '1rem', padding: '8px 10px' }}
                                 />
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>m</span>
+                                <span style={{ color: '#6e6e73', fontSize: '0.9rem' }}>m</span>
                                 <label style={{
                                   display: 'flex',
                                   alignItems: 'center',
@@ -12556,7 +13789,7 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                   background: part.isMultiColor ? 'rgba(165, 94, 234, 0.3)' : 'rgba(255,255,255,0.05)',
                                   border: `1px solid ${part.isMultiColor ? 'rgba(165, 94, 234, 0.5)' : 'rgba(255,255,255,0.1)'}`,
                                   fontSize: '0.7rem',
-                                  color: part.isMultiColor ? '#8b5cf6' : '#888'
+                                  color: part.isMultiColor ? '#8b5cf6' : '#6e6e73'
                                 }} title="When enabled, you'll choose the color when completing this part">
                                   <input
                                     type="checkbox"
@@ -12685,11 +13918,50 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
 
 // Supplies Tab Component (formerly External Parts)
 function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalParts, saveSupplyCategories, showNotification }) {
-  const [newPart, setNewPart] = useState({ name: '', quantity: '', categoryId: '', reorderAt: '', costPerUnit: '' });
+  // Smart default: remember last used category
+  const savedCategory = localStorage.getItem('lastUsedSupplyCategory') || '';
+  const [newPart, setNewPart] = useState({ name: '', quantity: '', categoryId: savedCategory, reorderAt: '', costPerUnit: '', imageUrl: '', supplierUrl: '' });
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategory, setNewCategory] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+
+  // Drag and drop state
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverItem, setDragOverItem] = useState(null);
+
+  // Handle drag and drop reordering
+  const handleDragStart = (e, memberId, partId) => {
+    setDraggedItem({ memberId, partId });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, memberId, partId) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.memberId === memberId && draggedItem.partId !== partId) {
+      setDragOverItem({ memberId, partId });
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (draggedItem && dragOverItem && draggedItem.memberId === dragOverItem.memberId) {
+      const memberId = draggedItem.memberId;
+      const parts = [...(externalParts[memberId] || [])];
+      const draggedIdx = parts.findIndex(p => p.id === draggedItem.partId);
+      const targetIdx = parts.findIndex(p => p.id === dragOverItem.partId);
+
+      if (draggedIdx !== -1 && targetIdx !== -1) {
+        // Reorder the array
+        const [removed] = parts.splice(draggedIdx, 1);
+        parts.splice(targetIdx, 0, removed);
+        saveExternalParts({ ...externalParts, [memberId]: parts });
+        showNotification('Supply reordered');
+      }
+    }
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
 
   // Category management
   const addCategory = () => {
@@ -12746,6 +14018,14 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
       if (newPart.costPerUnit) {
         memberParts[existing].costPerUnit = parseFloat(newPart.costPerUnit);
       }
+      // Update imageUrl if provided
+      if (newPart.imageUrl) {
+        memberParts[existing].imageUrl = newPart.imageUrl;
+      }
+      // Update supplierUrl if provided
+      if (newPart.supplierUrl) {
+        memberParts[existing].supplierUrl = newPart.supplierUrl;
+      }
     } else {
       memberParts.push({
         id: Date.now().toString(),
@@ -12753,12 +14033,18 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
         quantity: parseInt(newPart.quantity),
         categoryId: newPart.categoryId || null,
         reorderAt: newPart.reorderAt ? parseInt(newPart.reorderAt) : null,
-        costPerUnit: newPart.costPerUnit ? parseFloat(newPart.costPerUnit) : 0
+        costPerUnit: newPart.costPerUnit ? parseFloat(newPart.costPerUnit) : 0,
+        imageUrl: newPart.imageUrl || null,
+        supplierUrl: newPart.supplierUrl || null
       });
     }
 
     saveExternalParts({ ...externalParts, [memberId]: memberParts });
-    setNewPart({ name: '', quantity: '', categoryId: newPart.categoryId, reorderAt: '', costPerUnit: '' });
+    // Smart default: save last used category
+    if (newPart.categoryId) {
+      localStorage.setItem('lastUsedSupplyCategory', newPart.categoryId);
+    }
+    setNewPart({ name: '', quantity: '', categoryId: newPart.categoryId, reorderAt: '', costPerUnit: '', imageUrl: '', supplierUrl: '' });
     showNotification('Supply added successfully');
   };
 
@@ -12808,7 +14094,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
         gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ color: '#888' }}>Filter by Category:</span>
+          <span style={{ color: '#6e6e73' }}>Filter by Category:</span>
           <select
             className="assign-select"
             style={{ minWidth: '180px' }}
@@ -12845,7 +14131,11 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
             
             <div className="inventory-items">
               {filteredParts.length === 0 ? (
-                <p style={{ color: '#666', fontSize: '0.9rem' }}>No supplies in this category</p>
+                <div style={{ textAlign: 'center', padding: '24px 16px', color: '#86868b' }}>
+                  <Box size={32} style={{ opacity: 0.3, marginBottom: '12px' }} />
+                  <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}>No supplies in this category</p>
+                  <p style={{ fontSize: '0.8rem' }}>Add supplies using the form below</p>
+                </div>
               ) : (
                 Object.entries(groupedParts).map(([catId, parts]) => (
                   <div key={catId} style={{ marginBottom: '16px' }}>
@@ -12864,33 +14154,84 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                     </div>
                     {parts.map(part => {
                       const needsRestock = part.reorderAt && part.quantity <= part.reorderAt;
+                      const isDragging = draggedItem?.partId === part.id;
+                      const isDragOver = dragOverItem?.partId === part.id;
                       return (
-                      <div key={part.id} className="inventory-item" style={needsRestock ? { 
-                        borderColor: 'rgba(255, 193, 7, 0.5)',
-                        background: 'rgba(255, 193, 7, 0.1)'
-                      } : {}}>
-                        <div className="inventory-item-info">
-                          <div className="inventory-item-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div key={part.id} style={{
+                        position: 'relative',
+                        padding: needsRestock ? '6px' : '0',
+                        background: needsRestock ? 'rgba(255, 50, 50, 0.35)' : 'transparent',
+                        borderRadius: needsRestock ? '14px' : '0',
+                        marginBottom: needsRestock ? '4px' : '0'
+                      }}>
+                        {/* Low Stock Label */}
+                        {needsRestock && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            background: '#ef4444',
+                            color: '#fff',
+                            padding: '3px 12px',
+                            borderRadius: '10px',
+                            fontSize: '0.7rem',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            zIndex: 10,
+                            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            <AlertCircle size={12} /> LOW STOCK
+                          </div>
+                        )}
+                      <div
+                        className="inventory-item draggable"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, member.id, part.id)}
+                        onDragOver={(e) => handleDragOver(e, member.id, part.id)}
+                        onDragEnd={handleDragEnd}
+                        style={{
+                          ...(isDragging ? { opacity: 0.5 } : {}),
+                          ...(isDragOver ? { borderColor: '#007aff', borderStyle: 'dashed' } : {})
+                        }}
+                      >
+                        {/* Drag Handle */}
+                        <div className="drag-handle" title="Drag to reorder">
+                          <GripVertical size={16} />
+                        </div>
+                        {part.imageUrl && (
+                          <div style={{
+                            width: '50px',
+                            height: '50px',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            border: '1px solid #e5e5e5',
+                            background: '#f5f5f7'
+                          }}>
+                            <img
+                              src={part.imageUrl}
+                              alt={part.name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          </div>
+                        )}
+                        <div className="inventory-item-info" style={{ flex: 1 }}>
+                          <div className="inventory-item-name">
                             {part.name}
-                            {needsRestock && (
-                              <span style={{ 
-                                fontSize: '0.65rem', 
-                                padding: '2px 6px', 
-                                borderRadius: '4px',
-                                background: 'rgba(255, 193, 7, 0.2)',
-                                color: '#f59e0b',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}>
-                                <AlertCircle size={10} /> Low Stock
-                              </span>
-                            )}
                           </div>
                           <div className="inventory-item-meta">
                             {part.quantity} in stock
                             {part.reorderAt && (
-                              <span style={{ color: '#666', marginLeft: '8px' }}>
+                              <span style={{ color: '#86868b', marginLeft: '8px' }}>
                                 (reorder at {part.reorderAt})
                               </span>
                             )}
@@ -12899,9 +14240,42 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                                 ${part.costPerUnit.toFixed(2)}/unit
                               </span>
                             )}
+                            {part.supplierUrl && (
+                              <a
+                                href={part.supplierUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  marginLeft: '8px',
+                                  color: '#6366f1',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.8rem'
+                                }}
+                                title="Open supplier link"
+                              >
+                                <ExternalLink size={12} /> Reorder
+                              </a>
+                            )}
                           </div>
                         </div>
                         <div className="inventory-item-controls">
+                          {/* Quick Actions on Hover */}
+                          {part.supplierUrl && (
+                            <div className="quick-actions" style={{ marginRight: '8px' }}>
+                              <a
+                                href={part.supplierUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="quick-action-btn"
+                                title="Quick reorder"
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+                              >
+                                <ShoppingBag size={14} />
+                              </a>
+                            </div>
+                          )}
                           <button className="qty-btn" onClick={() => updateQuantity(member.id, part.id, -1)}>
                             <Minus size={14} />
                           </button>
@@ -12914,6 +14288,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                           </button>
                         </div>
                       </div>
+                      </div>
                     );})}
                   </div>
                 ))
@@ -12921,19 +14296,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
             </div>
 
             <div className="add-item-form">
-              <div style={{ marginBottom: '8px' }}>
-                <select
-                  className="add-item-input"
-                  value={newPart.categoryId}
-                  onChange={e => setNewPart({ ...newPart, categoryId: e.target.value })}
-                  style={{ width: '100%' }}
-                >
-                  <option value="">Select Category (Optional)</option>
-                  {supplyCategories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Basic Fields */}
               <div style={{ marginBottom: '8px' }}>
                 <input
                   type="text"
@@ -12948,39 +14311,107 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
                   {partSuggestions.map(s => <option key={s} value={s} />)}
                 </datalist>
               </div>
-              <div className="add-item-row">
+              <div className="add-item-row" style={{ marginBottom: '8px' }}>
                 <input
                   type="number"
                   className="add-item-input"
-                  placeholder="Quantity"
+                  placeholder="Quantity *"
                   value={newPart.quantity}
                   onChange={e => setNewPart({ ...newPart, quantity: e.target.value })}
                   style={{ flex: 1 }}
                 />
-                <input
-                  type="number"
+                <select
                   className="add-item-input"
-                  placeholder="Reorder at"
-                  title="Alert when stock falls to this level"
-                  value={newPart.reorderAt}
-                  onChange={e => setNewPart({ ...newPart, reorderAt: e.target.value })}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  className="add-item-input"
-                  placeholder="Cost/unit ($)"
-                  title="Cost per unit for profit calculation"
-                  value={newPart.costPerUnit}
-                  onChange={e => setNewPart({ ...newPart, costPerUnit: e.target.value })}
-                  style={{ flex: 1 }}
-                  min="0"
-                  step="0.01"
-                />
-                <button className="btn btn-primary btn-small" onClick={() => addPart(member.id)}>
-                  <Plus size={16} /> Add
-                </button>
+                  value={newPart.categoryId}
+                  onChange={e => setNewPart({ ...newPart, categoryId: e.target.value })}
+                  style={{ flex: 2 }}
+                >
+                  <option value="">Select Category</option>
+                  {supplyCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </div>
+
+              {/* Collapsible Advanced Fields */}
+              <div
+                className="collapsible-header"
+                onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                style={{ marginBottom: showAdvancedFields ? '8px' : '0' }}
+              >
+                {showAdvancedFields ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                Advanced Options
+                {(newPart.imageUrl || newPart.supplierUrl || newPart.reorderAt || newPart.costPerUnit) && (
+                  <span style={{
+                    background: '#007aff',
+                    color: 'white',
+                    fontSize: '0.65rem',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    marginLeft: '8px'
+                  }}>
+                    {[newPart.imageUrl, newPart.supplierUrl, newPart.reorderAt, newPart.costPerUnit].filter(Boolean).length} set
+                  </span>
+                )}
+              </div>
+
+              {showAdvancedFields && (
+                <div style={{
+                  background: '#f5f5f7',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '8px',
+                  animation: 'fadeIn 0.2s ease'
+                }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <input
+                      type="url"
+                      className="add-item-input"
+                      placeholder="Image URL (paste link to product image)"
+                      value={newPart.imageUrl}
+                      onChange={e => setNewPart({ ...newPart, imageUrl: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <input
+                      type="url"
+                      className="add-item-input"
+                      placeholder="Supplier URL (where to reorder)"
+                      value={newPart.supplierUrl}
+                      onChange={e => setNewPart({ ...newPart, supplierUrl: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="add-item-row">
+                    <input
+                      type="number"
+                      className="add-item-input"
+                      placeholder="Reorder at"
+                      title="Alert when stock falls to this level"
+                      value={newPart.reorderAt}
+                      onChange={e => setNewPart({ ...newPart, reorderAt: e.target.value })}
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      className="add-item-input"
+                      placeholder="Cost/unit ($)"
+                      title="Cost per unit for profit calculation"
+                      value={newPart.costPerUnit}
+                      onChange={e => setNewPart({ ...newPart, costPerUnit: e.target.value })}
+                      style={{ flex: 1 }}
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Add Button */}
+              <button className="btn btn-primary" onClick={() => addPart(member.id)} style={{ width: '100%' }}>
+                <Plus size={16} /> Add Supply
+              </button>
             </div>
           </div>
         );})}
@@ -13019,7 +14450,7 @@ function PartsTab({ externalParts, supplyCategories, teamMembers, saveExternalPa
             <div className="form-group">
               <label className="form-label">Existing Categories</label>
               {supplyCategories.length === 0 ? (
-                <p style={{ color: '#666', fontSize: '0.9rem' }}>No categories yet</p>
+                <p style={{ color: '#86868b', fontSize: '0.9rem' }}>No categories yet</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {supplyCategories.map(cat => (
@@ -13158,7 +14589,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
         <div className="empty-state">
           <Check size={48} style={{ color: '#10b981' }} />
           <p>All inventory is well stocked!</p>
-          <p style={{ fontSize: '0.85rem', color: '#666' }}>Items will appear here when they fall to or below their reorder level</p>
+          <p style={{ fontSize: '0.85rem', color: '#86868b' }}>Items will appear here when they fall to or below their reorder level</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -13214,12 +14645,12 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                         <div className="color-dot" style={{ backgroundColor: fil.colorHex, width: '16px', height: '16px' }} />
                         {fil.color}
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
+                      <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginTop: '4px' }}>
                         <span style={{ color: '#6366f1' }}>{fil.memberName}</span>
                         <span style={{ margin: '0 8px' }}>•</span>
                         <span style={{ color: '#ef4444' }}>{fil.amount.toFixed(0)}g</span> remaining
                         <span style={{ margin: '0 8px' }}>•</span>
-                        <span style={{ color: '#888' }}>0 backup rolls</span>
+                        <span style={{ color: '#6e6e73' }}>0 backup rolls</span>
                         <span style={{ margin: '0 8px' }}>•</span>
                         <span style={{ color: '#f59e0b' }}>Reorder at {fil.threshold}g</span>
                       </div>
@@ -13227,7 +14658,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ 
                         fontSize: '0.75rem', 
-                        color: '#888', 
+                        color: '#6e6e73', 
                         marginBottom: '4px' 
                       }}>
                         Suggested Order
@@ -13300,7 +14731,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                           <AlertCircle size={16} style={{ color: '#f59e0b' }} />
                           {item.name}
                         </div>
-                        <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
+                        <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginTop: '4px' }}>
                           <span style={{ color: '#6366f1' }}>{item.memberName}</span>
                           <span style={{ margin: '0 8px' }}>•</span>
                           <span style={{ color: '#ef4444' }}>{item.quantity}</span> in stock
@@ -13311,7 +14742,7 @@ function RestockTab({ externalParts, supplyCategories, teamMembers, filaments })
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ 
                           fontSize: '0.75rem', 
-                          color: '#888', 
+                          color: '#6e6e73', 
                           marginBottom: '4px' 
                         }}>
                           Suggested Order
@@ -13448,17 +14879,17 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
   const dailySubCost = yearlySubCost / 365;
 
   const categories = [
-    { id: 'filament', name: 'Filament', color: '#10b981' },
+    { id: 'filament', name: 'Material', color: '#10b981' },
     { id: 'parts', name: 'External Parts', color: '#6366f1' },
     { id: 'packaging', name: 'Packaging', color: '#ff9f43' },
     { id: 'electronics', name: 'Electronics', color: '#8b5cf6' },
     { id: 'hardware', name: 'Hardware', color: '#ef4444' },
     { id: 'shipping', name: 'Shipping Supplies', color: '#f59e0b' },
-    { id: 'other', name: 'Other', color: '#888' }
+    { id: 'other', name: 'Other', color: '#6e6e73' }
   ];
 
   const getCategoryColor = (catId) => {
-    return categories.find(c => c.id === catId)?.color || '#888';
+    return categories.find(c => c.id === catId)?.color || '#94a3b8';
   };
 
   const getCategoryName = (catId) => {
@@ -13576,7 +15007,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
         </div>
 
         {subscriptions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
+          <div style={{ textAlign: 'center', padding: '30px', color: '#86868b' }}>
             <RefreshCw size={36} style={{ opacity: 0.3, marginBottom: '12px' }} />
             <p style={{ margin: 0 }}>No subscriptions tracked yet</p>
             <p style={{ fontSize: '0.85rem', margin: '8px 0 0 0' }}>Add subscriptions to track recurring costs</p>
@@ -13610,7 +15041,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                         {sub.frequency}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#86868b', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       {sub.url && (
                         <a
                           href={sub.url.startsWith('http') ? sub.url : `https://${sub.url}`}
@@ -13621,7 +15052,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                           <ExternalLink size={12} /> Manage
                         </a>
                       )}
-                      {sub.notes && <span style={{ color: '#888' }}>{sub.notes}</span>}
+                      {sub.notes && <span style={{ color: '#6e6e73' }}>{sub.notes}</span>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -13629,7 +15060,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                       <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                         ${sub.price.toFixed(2)}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#86868b' }}>
                         ${yearlyAmount.toFixed(2)}/yr
                       </div>
                     </div>
@@ -13664,25 +15095,25 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
               marginTop: '8px'
             }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Daily</div>
+                <div style={{ fontSize: '0.7rem', color: '#6e6e73', marginBottom: '4px', textTransform: 'uppercase' }}>Daily</div>
                 <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${dailySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Weekly</div>
+                <div style={{ fontSize: '0.7rem', color: '#6e6e73', marginBottom: '4px', textTransform: 'uppercase' }}>Weekly</div>
                 <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${weeklySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Monthly</div>
+                <div style={{ fontSize: '0.7rem', color: '#6e6e73', marginBottom: '4px', textTransform: 'uppercase' }}>Monthly</div>
                 <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${monthlySubCost.toFixed(2)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '4px', textTransform: 'uppercase' }}>Yearly</div>
+                <div style={{ fontSize: '0.7rem', color: '#6e6e73', marginBottom: '4px', textTransform: 'uppercase' }}>Yearly</div>
                 <div style={{ fontSize: '1rem', fontWeight: '700', color: '#8b5cf6', fontFamily: 'JetBrains Mono, monospace' }}>
                   ${yearlySubCost.toFixed(2)}
                 </div>
@@ -13716,7 +15147,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
               </h3>
               {totalMonthlyPayments > 0 && (
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#888' }}>Monthly Total</div>
+                  <div style={{ fontSize: '0.75rem', color: '#6e6e73' }}>Monthly Total</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#ff9f43', fontFamily: 'JetBrains Mono, monospace' }}>
                     ${totalMonthlyPayments.toFixed(2)}
                   </div>
@@ -13727,7 +15158,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
             {/* Active Payments */}
             {printersWithPayments.length > 0 && (
               <>
-                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Active Payments</div>
+                <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Active Payments</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
                   {printersWithPayments.map(printer => {
                     const progress = printer.totalPrice > 0
@@ -13753,7 +15184,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                           </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '0.85rem' }}>
-                          <span style={{ color: '#888' }}>
+                          <span style={{ color: '#6e6e73' }}>
                             Total: ${(printer.totalPrice || 0).toFixed(2)}
                           </span>
                           <span style={{ color: '#ef4444' }}>
@@ -13777,7 +15208,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                           </div>
                         )}
                         {printer.totalPrice > 0 && (
-                          <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px', textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#6e6e73', marginTop: '4px', textAlign: 'right' }}>
                             {progress.toFixed(0)}% paid off
                           </div>
                         )}
@@ -13791,7 +15222,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
             {/* Paid Off Printers */}
             {paidOffPrinters.length > 0 && (
               <>
-                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Paid Off</div>
+                <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Paid Off</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {paidOffPrinters.map(printer => (
                     <div
@@ -13808,7 +15239,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                     >
                       <Check size={14} style={{ color: '#10b981' }} />
                       <span style={{ fontWeight: '500' }}>{printer.name}</span>
-                      <span style={{ fontSize: '0.85rem', color: '#888' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#6e6e73' }}>
                         (${(printer.totalPrice || 0).toFixed(2)})
                       </span>
                     </div>
@@ -13852,7 +15283,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Service Name *</label>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Service Name *</label>
                 <input
                   type="text"
                   className="add-item-input"
@@ -13865,7 +15296,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Price ($) *</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Price ($) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -13877,7 +15308,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Frequency</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Frequency</label>
                   <select
                     value={newSubscription.frequency}
                     onChange={e => setNewSubscription({ ...newSubscription, frequency: e.target.value })}
@@ -13899,7 +15330,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Manage/Cancel URL</label>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Manage/Cancel URL</label>
                 <input
                   type="text"
                   className="add-item-input"
@@ -13911,7 +15342,7 @@ function CostsTab({ purchases, savePurchases, subscriptions, saveSubscriptions, 
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Notes</label>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Notes</label>
                 <input
                   type="text"
                   className="add-item-input"
@@ -14101,7 +15532,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 
     const colors = ['#ff9f43', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981', '#6366f1'];
     const usedColors = allocations.map(a => a.color);
-    const availableColor = colors.find(c => !usedColors.includes(c)) || '#888';
+    const availableColor = colors.find(c => !usedColors.includes(c)) || '#94a3b8';
 
     setAllocations([...allocations, {
       id: `alloc-${Date.now()}`,
@@ -14181,11 +15612,11 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Revenue ({periodLabels[timePeriod]})</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Revenue ({periodLabels[timePeriod]})</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
             {formatCurrency(totalRevenue)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '4px' }}>
             {allShippedOrders.length} orders
           </div>
         </div>
@@ -14196,11 +15627,11 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Costs ({periodLabels[timePeriod]})</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Costs ({periodLabels[timePeriod]})</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#ef4444', fontFamily: 'JetBrains Mono, monospace' }}>
             {formatCurrency(totalCosts)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '4px' }}>
             Purchases, subs, materials
           </div>
         </div>
@@ -14213,7 +15644,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           borderRadius: '12px',
           padding: '20px'
         }}>
-          <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>Net Profit ({periodLabels[timePeriod]})</div>
+          <div style={{ fontSize: '0.85rem', color: '#6e6e73', marginBottom: '8px' }}>Net Profit ({periodLabels[timePeriod]})</div>
           <div style={{
             fontSize: '1.75rem',
             fontWeight: '700',
@@ -14222,7 +15653,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
           }}>
             {formatCurrency(netProfit)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.75rem', color: '#86868b', marginTop: '4px' }}>
             {((netProfit / totalRevenue) * 100 || 0).toFixed(1)}% margin
           </div>
         </div>
@@ -14282,7 +15713,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
             );
           })}
           {totalCosts === 0 && (
-            <p style={{ color: '#666', fontSize: '0.9rem' }}>No costs recorded for this period</p>
+            <p style={{ color: '#86868b', fontSize: '0.9rem' }}>No costs recorded for this period</p>
           )}
         </div>
       </div>
@@ -14368,7 +15799,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
                           textAlign: 'center'
                         }}
                       />
-                      <span style={{ color: '#888' }}>%</span>
+                      <span style={{ color: '#6e6e73' }}>%</span>
                       <button
                         className="btn btn-small"
                         onClick={() => setEditingAllocation(null)}
@@ -14401,7 +15832,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
-                  <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '4px' }}>
                     {alloc.isSplit ? 'Total Amount' : 'Allocated Amount'}
                   </div>
                   <div style={{
@@ -14416,7 +15847,7 @@ function FinanceTab({ orders, archivedOrders, purchases, subscriptions, printers
 
                 {alloc.isSplit && (
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#6e6e73', marginBottom: '4px' }}>
                       Per Partner ({partnerCount})
                     </div>
                     <div style={{
@@ -15041,7 +16472,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 
               {/* Paste Input */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', color: '#888' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#6e6e73' }}>
                   Paste order data (tab-separated: Transaction ID, Product, Quantity, Variations, Price, Tax)
                 </label>
                 <textarea
@@ -15073,7 +16504,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     Preview ({parsedOrders.length} orders found)
                   </h4>
                   <div style={{
-                    background: 'rgba(0,0,0,0.3)',
+                    background: 'rgba(0,0,0,0.05)',
                     borderRadius: '8px',
                     overflow: 'auto',
                     maxHeight: '200px'
@@ -15081,13 +16512,13 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                       <thead>
                         <tr>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>TXN ID</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Product</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Qty</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Color</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Extra</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Price</th>
-                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#888' }}>Tax</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>TXN ID</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Product</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Qty</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Color</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Extra</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Price</th>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#6e6e73' }}>Tax</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -15105,7 +16536,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                       </tbody>
                     </table>
                     {parsedOrders.length > 5 && (
-                      <div style={{ padding: '8px', color: '#888', fontSize: '0.8rem', textAlign: 'center' }}>
+                      <div style={{ padding: '8px', color: '#6e6e73', fontSize: '0.8rem', textAlign: 'center' }}>
                         ... and {parsedOrders.length - 5} more orders
                       </div>
                     )}
@@ -15262,7 +16693,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   border: `1px solid ${profitData.profit >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}`
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#888' }}>Profit Analysis</span>
+                    <span style={{ fontSize: '0.75rem', color: '#6e6e73' }}>Profit Analysis</span>
                     <span style={{
                       fontSize: '1rem',
                       fontWeight: '600',
@@ -15271,10 +16702,10 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                       {profitData.profit >= 0 ? '+' : ''}${profitData.profit.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.7rem', color: '#888' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.7rem', color: '#6e6e73' }}>
                     <span>Order: ${profitData.orderTotal.toFixed(2)}</span>
                     {profitData.shippingCost > 0 && <span style={{ color: '#ff9f43' }}>Shipping: -${profitData.shippingCost.toFixed(2)}</span>}
-                    {profitData.salesTax > 0 && <span style={{ color: '#888' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
+                    {profitData.salesTax > 0 && <span style={{ color: '#6e6e73' }}>Tax: -${profitData.salesTax.toFixed(2)}</span>}
                     {profitData.totalFees > 0 && <span style={{ color: '#ff9f43' }}>Fees: -${profitData.totalFees.toFixed(2)}</span>}
                     <span style={{ color: profitData.filamentCost > 0 ? '#8b5cf6' : '#555' }}>
                       Material: {profitData.filamentCost > 0 ? `-$${profitData.filamentCost.toFixed(2)}` : '$0'}
@@ -15289,7 +16720,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
               {/* External Parts Required */}
               {matchingModel?.externalParts?.length > 0 && (
                 <div style={{ marginTop: '12px' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#6e6e73', marginBottom: '6px' }}>
                     <Box size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
                     Required Parts:
                   </div>
@@ -15378,7 +16809,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Item/Product Name</label>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Item/Product Name</label>
                 <input
                   type="text"
                   className="add-item-input"
@@ -15390,7 +16821,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Quantity</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Quantity</label>
                   <input
                     type="number"
                     min="1"
@@ -15401,7 +16832,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Price (e.g., $24.99)</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Price (e.g., $24.99)</label>
                   <input
                     type="text"
                     className="add-item-input"
@@ -15414,7 +16845,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Color</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Color</label>
                   <input
                     type="text"
                     className="add-item-input"
@@ -15424,7 +16855,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Extra/Variations</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Extra/Variations</label>
                   <input
                     type="text"
                     className="add-item-input"
@@ -15437,7 +16868,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Shipping Cost ($)</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Shipping Cost ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -15449,7 +16880,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Sales Tax ($)</label>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Sales Tax ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -15463,7 +16894,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', color: '#888', fontSize: '0.85rem' }}>Store</label>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#6e6e73', fontSize: '0.85rem' }}>Store</label>
                 <select
                   value={editForm.storeId}
                   onChange={e => setEditForm({ ...editForm, storeId: e.target.value })}
@@ -15601,7 +17032,7 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
               </div>
               <div className="team-stat">
                 <div className="team-stat-value">{totalFilament.toFixed(0)}g</div>
-                <div className="team-stat-label">Total Filament</div>
+                <div className="team-stat-label">Total Material</div>
               </div>
               <div className="team-stat">
                 <div className="team-stat-value">{totalParts}</div>
@@ -15862,12 +17293,12 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
             )}
           </div>
 
-          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '16px' }}>
+          <p style={{ color: '#6e6e73', fontSize: '0.9rem', marginBottom: '16px' }}>
             Group {optimizedQueue.totalOrders} orders into {optimizedQueue.uniqueColors} color batches to minimize filament changes.
           </p>
 
           {optimizedQueue.groups.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+            <div style={{ textAlign: 'center', padding: '20px', color: '#86868b' }}>
               No orders in queue to optimize
             </div>
           ) : (
@@ -15900,20 +17331,20 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                           width: '16px',
                           height: '16px',
                           borderRadius: '4px',
-                          background: '#888',
+                          background: '#6e6e73',
                           border: '1px solid #d2d2d7'
                         }} />
                         <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{group.color}</span>
                       </div>
                     </div>
-                    <span style={{ color: '#888', fontSize: '0.85rem' }}>
+                    <span style={{ color: '#6e6e73', fontSize: '0.85rem' }}>
                       {group.count} order{group.count !== 1 ? 's' : ''} • {group.totalQuantity} total items
                     </span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {group.orders.map(order => (
                       <div key={order.orderId} style={{
-                        background: 'rgba(0,0,0,0.2)',
+                        background: 'rgba(0,0,0,0.05)',
                         padding: '6px 10px',
                         borderRadius: '6px',
                         fontSize: '0.8rem',
@@ -15922,7 +17353,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                         gap: '6px'
                       }}>
                         <span style={{ color: '#10b981' }}>#{order.orderId.slice(-4)}</span>
-                        <span style={{ color: '#666' }}>•</span>
+                        <span style={{ color: '#86868b' }}>•</span>
                         <span style={{ color: '#1a1a2e', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {order.item?.slice(0, 25)}{order.item?.length > 25 ? '...' : ''}
                         </span>
@@ -15953,7 +17384,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
               {member.name}
               <span style={{
                 fontSize: '0.8rem',
-                color: '#888',
+                color: '#6e6e73',
                 fontWeight: 'normal'
               }}>
                 ({memberSchedule.length} prints queued)
@@ -15964,7 +17395,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
               <div style={{
                 padding: '2rem',
                 textAlign: 'center',
-                color: '#666',
+                color: '#86868b',
                 background: 'rgba(255,255,255,0.02)',
                 borderRadius: '12px',
                 border: '1px dashed rgba(255,255,255,0.1)'
@@ -16021,7 +17452,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                          <div style={{ fontSize: '0.85rem', color: '#6e6e73' }}>
                             {order.buyerName} • {order.color || 'No color specified'}
                             {order.quantity > 1 && ` • Qty: ${order.quantity}`}
                           </div>
@@ -16044,7 +17475,7 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                             </div>
                           )}
                           <div style={{
-                            background: 'rgba(0,255,136,0.1)',
+                            background: 'rgba(16,185,129,0.1)',
                             padding: '4px 12px',
                             borderRadius: '20px',
                             fontSize: '0.85rem',
@@ -16087,17 +17518,17 @@ function ScheduleTab({ orders, models, teamMembers, printers, setOrders }) {
                         alignItems: 'center',
                         gap: '12px',
                         padding: '8px 12px',
-                        background: 'rgba(0,0,0,0.2)',
+                        background: 'rgba(0,0,0,0.05)',
                         borderRadius: '8px',
                         fontSize: '0.9rem'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ color: '#888' }}>Start:</span>
+                          <span style={{ color: '#6e6e73' }}>Start:</span>
                           <span style={{ color: '#10b981' }}>{formatDateTime(order.calculatedStart)}</span>
                         </div>
                         <ChevronRight size={16} style={{ color: '#444' }} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ color: '#888' }}>End:</span>
+                          <span style={{ color: '#6e6e73' }}>End:</span>
                           <span style={{ color: '#6366f1' }}>{formatDateTime(order.calculatedEnd)}</span>
                         </div>
                       </div>
@@ -16321,7 +17752,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                     />
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#888' }}>Owner:</span>
+                        <span style={{ fontSize: '0.85rem', color: '#6e6e73' }}>Owner:</span>
                         <select
                           className="form-input"
                           defaultValue={printer.ownerId || ''}
@@ -16335,7 +17766,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                         </select>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#888' }}>Hours:</span>
+                        <span style={{ fontSize: '0.85rem', color: '#6e6e73' }}>Hours:</span>
                         <input
                           type="number"
                           className="form-input"
@@ -16361,7 +17792,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Total:</span>
+                          <span style={{ fontSize: '0.75rem', color: '#6e6e73' }}>Total:</span>
                           <input
                             type="number"
                             className="form-input"
@@ -16374,7 +17805,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                           />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Remaining:</span>
+                          <span style={{ fontSize: '0.75rem', color: '#6e6e73' }}>Remaining:</span>
                           <input
                             type="number"
                             className="form-input"
@@ -16393,7 +17824,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                           />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Monthly:</span>
+                          <span style={{ fontSize: '0.75rem', color: '#6e6e73' }}>Monthly:</span>
                           <input
                             type="number"
                             className="form-input"
@@ -16459,7 +17890,7 @@ function PrintersTab({ printers, savePrinters, orders, teamMembers, showNotifica
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#6e6e73', display: 'flex', gap: '16px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span>{getOrderCount(printer.id)} active prints</span>
                       <span style={{ color: '#6366f1' }}>
                         <Clock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
