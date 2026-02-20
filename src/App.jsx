@@ -7073,6 +7073,8 @@ export default function EtsyOrderManager() {
                   fulfillLineItem={fulfillLineItem}
                   unfulfillLineItem={unfulfillLineItem}
                   toggleLineItemPlateComplete={toggleLineItemPlateComplete}
+                  deleteOrder={deleteOrder}
+                  isAdmin={isAdmin}
                   uiMode={uiMode}
                 />
               )}
@@ -7715,7 +7717,7 @@ function calculateShipByDate(orderDate, processingDays) {
 }
 
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete, uiMode = 'advanced' }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete, deleteOrder, isAdmin, uiMode = 'advanced' }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
@@ -9337,7 +9339,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
                 >
                   <Edit2 size={12} />
                 </button>
-                {canDeleteOrder && (
+                {canDeleteOrder && deleteOrder && (
                   <button
                     type="button"
                     onClick={(e) => {
