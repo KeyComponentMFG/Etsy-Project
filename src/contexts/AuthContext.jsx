@@ -28,6 +28,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileChecked, setProfileChecked] = useState(false); // Track if we've done initial check
 
   // Fetch user profile
   const fetchProfile = async (userId, keepExisting = false) => {
@@ -78,6 +79,7 @@ export function AuthProvider({ children }) {
         // Only clear profile if this is initial load, not a refresh
         if (!keepExisting) setProfile(null);
         setProfileLoading(false);
+        setProfileChecked(true);
         return null;
       }
 
@@ -104,6 +106,7 @@ export function AuthProvider({ children }) {
         company: company
       });
       setProfileLoading(false);
+      setProfileChecked(true);
       return data;
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -205,6 +208,7 @@ export function AuthProvider({ children }) {
     profile,
     loading,
     profileLoading,
+    profileChecked,
     signIn,
     signUp,
     signOut,

@@ -1522,7 +1522,7 @@ function AnalyticsTab({ orders, setOrders, archivedOrders, setArchivedOrders, mo
 
 export default function EtsyOrderManager() {
   // Auth state - must be first
-  const { user, loading: authLoading, signOut, profile, profileLoading, refreshProfile } = useAuth();
+  const { user, loading: authLoading, signOut, profile, profileLoading, profileChecked, refreshProfile } = useAuth();
   const { isAdmin, canEdit, canDelete, companyId } = usePermissions();
   const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -5252,7 +5252,8 @@ export default function EtsyOrderManager() {
   }
 
   // Show company setup if user has no profile (needs to create or join company)
-  if (!profile) {
+  // Only show after we've confirmed profile doesn't exist (profileChecked = true)
+  if (!profile && profileChecked) {
     return (
       <CompanySetup
         user={user}
@@ -5260,6 +5261,32 @@ export default function EtsyOrderManager() {
           await refreshProfile();
         }}
       />
+    );
+  }
+
+  // Still checking for profile - show loading
+  if (!profile && !profileChecked) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #f8f9fc 0%, #e2e8f0 100%)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid #e2e8f0',
+            borderTopColor: '#10b981',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <p style={{ color: '#64748b', fontSize: '1rem' }}>Loading...</p>
+        </div>
+      </div>
     );
   }
 
