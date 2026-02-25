@@ -366,7 +366,7 @@ export default function AdminPanel({ companyId, onClose }) {
                     fontWeight: '600',
                     fontSize: '1rem'
                   }}>
-                    {member.display_name?.[0]?.toUpperCase() || '?'}
+                    {(member.display_name || member.email || '?')[0]?.toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{
@@ -376,7 +376,7 @@ export default function AdminPanel({ companyId, onClose }) {
                       alignItems: 'center',
                       gap: '8px'
                     }}>
-                      {member.display_name || 'Unknown'}
+                      {member.display_name || member.email || 'Unknown'}
                       {member.role === 'admin' && (
                         <span style={{
                           background: 'linear-gradient(135deg, #f59e0b, #d97706)',

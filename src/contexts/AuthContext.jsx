@@ -102,6 +102,9 @@ export function AuthProvider({ children }) {
         company_id: data.company_id,
         role: data.role,
         display_name: data.display_name,
+        email: data.email,
+        phone: data.phone,
+        avatar_url: data.avatar_url,
         created_at: data.created_at,
         company: company
       });

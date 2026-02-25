@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown, Search, HelpCircle, Bell, Undo2, GripVertical, CheckSquare, Square, Info, LogOut } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown, Search, HelpCircle, Bell, Undo2, GripVertical, CheckSquare, Square, Info, LogOut, Shield, Mail, Phone } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
@@ -1538,6 +1538,7 @@ export default function EtsyOrderManager() {
   const [externalParts, setExternalParts] = useState({});
   const [supplyCategories, setSupplyCategories] = useState(DEFAULT_SUPPLY_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState(DEFAULT_TEAM);
+  const [companyProfiles, setCompanyProfiles] = useState([]); // User profiles who joined the company
   const [stores, setStores] = useState(DEFAULT_STORES);
   const [printers, setPrinters] = useState(DEFAULT_PRINTERS);
   const [selectedStoreFilter, setSelectedStoreFilter] = useState('all');
@@ -1821,7 +1822,8 @@ export default function EtsyOrderManager() {
         { data: printersData, error: printersError },
         { data: purchasesData, error: purchasesError },
         { data: usageHistoryData, error: usageHistoryError },
-        { data: subscriptionsData, error: subscriptionsError }
+        { data: subscriptionsData, error: subscriptionsError },
+        { data: profilesData, error: profilesError }
       ] = await Promise.all([
         supabase.from('orders').select('*'),
         supabase.from('archived_orders').select('*'),
@@ -1834,7 +1836,8 @@ export default function EtsyOrderManager() {
         supabase.from('printers').select('*'),
         supabase.from('purchases').select('*'),
         supabase.from('filament_usage_history').select('*'),
-        supabase.from('subscriptions').select('*')
+        supabase.from('subscriptions').select('*'),
+        supabase.from('user_profiles').select('*')
       ]);
 
       // Log any errors
@@ -2000,7 +2003,21 @@ export default function EtsyOrderManager() {
         setSupplyCategories(categoriesData.map(c => ({ id: c.id, name: c.name })));
       }
       if (teamData && teamData.length > 0) {
-        setTeamMembers(teamData.map(t => ({ id: t.id, name: t.name })));
+        setTeamMembers(teamData.map(t => ({ id: t.id, name: t.name, ownerId: t.owner_id })));
+      }
+
+      // Store user profiles (people who joined the company)
+      if (profilesData) {
+        setCompanyProfiles(profilesData.map(p => ({
+          id: p.id,
+          userId: p.user_id,
+          displayName: p.display_name,
+          email: p.email,
+          phone: p.phone,
+          avatarUrl: p.avatar_url,
+          role: p.role,
+          createdAt: p.created_at
+        })));
       }
       if (storesData && storesData.length > 0) {
         setStores(storesData.map(s => ({ id: s.id, name: s.name, color: s.color })));
@@ -7342,10 +7359,12 @@ export default function EtsyOrderManager() {
             <TeamTab
               teamMembers={teamMembers}
               saveTeamMembers={saveTeamMembers}
+              companyProfiles={companyProfiles}
               orders={orders}
               filaments={filaments}
               externalParts={externalParts}
               showNotification={showNotification}
+              loadData={loadData}
             />
           )}
         </main>
@@ -7385,7 +7404,10 @@ export default function EtsyOrderManager() {
         <ProfileSettings
           profile={profile}
           onClose={() => setShowProfileSettings(false)}
-          onUpdate={refreshProfile}
+          onUpdate={() => {
+            refreshProfile();
+            loadData(false); // Refresh team data to sync names
+          }}
         />
       )}
 
@@ -17028,21 +17050,26 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 }
 
 // Team Tab Component
-function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalParts, showNotification }) {
+function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filaments, externalParts, showNotification, loadData }) {
   const [editingMember, setEditingMember] = useState(null);
   const [newMemberName, setNewMemberName] = useState('');
+
+  // Find which team members are linked to user profiles
+  const getLinkedProfile = (member) => {
+    return companyProfiles?.find(p => p.userId === member.ownerId);
+  };
 
   const addMember = () => {
     if (!newMemberName.trim()) {
       showNotification('Please enter a name', 'error');
       return;
     }
-    
+
     const newMember = {
       id: `member${Date.now()}`,
       name: newMemberName.trim()
     };
-    
+
     saveTeamMembers([...teamMembers, newMember]);
     setNewMemberName('');
     showNotification('Team member added');
@@ -17064,12 +17091,159 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
     showNotification('Team member removed');
   };
 
+  // Get profiles without a linked team member (newly joined users)
+  const unlinkedProfiles = companyProfiles?.filter(profile =>
+    !teamMembers.some(tm => tm.ownerId === profile.userId)
+  ) || [];
+
   return (
     <>
       <h2 className="page-title"><Users size={28} /> Team Management</h2>
-      
+
+      {/* Company Members Section - Users who joined via invite code */}
+      {companyProfiles && companyProfiles.length > 0 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{
+            fontSize: '1rem',
+            color: '#6366f1',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <Shield size={20} />
+            Company Members ({companyProfiles.length})
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {companyProfiles.map((profile) => {
+              // Find linked team member
+              const linkedMember = teamMembers.find(tm => tm.ownerId === profile.userId);
+              const memberOrders = linkedMember ? orders.filter(o => o.assignedTo === linkedMember.id) : [];
+              const activeOrders = memberOrders.filter(o => o.status !== 'shipped');
+              // Use displayName, fall back to email if not set
+              const displayName = profile.displayName || profile.email || 'Unknown';
+              const avatarLetter = (profile.displayName || profile.email || '?')[0]?.toUpperCase();
+
+              return (
+                <div
+                  key={profile.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    background: '#f8fafc',
+                    borderRadius: '10px',
+                    border: profile.role === 'admin' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #e2e8f0'
+                  }}
+                >
+                  {/* Avatar */}
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    background: profile.avatarUrl
+                      ? `url(${profile.avatarUrl}) center/cover`
+                      : profile.role === 'admin'
+                        ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                        : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontWeight: '600',
+                    fontSize: '1.25rem',
+                    flexShrink: 0
+                  }}>
+                    {!profile.avatarUrl && avatarLetter}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      fontWeight: '600',
+                      color: '#1a1a2e',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '4px'
+                    }}>
+                      {displayName}
+                      {profile.role === 'admin' && (
+                        <span style={{
+                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                          color: '#fff',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: '600'
+                        }}>
+                          ADMIN
+                        </span>
+                      )}
+                      {linkedMember && (
+                        <span style={{
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          color: '#10b981',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: '500'
+                        }}>
+                          Linked
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      {profile.email && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Mail size={12} /> {profile.email}
+                        </span>
+                      )}
+                      {profile.phone && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Phone size={12} /> {profile.phone}
+                        </span>
+                      )}
+                      <span>
+                        Joined {new Date(profile.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  {linkedMember && (
+                    <div style={{ display: 'flex', gap: '16px', color: '#64748b', fontSize: '0.85rem' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: '600', color: '#1a1a2e' }}>{activeOrders.length}</div>
+                        <div style={{ fontSize: '0.75rem' }}>Orders</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Legacy Team Members Section - For inventory assignment */}
       <div style={{ marginBottom: '2rem' }}>
-        <div className="add-item-row" style={{ maxWidth: '400px' }}>
+        <h3 style={{
+          fontSize: '1rem',
+          color: '#10b981',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <Box size={20} />
+          Inventory Assignments ({teamMembers.length})
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '16px' }}>
+          Team members for assigning orders and tracking inventory. Users who join are automatically added.
+        </p>
+        <div className="add-item-row" style={{ maxWidth: '400px', marginBottom: '16px' }}>
           <input
             type="text"
             className="add-item-input"
@@ -17090,6 +17264,7 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
         const memberParts = externalParts[member.id] || [];
         const totalFilament = memberFilaments.reduce((sum, f) => sum + f.amount, 0);
         const totalParts = memberParts.reduce((sum, p) => sum + p.quantity, 0);
+        const linkedProfile = getLinkedProfile(member);
 
         return (
           <div key={member.id} className="team-member-card">
@@ -17112,21 +17287,44 @@ function TeamTab({ teamMembers, saveTeamMembers, orders, filaments, externalPart
                   </button>
                 </div>
               ) : (
-                <div className="team-member-name">
-                  <Users size={24} style={{ color: '#10b981' }} />
-                  {member.name}
+                <div className="team-member-name" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {linkedProfile?.avatarUrl ? (
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      background: `url(${linkedProfile.avatarUrl}) center/cover`,
+                      borderRadius: '8px'
+                    }} />
+                  ) : (
+                    <Users size={24} style={{ color: linkedProfile ? '#6366f1' : '#10b981' }} />
+                  )}
+                  <span>{member.name}</span>
+                  {linkedProfile && (
+                    <span style={{
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#6366f1',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.7rem',
+                      fontWeight: '500'
+                    }}>
+                      User Account
+                    </span>
+                  )}
                 </div>
               )}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-secondary btn-small" onClick={() => setEditingMember(member.id)}>
-                  <Edit2 size={14} /> Edit
-                </button>
+                {!linkedProfile && (
+                  <button className="btn btn-secondary btn-small" onClick={() => setEditingMember(member.id)}>
+                    <Edit2 size={14} /> Edit
+                  </button>
+                )}
                 <button className="btn btn-danger btn-small" onClick={() => removeMember(member.id)}>
                   <Trash2 size={14} />
                 </button>
               </div>
             </div>
-            
+
             <div className="team-member-stats">
               <div className="team-stat">
                 <div className="team-stat-value">{activeOrders.length}</div>

@@ -97,7 +97,8 @@ export default function CompanySetup({ user, onComplete }) {
           user_id: user.id,
           company_id: companyId,
           role: 'admin',
-          display_name: user.email.split('@')[0]
+          display_name: user.email.split('@')[0],
+          email: user.email
         });
 
       if (profileError) {
@@ -158,7 +159,8 @@ export default function CompanySetup({ user, onComplete }) {
           user_id: user.id,
           company_id: company.id,
           role: 'member',
-          display_name: user.email.split('@')[0]
+          display_name: user.email.split('@')[0],
+          email: user.email
         });
 
       if (profileError) throw profileError;

@@ -13,7 +13,32 @@ export default function ProfileSettings({ profile, onClose, onUpdate }) {
     avatar_url: profile?.avatar_url || ''
   });
 
+  // Fetch fresh profile data when component opens
+  useEffect(() => {
+    const fetchFreshProfile = async () => {
+      if (!profile?.id) return;
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', profile.id)
+        .single();
+
+      if (data && !error) {
+        setFormData({
+          display_name: data.display_name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          avatar_url: data.avatar_url || ''
+        });
+      }
+    };
+
+    fetchFreshProfile();
+  }, [profile?.id]);
+
   const handleSave = async () => {
+
     setLoading(true);
     setError('');
     setSuccess('');
@@ -96,6 +121,7 @@ export default function ProfileSettings({ profile, onClose, onUpdate }) {
             </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             style={{
               background: 'none',
@@ -321,6 +347,7 @@ export default function ProfileSettings({ profile, onClose, onUpdate }) {
 
           {/* Save Button */}
           <button
+            type="button"
             onClick={handleSave}
             disabled={loading}
             style={{
