@@ -30,12 +30,12 @@ export function AuthProvider({ children }) {
   const [profileLoading, setProfileLoading] = useState(true);
 
   // Fetch user profile
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (userId, keepExisting = false) => {
     console.log('=== FETCHING PROFILE ===');
     console.log('User ID:', userId);
     if (!userId) {
       console.log('No userId, skipping profile fetch');
-      setProfile(null);
+      if (!keepExisting) setProfile(null);
       setProfileLoading(false);
       return null;
     }
@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
 
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), 5000)
+        setTimeout(() => reject(new Error('Query timeout')), 10000)
       );
 
       // First, fetch just the profile (without join to avoid RLS issues)
@@ -67,14 +67,16 @@ export function AuthProvider({ children }) {
 
       if (error) {
         console.error('Profile query error:', error);
-        setProfile(null);
+        // Don't clear profile on error if we already have one (e.g., token refresh failure)
+        if (!keepExisting) setProfile(null);
         setProfileLoading(false);
         return null;
       }
 
       if (!data) {
         console.log('No profile found, user needs to set up company');
-        setProfile(null);
+        // Only clear profile if this is initial load, not a refresh
+        if (!keepExisting) setProfile(null);
         setProfileLoading(false);
         return null;
       }
@@ -105,7 +107,8 @@ export function AuthProvider({ children }) {
       return data;
     } catch (err) {
       console.error('Error fetching profile:', err);
-      setProfile(null);
+      // Don't clear profile on error if we already have one
+      if (!keepExisting) setProfile(null);
       setProfileLoading(false);
       return null;
     }
@@ -155,8 +158,11 @@ export function AuthProvider({ children }) {
 
         // Fetch profile on auth change
         if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
+          // On token refresh, keep existing profile if query fails
+          const keepExisting = _event === 'TOKEN_REFRESHED' || _event === 'USER_UPDATED';
+          await fetchProfile(session.user.id, keepExisting);
+        } else if (_event === 'SIGNED_OUT') {
+          // Only clear profile on explicit sign out
           setProfile(null);
           setProfileLoading(false);
         }
