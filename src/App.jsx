@@ -17053,6 +17053,7 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filaments, externalParts, showNotification, loadData }) {
   const [editingMember, setEditingMember] = useState(null);
   const [newMemberName, setNewMemberName] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState(null);
 
   // Find which team members are linked to user profiles
   const getLinkedProfile = (member) => {
@@ -17127,6 +17128,7 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filame
               return (
                 <div
                   key={profile.id}
+                  onClick={() => setSelectedProfile(profile)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -17134,8 +17136,12 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filame
                     padding: '12px 16px',
                     background: '#f8fafc',
                     borderRadius: '10px',
-                    border: profile.role === 'admin' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #e2e8f0'
+                    border: profile.role === 'admin' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
                   }}
+                  onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseOut={e => e.currentTarget.style.background = '#f8fafc'}
                 >
                   {/* Avatar */}
                   <div style={{
@@ -17342,6 +17348,177 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filame
           </div>
         );
       })}
+
+      {/* Profile Details Modal */}
+      {selectedProfile && (
+        <div
+          className="modal-overlay"
+          onClick={() => setSelectedProfile(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '450px',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#1a1a2e' }}>
+                Member Details
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSelectedProfile(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  color: '#64748b'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '24px' }}>
+              {/* Avatar and Name */}
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  background: selectedProfile.avatarUrl
+                    ? `url(${selectedProfile.avatarUrl}) center/cover`
+                    : selectedProfile.role === 'admin'
+                      ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                      : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px',
+                  color: '#fff',
+                  fontSize: '2rem',
+                  fontWeight: '600'
+                }}>
+                  {!selectedProfile.avatarUrl && (selectedProfile.displayName || selectedProfile.email || '?')[0]?.toUpperCase()}
+                </div>
+                <h3 style={{ margin: '0 0 8px', fontSize: '1.5rem', color: '#1a1a2e' }}>
+                  {selectedProfile.displayName || selectedProfile.email || 'Unknown'}
+                </h3>
+                <span style={{
+                  padding: '4px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  background: selectedProfile.role === 'admin'
+                    ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                    : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff'
+                }}>
+                  {selectedProfile.role === 'admin' ? 'Admin' : 'Member'}
+                </span>
+              </div>
+
+              {/* Contact Info */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {selectedProfile.email && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    background: '#f8fafc',
+                    borderRadius: '8px'
+                  }}>
+                    <Mail size={20} style={{ color: '#6366f1' }} />
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Email</div>
+                      <div style={{ color: '#1a1a2e', fontWeight: '500' }}>{selectedProfile.email}</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedProfile.phone && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    background: '#f8fafc',
+                    borderRadius: '8px'
+                  }}>
+                    <Phone size={20} style={{ color: '#10b981' }} />
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Phone</div>
+                      <div style={{ color: '#1a1a2e', fontWeight: '500' }}>{selectedProfile.phone}</div>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  background: '#f8fafc',
+                  borderRadius: '8px'
+                }}>
+                  <Calendar size={20} style={{ color: '#8b5cf6' }} />
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Joined</div>
+                    <div style={{ color: '#1a1a2e', fontWeight: '500' }}>
+                      {new Date(selectedProfile.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {!selectedProfile.email && !selectedProfile.phone && (
+                  <div style={{
+                    padding: '16px',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    color: '#92400e',
+                    fontSize: '0.9rem'
+                  }}>
+                    No contact info added yet
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
