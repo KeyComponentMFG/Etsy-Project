@@ -7,6 +7,7 @@ import LoginPage from './components/auth/LoginPage';
 import SignupPage from './components/auth/SignupPage';
 import CompanySetup from './components/auth/CompanySetup';
 import AdminPanel from './components/admin/AdminPanel';
+import ProfileSettings from './components/profile/ProfileSettings';
 import { usePermissions } from './hooks/usePermissions';
 
 // Default supply categories
@@ -1526,6 +1527,7 @@ export default function EtsyOrderManager() {
   const { isAdmin, canEdit, canDelete, companyId } = usePermissions();
   const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
 
   // ALL hooks must be declared before any conditional returns
   const [activeTab, setActiveTab] = useState('finance'); // Default to dashboard
@@ -6967,6 +6969,15 @@ export default function EtsyOrderManager() {
           )}
           <button
             className="btn btn-secondary"
+            onClick={() => setShowProfileSettings(true)}
+            style={{ marginLeft: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderColor: '#6366f1' }}
+            title="Profile Settings"
+          >
+            <User size={18} />
+            Profile
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={signOut}
             style={{ marginLeft: '8px' }}
             title={`Signed in as ${user?.email}${profile?.role ? ` (${profile.role})` : ''}`}
@@ -7366,6 +7377,15 @@ export default function EtsyOrderManager() {
         <AdminPanel
           companyId={profile.company_id}
           onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
+      {/* Profile Settings Modal */}
+      {showProfileSettings && profile && (
+        <ProfileSettings
+          profile={profile}
+          onClose={() => setShowProfileSettings(false)}
+          onUpdate={refreshProfile}
         />
       )}
 
