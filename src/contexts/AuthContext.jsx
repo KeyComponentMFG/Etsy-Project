@@ -25,10 +25,28 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(() => {
+    // Try to load cached profile on init
+    try {
+      const cached = localStorage.getItem('userProfile');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileChecked, setProfileChecked] = useState(false); // Track if we've done initial check
+
+  // Save profile to localStorage when it changes
+  const saveProfile = (profileData) => {
+    setProfile(profileData);
+    if (profileData) {
+      localStorage.setItem('userProfile', JSON.stringify(profileData));
+    } else {
+      localStorage.removeItem('userProfile');
+    }
+  };
 
   // Fetch user profile
   const fetchProfile = async (userId, keepExisting = false) => {
@@ -36,7 +54,7 @@ export function AuthProvider({ children }) {
     console.log('User ID:', userId);
     if (!userId) {
       console.log('No userId, skipping profile fetch');
-      if (!keepExisting) setProfile(null);
+      if (!keepExisting) saveProfile(null);
       setProfileLoading(false);
       return null;
     }
@@ -68,16 +86,17 @@ export function AuthProvider({ children }) {
 
       if (error) {
         console.error('Profile query error:', error);
-        // Don't clear profile on error if we already have one (e.g., token refresh failure)
-        if (!keepExisting) setProfile(null);
+        // On error, keep existing profile - don't show CompanySetup
+        // profileChecked stays false so we'll retry
         setProfileLoading(false);
-        return null;
+        return profile; // Return existing profile
       }
 
       if (!data) {
         console.log('No profile found, user needs to set up company');
-        // Only clear profile if this is initial load, not a refresh
-        if (!keepExisting) setProfile(null);
+        // Only set profileChecked=true when we SUCCESSFULLY queried and got no results
+        // This means the user genuinely has no profile
+        if (!keepExisting) saveProfile(null);
         setProfileLoading(false);
         setProfileChecked(true);
         return null;
@@ -96,7 +115,7 @@ export function AuthProvider({ children }) {
       }
 
       console.log('Profile found:', data);
-      setProfile({
+      const profileData = {
         id: data.id,
         user_id: data.user_id,
         company_id: data.company_id,
@@ -107,16 +126,16 @@ export function AuthProvider({ children }) {
         avatar_url: data.avatar_url,
         created_at: data.created_at,
         company: company
-      });
+      };
+      saveProfile(profileData);
       setProfileLoading(false);
       setProfileChecked(true);
       return data;
     } catch (err) {
       console.error('Error fetching profile:', err);
-      // Don't clear profile on error if we already have one
-      if (!keepExisting) setProfile(null);
+      // On error, keep existing profile - don't show CompanySetup
       setProfileLoading(false);
-      return null;
+      return profile; // Return existing profile
     }
   };
 
@@ -169,7 +188,8 @@ export function AuthProvider({ children }) {
           await fetchProfile(session.user.id, keepExisting);
         } else if (_event === 'SIGNED_OUT') {
           // Only clear profile on explicit sign out
-          setProfile(null);
+          saveProfile(null);
+          setProfileChecked(false);
           setProfileLoading(false);
         }
       }
@@ -202,7 +222,8 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    setProfile(null);
+    saveProfile(null);
+    setProfileChecked(false);
   };
 
   const value = {
@@ -216,7 +237,7 @@ export function AuthProvider({ children }) {
     signUp,
     signOut,
     refreshProfile,
-    setProfile,
+    setProfile: saveProfile,
   };
 
   return (
