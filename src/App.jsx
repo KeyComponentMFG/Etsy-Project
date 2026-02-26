@@ -17104,11 +17104,63 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
       thisMonth: thisMonth.length,
       thisWeek: thisWeek.length,
       activeOrders: activeOrders.length,
-      avgCompletionDays: avgCompletionDays.toFixed(1),
+      avgCompletionDays: parseFloat(avgCompletionDays.toFixed(1)),
       totalRevenue,
       monthRevenue,
       statusCounts
     };
+  };
+
+  // Calculate team averages for comparison
+  const getTeamAverages = () => {
+    const linkedMembers = teamMembers.filter(tm =>
+      companyProfiles?.some(p => p.userId === tm.ownerId)
+    );
+
+    if (linkedMembers.length === 0) return null;
+
+    const allStats = linkedMembers.map(m => getProductionStats(m.id));
+
+    const avgThisMonth = allStats.reduce((sum, s) => sum + s.thisMonth, 0) / allStats.length;
+    const avgThisWeek = allStats.reduce((sum, s) => sum + s.thisWeek, 0) / allStats.length;
+    const avgMonthRevenue = allStats.reduce((sum, s) => sum + s.monthRevenue, 0) / allStats.length;
+    const avgActiveOrders = allStats.reduce((sum, s) => sum + s.activeOrders, 0) / allStats.length;
+
+    // For completion days, only count members with data
+    const membersWithCompletionData = allStats.filter(s => s.avgCompletionDays > 0);
+    const avgCompletionDays = membersWithCompletionData.length > 0
+      ? membersWithCompletionData.reduce((sum, s) => sum + s.avgCompletionDays, 0) / membersWithCompletionData.length
+      : 0;
+
+    return {
+      avgThisMonth,
+      avgThisWeek,
+      avgMonthRevenue,
+      avgActiveOrders,
+      avgCompletionDays,
+      teamSize: linkedMembers.length
+    };
+  };
+
+  // Get comparison indicator
+  const getComparison = (value, average, higherIsBetter = true) => {
+    if (!average || average === 0) return { status: 'neutral', diff: 0 };
+    const diff = ((value - average) / average) * 100;
+
+    if (Math.abs(diff) < 10) return { status: 'neutral', diff: 0 };
+
+    if (higherIsBetter) {
+      if (diff >= 20) return { status: 'excellent', diff };
+      if (diff > 0) return { status: 'good', diff };
+      if (diff <= -30) return { status: 'behind', diff };
+      return { status: 'below', diff };
+    } else {
+      // For metrics where lower is better (like completion days)
+      if (diff <= -20) return { status: 'excellent', diff: -diff };
+      if (diff < 0) return { status: 'good', diff: -diff };
+      if (diff >= 30) return { status: 'behind', diff: -diff };
+      return { status: 'below', diff: -diff };
+    }
   };
 
   // Find which team members are linked to user profiles
@@ -17590,6 +17642,48 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
                 );
 
                 const stats = getProductionStats(linkedMember.id);
+                const teamAvg = getTeamAverages();
+
+                // Get comparisons
+                const monthComp = teamAvg ? getComparison(stats.thisMonth, teamAvg.avgThisMonth, true) : null;
+                const weekComp = teamAvg ? getComparison(stats.thisWeek, teamAvg.avgThisWeek, true) : null;
+                const revenueComp = teamAvg ? getComparison(stats.monthRevenue, teamAvg.avgMonthRevenue, true) : null;
+                const speedComp = teamAvg && stats.avgCompletionDays > 0 ? getComparison(stats.avgCompletionDays, teamAvg.avgCompletionDays, false) : null;
+
+                // Check if falling behind (any metric significantly below average)
+                const isFallingBehind = monthComp?.status === 'behind' || weekComp?.status === 'behind' || revenueComp?.status === 'behind';
+
+                // Comparison indicator component
+                const ComparisonBadge = ({ comparison, label }) => {
+                  if (!comparison || comparison.status === 'neutral') return null;
+
+                  const config = {
+                    excellent: { bg: 'rgba(16, 185, 129, 0.15)', color: '#059669', icon: <TrendingUp size={12} />, text: `+${Math.abs(comparison.diff).toFixed(0)}%` },
+                    good: { bg: 'rgba(16, 185, 129, 0.1)', color: '#10b981', icon: <ChevronUp size={12} />, text: `+${Math.abs(comparison.diff).toFixed(0)}%` },
+                    below: { bg: 'rgba(245, 158, 11, 0.15)', color: '#d97706', icon: <ChevronDown size={12} />, text: `-${Math.abs(comparison.diff).toFixed(0)}%` },
+                    behind: { bg: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', icon: <AlertCircle size={12} />, text: `-${Math.abs(comparison.diff).toFixed(0)}%` }
+                  };
+
+                  const style = config[comparison.status];
+                  return (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: style.bg,
+                      color: style.color,
+                      fontSize: '0.65rem',
+                      fontWeight: '600',
+                      marginTop: '4px'
+                    }}>
+                      {style.icon}
+                      {style.text} vs avg
+                    </div>
+                  );
+                };
+
                 return (
                   <div style={{ marginTop: '24px' }}>
                     <h4 style={{
@@ -17602,7 +17696,41 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
                     }}>
                       <BarChart3 size={18} style={{ color: '#6366f1' }} />
                       Production Stats
+                      {teamAvg && teamAvg.teamSize > 1 && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          color: '#64748b',
+                          fontWeight: '400',
+                          marginLeft: 'auto'
+                        }}>
+                          vs {teamAvg.teamSize} team members
+                        </span>
+                      )}
                     </h4>
+
+                    {/* Falling Behind Alert */}
+                    {isFallingBehind && (
+                      <div style={{
+                        padding: '12px 16px',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05))',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '10px',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                      }}>
+                        <AlertCircle size={20} style={{ color: '#dc2626', flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#dc2626', fontSize: '0.9rem' }}>
+                            Falling Behind
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#991b1b' }}>
+                            Performance is significantly below team average in one or more areas
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Stats Grid */}
                     <div style={{
@@ -17637,38 +17765,62 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
 
                       <div style={{
                         padding: '16px',
-                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05))',
+                        background: monthComp?.status === 'behind'
+                          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05))'
+                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05))',
                         borderRadius: '10px',
-                        border: '1px solid rgba(139, 92, 246, 0.2)'
+                        border: monthComp?.status === 'behind'
+                          ? '1px solid rgba(239, 68, 68, 0.3)'
+                          : '1px solid rgba(139, 92, 246, 0.2)'
                       }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#8b5cf6' }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: monthComp?.status === 'behind' ? '#dc2626' : '#8b5cf6' }}>
                           {stats.thisMonth}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>This Month</div>
+                        <ComparisonBadge comparison={monthComp} />
+                        {teamAvg && (
+                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                            Avg: {teamAvg.avgThisMonth.toFixed(1)}
+                          </div>
+                        )}
                       </div>
 
                       <div style={{
                         padding: '16px',
-                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05))',
+                        background: weekComp?.status === 'behind'
+                          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05))'
+                          : 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05))',
                         borderRadius: '10px',
-                        border: '1px solid rgba(245, 158, 11, 0.2)'
+                        border: weekComp?.status === 'behind'
+                          ? '1px solid rgba(239, 68, 68, 0.3)'
+                          : '1px solid rgba(245, 158, 11, 0.2)'
                       }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d97706' }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: weekComp?.status === 'behind' ? '#dc2626' : '#d97706' }}>
                           {stats.thisWeek}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>This Week</div>
+                        <ComparisonBadge comparison={weekComp} />
+                        {teamAvg && (
+                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                            Avg: {teamAvg.avgThisWeek.toFixed(1)}
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     {/* Revenue Stats */}
                     <div style={{
                       padding: '16px',
-                      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05))',
+                      background: revenueComp?.status === 'behind'
+                        ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05))'
+                        : 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05))',
                       borderRadius: '10px',
-                      border: '1px solid rgba(34, 197, 94, 0.2)',
+                      border: revenueComp?.status === 'behind'
+                        ? '1px solid rgba(239, 68, 68, 0.3)'
+                        : '1px solid rgba(34, 197, 94, 0.2)',
                       marginBottom: '12px'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
                           <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Total Revenue</div>
                           <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#16a34a' }}>
@@ -17677,9 +17829,15 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>This Month</div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#16a34a' }}>
+                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: revenueComp?.status === 'behind' ? '#dc2626' : '#16a34a' }}>
                             ${stats.monthRevenue.toFixed(2)}
                           </div>
+                          <ComparisonBadge comparison={revenueComp} />
+                          {teamAvg && (
+                            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>
+                              Avg: ${teamAvg.avgMonthRevenue.toFixed(2)}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -17692,14 +17850,21 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
                       <div style={{
                         flex: 1,
                         padding: '12px',
-                        background: '#f8fafc',
+                        background: speedComp?.status === 'behind' ? 'rgba(239, 68, 68, 0.1)' : '#f8fafc',
                         borderRadius: '8px',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        border: speedComp?.status === 'behind' ? '1px solid rgba(239, 68, 68, 0.3)' : 'none'
                       }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1a1a2e' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '600', color: speedComp?.status === 'behind' ? '#dc2626' : '#1a1a2e' }}>
                           {stats.avgCompletionDays}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Avg Days to Complete</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Avg Days</div>
+                        {speedComp && <ComparisonBadge comparison={speedComp} />}
+                        {teamAvg && teamAvg.avgCompletionDays > 0 && (
+                          <div style={{ fontSize: '0.6rem', color: '#94a3b8' }}>
+                            Avg: {teamAvg.avgCompletionDays.toFixed(1)}
+                          </div>
+                        )}
                       </div>
                       <div style={{
                         flex: 1,
@@ -17723,7 +17888,7 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archiv
                         <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#10b981' }}>
                           {stats.statusCounts.ready}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Ready to Ship</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Ready</div>
                       </div>
                     </div>
                   </div>
