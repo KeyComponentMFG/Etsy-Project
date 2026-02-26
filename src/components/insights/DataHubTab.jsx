@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Database, Upload, FileText, FileSpreadsheet, Receipt,
-  RefreshCw, CheckCircle, AlertCircle, Clock, Trash2, Eye
+  RefreshCw, CheckCircle, AlertCircle, Clock, Trash2, Eye,
+  CreditCard, Save, DollarSign
 } from 'lucide-react';
 import { checkApiHealth } from '../../lib/analyticsApi';
 
-const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL || 'http://localhost:8070';
+const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
+  || (window.location.hostname !== 'localhost'
+      ? 'https://web-production-7f385.up.railway.app'
+      : 'http://localhost:8070');
 
 export default function DataHubTab({ showNotification }) {
   const [files, setFiles] = useState({
@@ -17,6 +21,18 @@ export default function DataHubTab({ showNotification }) {
   const [apiStatus, setApiStatus] = useState('checking');
   const [lastSync, setLastSync] = useState(null);
 
+  // Credit card config state
+  const [ccConfig, setCcConfig] = useState({
+    balance: 0,
+    creditLimit: 0,
+    totalCharged: 0,
+    totalPaid: 0,
+    availableCredit: 0
+  });
+  const [ccBalance, setCcBalance] = useState('');
+  const [ccLimit, setCcLimit] = useState('');
+  const [savingCc, setSavingCc] = useState(false);
+
   const etsyInputRef = useRef(null);
   const bankInputRef = useRef(null);
   const invoiceInputRef = useRef(null);
@@ -24,6 +40,7 @@ export default function DataHubTab({ showNotification }) {
   useEffect(() => {
     checkConnection();
     loadFileHistory();
+    loadCreditCardConfig();
   }, []);
 
   const checkConnection = async () => {
@@ -82,11 +99,68 @@ export default function DataHubTab({ showNotification }) {
       if (response.ok) {
         showNotification?.('Data reprocessed successfully', 'success');
         setLastSync(new Date().toISOString());
+        loadCreditCardConfig(); // Refresh CC config after reload
       }
     } catch (err) {
       showNotification?.('Reprocess failed', 'error');
     } finally {
       setUploading(null);
+    }
+  };
+
+  const loadCreditCardConfig = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/credit-card`);
+      if (response.ok) {
+        const data = await response.json();
+        setCcConfig({
+          balance: data.current_balance || 0,
+          creditLimit: data.credit_limit || 0,
+          totalCharged: data.total_charged || 0,
+          totalPaid: data.total_paid || 0,
+          availableCredit: data.available_credit || 0
+        });
+        setCcBalance(data.current_balance > 0 ? data.current_balance.toString() : '');
+        setCcLimit(data.credit_limit > 0 ? data.credit_limit.toString() : '');
+      }
+    } catch (err) {
+      console.log('Credit card config not available');
+    }
+  };
+
+  const handleSaveCreditCard = async () => {
+    setSavingCc(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/credit-card`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          balance: parseFloat(ccBalance) || 0,
+          credit_limit: parseFloat(ccLimit) || 0
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCcConfig({
+            balance: data.current_balance || 0,
+            creditLimit: data.credit_limit || 0,
+            totalCharged: data.total_charged || 0,
+            totalPaid: data.total_paid || 0,
+            availableCredit: data.available_credit || 0
+          });
+          showNotification?.('Credit card configuration saved', 'success');
+        } else {
+          throw new Error(data.error || 'Save failed');
+        }
+      } else {
+        throw new Error('Save failed');
+      }
+    } catch (err) {
+      showNotification?.(`Failed to save: ${err.message}`, 'error');
+    } finally {
+      setSavingCc(false);
     }
   };
 
@@ -211,6 +285,127 @@ export default function DataHubTab({ showNotification }) {
             lastUpdate="Real-time"
           />
         </div>
+      </div>
+
+      {/* Credit Card Configuration */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', marginTop: '24px' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1a1a2e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CreditCard size={20} style={{ color: '#6366f1' }} />
+          Business Credit Card
+        </h3>
+        <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '0.9rem' }}>
+          Track your business credit card balance for accurate liability reporting in the Valuation tab.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '500', color: '#374151', marginBottom: '6px' }}>
+              Current Balance Owed ($)
+            </label>
+            <div style={{ position: 'relative' }}>
+              <DollarSign size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                type="number"
+                value={ccBalance}
+                onChange={(e) => setCcBalance(e.target.value)}
+                placeholder="0.00"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '500', color: '#374151', marginBottom: '6px' }}>
+              Credit Limit ($)
+            </label>
+            <div style={{ position: 'relative' }}>
+              <DollarSign size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                type="number"
+                value={ccLimit}
+                onChange={(e) => setCcLimit(e.target.value)}
+                placeholder="0.00"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button
+              onClick={handleSaveCreditCard}
+              disabled={savingCc}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: savingCc ? '#94a3b8' : '#6366f1',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                fontWeight: '500',
+                cursor: savingCc ? 'wait' : 'pointer',
+                transition: 'background 0.2s'
+              }}
+            >
+              {savingCc ? <RefreshCw size={16} className="spinning" /> : <Save size={16} />}
+              {savingCc ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+
+        {/* Current Credit Card Status */}
+        {ccConfig.balance > 0 && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.05)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '12px'
+          }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Balance Owed</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#dc2626' }}>
+                ${ccConfig.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Credit Limit</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1a1a2e' }}>
+                ${ccConfig.creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Available Credit</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#059669' }}>
+                ${ccConfig.availableCredit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '2px' }}>Total Paid</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#3b82f6' }}>
+                ${ccConfig.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Instructions */}
