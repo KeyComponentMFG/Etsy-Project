@@ -3,8 +3,11 @@
  * Connects to the Python analytics backend for financial data, health scores, and AI insights
  */
 
-// API base URL - will be updated when deployed to Railway
-const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL || 'http://localhost:8070';
+// API base URL - use Railway production URL or local development
+const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
+  || (window.location.hostname !== 'localhost'
+      ? 'https://web-production-7f385.up.railway.app'
+      : 'http://localhost:8070');
 
 /**
  * Fetch with error handling and timeout
