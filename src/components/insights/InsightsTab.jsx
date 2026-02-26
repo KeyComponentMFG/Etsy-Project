@@ -543,7 +543,7 @@ export default function InsightsTab({ showNotification }) {
               {monthlyData?.monthly && monthlyData.monthly.length > 0 && (
                 <div>
                   <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
-                    Monthly Revenue & Net Profit
+                    Monthly Revenue & Gross Margin
                   </h4>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={monthlyData.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
@@ -562,8 +562,8 @@ export default function InsightsTab({ showNotification }) {
                         contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
                       />
                       <Legend />
-                      <Bar dataKey="sales" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="net" name="Net Profit" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="sales" name="Gross Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="net" name="Etsy Net (after fees)" fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
