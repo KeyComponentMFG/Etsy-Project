@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown, Search, HelpCircle, Bell, Undo2, GripVertical, CheckSquare, Square, Info, LogOut, Shield, Mail, Phone } from 'lucide-react';
+import { Package, Printer, Users, User, Archive, Upload, ChevronRight, ChevronUp, ChevronDown, Check, Truck, Clock, Palette, Box, Settings, BarChart3, Plus, Minus, Trash2, Edit2, Save, X, AlertCircle, Zap, Store, ShoppingBag, Image, RefreshCw, DollarSign, TrendingUp, Star, ExternalLink, PieChart, Percent, Download, FileText, Calendar, ArrowUpDown, Search, HelpCircle, Bell, Undo2, GripVertical, CheckSquare, Square, Info, LogOut, Shield, Mail, Phone, Brain } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
@@ -8,6 +8,7 @@ import SignupPage from './components/auth/SignupPage';
 import CompanySetup from './components/auth/CompanySetup';
 import AdminPanel from './components/admin/AdminPanel';
 import ProfileSettings from './components/profile/ProfileSettings';
+import InsightsTab from './components/insights/InsightsTab';
 import { usePermissions } from './hooks/usePermissions';
 
 // Default supply categories
@@ -5319,13 +5320,14 @@ export default function EtsyOrderManager() {
     );
   }
 
-  // Consolidated tabs (14 → 7)
+  // Consolidated tabs (14 → 8)
   const tabs = [
     { id: 'orders', label: 'Orders', icon: Package },
     { id: 'inventory', label: 'Inventory', icon: Box },
     { id: 'products', label: 'Products', icon: Printer },
     { id: 'equipment', label: 'Equipment', icon: Settings },
     { id: 'finance', label: 'Finance', icon: TrendingUp },
+    { id: 'insights', label: 'Insights', icon: Brain },
     { id: 'history', label: 'History', icon: Archive },
     { id: 'team', label: 'Team', icon: Users }
   ];
@@ -7336,6 +7338,13 @@ export default function EtsyOrderManager() {
                 />
               )}
             </>
+          )}
+
+          {/* INSIGHTS TAB */}
+          {activeTab === 'insights' && (
+            <InsightsTab
+              showNotification={showNotification}
+            />
           )}
 
           {/* HISTORY TAB (Archive) */}
