@@ -103,6 +103,106 @@ export async function checkApiHealth() {
   }
 }
 
+/**
+ * Get bank ledger with transactions
+ */
+export async function getBankLedger() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/bank/ledger`);
+}
+
+/**
+ * Get bank summary with categories
+ */
+export async function getBankSummary() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/bank/summary`);
+}
+
+/**
+ * Get detailed P&L statement
+ */
+export async function getPnL() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/pnl`);
+}
+
+/**
+ * Get inventory/COGS summary
+ */
+export async function getInventorySummary() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/inventory/summary`);
+}
+
+/**
+ * Get business valuation estimates
+ */
+export async function getValuation() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/valuation`);
+}
+
+/**
+ * Get shipping analysis
+ */
+export async function getShipping() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/shipping`);
+}
+
+/**
+ * Get fee breakdown
+ */
+export async function getFees() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/fees`);
+}
+
+// ─── Chart Data Endpoints ────────────────────────────────────────────────────
+
+/**
+ * Get monthly performance data for charts
+ */
+export async function getMonthlyPerformance() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/monthly-performance`);
+}
+
+/**
+ * Get daily sales data for charts
+ */
+export async function getDailySales() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/daily-sales`);
+}
+
+/**
+ * Get expense breakdown for pie charts
+ */
+export async function getExpenseBreakdown() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/expense-breakdown`);
+}
+
+/**
+ * Get cash flow data for charts
+ */
+export async function getCashFlow() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/cash-flow`);
+}
+
+/**
+ * Get top products data for charts
+ */
+export async function getTopProducts() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/products`);
+}
+
+/**
+ * Get health score breakdown for gauge charts
+ */
+export async function getHealthBreakdown() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/health-breakdown`);
+}
+
+/**
+ * Get revenue/profit projections for growth charts
+ */
+export async function getProjections() {
+  return fetchWithTimeout(`${API_BASE_URL}/api/charts/projections`);
+}
+
 export default {
   getOverview,
   getHealthScore,
@@ -113,4 +213,19 @@ export default {
   getDiagnostics,
   reloadAnalytics,
   checkApiHealth,
+  getBankLedger,
+  getBankSummary,
+  getPnL,
+  getInventorySummary,
+  getValuation,
+  getShipping,
+  getFees,
+  // Chart data
+  getMonthlyPerformance,
+  getDailySales,
+  getExpenseBreakdown,
+  getCashFlow,
+  getTopProducts,
+  getHealthBreakdown,
+  getProjections,
 };

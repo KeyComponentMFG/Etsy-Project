@@ -4,10 +4,16 @@ import {
   DollarSign, Activity, Zap, RefreshCw, Wifi, WifiOff,
   ChevronDown, ChevronUp, Target, Lightbulb
 } from 'lucide-react';
-import { getOverview, checkApiHealth, reloadAnalytics } from '../../lib/analyticsApi';
+import { getOverview, checkApiHealth, reloadAnalytics, getMonthlyPerformance, getExpenseBreakdown } from '../../lib/analyticsApi';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell, LineChart, Line
+} from 'recharts';
 
 export default function InsightsTab({ showNotification }) {
   const [data, setData] = useState(null);
+  const [monthlyData, setMonthlyData] = useState(null);
+  const [expenseData, setExpenseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [apiConnected, setApiConnected] = useState(false);
@@ -15,6 +21,7 @@ export default function InsightsTab({ showNotification }) {
     briefing: true,
     actions: true,
     health: false,
+    charts: true,
   });
 
   // Load data on mount
@@ -36,8 +43,16 @@ export default function InsightsTab({ showNotification }) {
         return;
       }
 
-      const overview = await getOverview();
+      // Load all data in parallel
+      const [overview, monthly, expenses] = await Promise.all([
+        getOverview(),
+        getMonthlyPerformance().catch(() => null),
+        getExpenseBreakdown().catch(() => null),
+      ]);
+
       setData(overview);
+      setMonthlyData(monthly);
+      setExpenseData(expenses);
     } catch (err) {
       setError(err.message || 'Failed to load analytics data');
     } finally {
@@ -492,8 +507,138 @@ export default function InsightsTab({ showNotification }) {
         )}
       </div>
 
-      {/* Monthly Trend */}
-      {data.monthly_trend && data.monthly_trend.length > 0 && (
+      {/* Charts Section */}
+      <div style={{
+        background: '#fff',
+        borderRadius: '16px',
+        border: '1px solid #e2e8f0',
+        marginBottom: '24px',
+        overflow: 'hidden'
+      }}>
+        <button
+          onClick={() => toggleSection('charts')}
+          style={{
+            width: '100%',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05))',
+            border: 'none',
+            padding: '16px 20px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Activity size={20} style={{ color: '#10b981' }} />
+            <span style={{ fontWeight: '600', color: '#1a1a2e' }}>Performance Charts</span>
+          </div>
+          {expandedSections.charts ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+
+        {expandedSections.charts && (
+          <div style={{ padding: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+
+              {/* Monthly Performance Bar Chart */}
+              {monthlyData?.monthly && monthlyData.monthly.length > 0 && (
+                <div>
+                  <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                    Monthly Revenue & Net Profit
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={monthlyData.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={(val) => val.split('-')[1] + '/' + val.split('-')[0].slice(2)}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`$${value.toLocaleString()}`, '']}
+                        contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                      />
+                      <Legend />
+                      <Bar dataKey="sales" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="net" name="Net Profit" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Expense Breakdown Pie Chart */}
+              {expenseData?.expenses && expenseData.expenses.length > 0 && (
+                <div>
+                  <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                    Expense Breakdown
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={expenseData.expenses}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, payload }) => `${name} ${Math.round(payload.percent)}%`}
+                        labelLine={{ stroke: '#94a3b8' }}
+                      >
+                        {expenseData.expenses.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => [`$${value.toLocaleString()}`, '']}
+                        contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                      Total Expenses: <strong style={{ color: '#ef4444' }}>${expenseData.total?.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Monthly Orders & AOV Line Chart */}
+            {monthlyData?.monthly && monthlyData.monthly.length > 0 && (
+              <div style={{ marginTop: '24px' }}>
+                <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                  Orders & Average Order Value
+                </h4>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={monthlyData.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(val) => val.split('-')[1] + '/' + val.split('-')[0].slice(2)}
+                    />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
+                    <Tooltip
+                      contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                    />
+                    <Legend />
+                    <Line yAxisId="left" type="monotone" dataKey="orders" name="Orders" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line yAxisId="right" type="monotone" dataKey="aov" name="Avg Order Value" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Monthly Trend (Simple fallback) */}
+      {!monthlyData && data.monthly_trend && data.monthly_trend.length > 0 && (
         <div style={{
           background: '#fff',
           borderRadius: '16px',

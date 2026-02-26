@@ -9,6 +9,10 @@ import CompanySetup from './components/auth/CompanySetup';
 import AdminPanel from './components/admin/AdminPanel';
 import ProfileSettings from './components/profile/ProfileSettings';
 import InsightsTab from './components/insights/InsightsTab';
+import FinancialsTab from './components/insights/FinancialsTab';
+import TaxFormsTab from './components/insights/TaxFormsTab';
+import ValuationTab from './components/insights/ValuationTab';
+import DataHubTab from './components/insights/DataHubTab';
 import { usePermissions } from './hooks/usePermissions';
 
 // Default supply categories
@@ -1568,6 +1572,7 @@ export default function EtsyOrderManager() {
   const [inventorySubTab, setInventorySubTab] = useState('filament'); // 'filament', 'supplies', or 'restock'
   const [equipmentSubTab, setEquipmentSubTab] = useState('printers'); // 'printers' or 'stores'
   const [financeSubTab, setFinanceSubTab] = useState('dashboard'); // 'dashboard', 'costs', 'finance', or 'analytics'
+  const [insightsSubTab, setInsightsSubTab] = useState('overview'); // 'overview', 'financials', 'tax', 'valuation', or 'datahub'
 
   // UX Enhancement States
   const [searchQuery, setSearchQuery] = useState('');
@@ -7340,11 +7345,74 @@ export default function EtsyOrderManager() {
             </>
           )}
 
-          {/* INSIGHTS TAB */}
+          {/* INSIGHTS TAB (Overview + Financials + Tax + Valuation + Data Hub) */}
           {activeTab === 'insights' && (
-            <InsightsTab
-              showNotification={showNotification}
-            />
+            <>
+              {uiMode === 'advanced' && (
+                <div className="sub-nav">
+                  <button
+                    className={insightsSubTab === 'overview' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('overview')}
+                  >
+                    <Brain size={16} style={{ marginRight: '6px' }} />
+                    Overview
+                  </button>
+                  <button
+                    className={insightsSubTab === 'financials' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('financials')}
+                  >
+                    <DollarSign size={16} style={{ marginRight: '6px' }} />
+                    Financials
+                  </button>
+                  <button
+                    className={insightsSubTab === 'tax' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('tax')}
+                  >
+                    <FileText size={16} style={{ marginRight: '6px' }} />
+                    Tax Prep
+                  </button>
+                  <button
+                    className={insightsSubTab === 'valuation' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('valuation')}
+                  >
+                    <TrendingUp size={16} style={{ marginRight: '6px' }} />
+                    Valuation
+                  </button>
+                  <button
+                    className={insightsSubTab === 'datahub' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('datahub')}
+                  >
+                    <Upload size={16} style={{ marginRight: '6px' }} />
+                    Data Hub
+                  </button>
+                </div>
+              )}
+              {(uiMode === 'simple' || insightsSubTab === 'overview') && (
+                <InsightsTab
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'financials' && (
+                <FinancialsTab
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'tax' && (
+                <TaxFormsTab
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'valuation' && (
+                <ValuationTab
+                  showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'datahub' && (
+                <DataHubTab
+                  showNotification={showNotification}
+                />
+              )}
+            </>
           )}
 
           {/* HISTORY TAB (Archive) */}
