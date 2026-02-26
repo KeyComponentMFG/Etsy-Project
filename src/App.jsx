@@ -7361,10 +7361,12 @@ export default function EtsyOrderManager() {
               saveTeamMembers={saveTeamMembers}
               companyProfiles={companyProfiles}
               orders={orders}
+              archivedOrders={archivedOrders}
               filaments={filaments}
               externalParts={externalParts}
               showNotification={showNotification}
               loadData={loadData}
+              isAdmin={isAdmin}
             />
           )}
         </main>
@@ -17050,10 +17052,64 @@ function ArchiveTab({ archivedOrders, saveArchivedOrders, orders, setOrders, tea
 }
 
 // Team Tab Component
-function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filaments, externalParts, showNotification, loadData }) {
+function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, archivedOrders, filaments, externalParts, showNotification, loadData, isAdmin }) {
   const [editingMember, setEditingMember] = useState(null);
   const [newMemberName, setNewMemberName] = useState('');
   const [selectedProfile, setSelectedProfile] = useState(null);
+
+  // Calculate production stats for a team member
+  const getProductionStats = (memberId) => {
+    const allOrders = [...(orders || []), ...(archivedOrders || [])];
+    const memberOrders = allOrders.filter(o => o.assignedTo === memberId);
+    const completedOrders = memberOrders.filter(o => o.status === 'shipped' || archivedOrders?.some(a => a.id === o.id));
+    const activeOrders = orders?.filter(o => o.assignedTo === memberId && o.status !== 'shipped') || [];
+
+    // Orders by time period
+    const now = new Date();
+    const thisMonth = completedOrders.filter(o => {
+      const date = new Date(o.shippedAt || o.fulfilledAt || o.createdAt);
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    });
+    const thisWeek = completedOrders.filter(o => {
+      const date = new Date(o.shippedAt || o.fulfilledAt || o.createdAt);
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return date >= weekAgo;
+    });
+
+    // Calculate average completion time (from created to shipped)
+    const completionTimes = completedOrders
+      .filter(o => o.shippedAt && o.createdAt)
+      .map(o => {
+        const created = new Date(o.createdAt);
+        const shipped = new Date(o.shippedAt);
+        return (shipped - created) / (1000 * 60 * 60 * 24); // days
+      });
+    const avgCompletionDays = completionTimes.length > 0
+      ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
+      : 0;
+
+    // Revenue generated
+    const totalRevenue = completedOrders.reduce((sum, o) => sum + (parseFloat(o.price) || 0), 0);
+    const monthRevenue = thisMonth.reduce((sum, o) => sum + (parseFloat(o.price) || 0), 0);
+
+    // Orders by status
+    const statusCounts = {
+      pending: orders?.filter(o => o.assignedTo === memberId && o.status === 'pending').length || 0,
+      printing: orders?.filter(o => o.assignedTo === memberId && o.status === 'printing').length || 0,
+      ready: orders?.filter(o => o.assignedTo === memberId && o.status === 'ready').length || 0,
+    };
+
+    return {
+      totalCompleted: completedOrders.length,
+      thisMonth: thisMonth.length,
+      thisWeek: thisWeek.length,
+      activeOrders: activeOrders.length,
+      avgCompletionDays: avgCompletionDays.toFixed(1),
+      totalRevenue,
+      monthRevenue,
+      statusCounts
+    };
+  };
 
   // Find which team members are linked to user profiles
   const getLinkedProfile = (member) => {
@@ -17515,6 +17571,164 @@ function TeamTab({ teamMembers, saveTeamMembers, companyProfiles, orders, filame
                   </div>
                 )}
               </div>
+
+              {/* Production Stats - Admin Only */}
+              {isAdmin && (() => {
+                const linkedMember = teamMembers.find(tm => tm.ownerId === selectedProfile.userId);
+                if (!linkedMember) return (
+                  <div style={{
+                    marginTop: '24px',
+                    padding: '16px',
+                    background: 'rgba(100, 116, 139, 0.1)',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    fontSize: '0.9rem'
+                  }}>
+                    No production data - member not linked to orders
+                  </div>
+                );
+
+                const stats = getProductionStats(linkedMember.id);
+                return (
+                  <div style={{ marginTop: '24px' }}>
+                    <h4 style={{
+                      margin: '0 0 16px',
+                      fontSize: '1rem',
+                      color: '#1a1a2e',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <BarChart3 size={18} style={{ color: '#6366f1' }} />
+                      Production Stats
+                    </h4>
+
+                    {/* Stats Grid */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: '12px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{
+                        padding: '16px',
+                        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05))',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(16, 185, 129, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#059669' }}>
+                          {stats.totalCompleted}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Total Completed</div>
+                      </div>
+
+                      <div style={{
+                        padding: '16px',
+                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.05))',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(99, 102, 241, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#6366f1' }}>
+                          {stats.activeOrders}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Active Orders</div>
+                      </div>
+
+                      <div style={{
+                        padding: '16px',
+                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05))',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(139, 92, 246, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#8b5cf6' }}>
+                          {stats.thisMonth}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>This Month</div>
+                      </div>
+
+                      <div style={{
+                        padding: '16px',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05))',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(245, 158, 11, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d97706' }}>
+                          {stats.thisWeek}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>This Week</div>
+                      </div>
+                    </div>
+
+                    {/* Revenue Stats */}
+                    <div style={{
+                      padding: '16px',
+                      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05))',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(34, 197, 94, 0.2)',
+                      marginBottom: '12px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Total Revenue</div>
+                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#16a34a' }}>
+                            ${stats.totalRevenue.toFixed(2)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>This Month</div>
+                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#16a34a' }}>
+                            ${stats.monthRevenue.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Efficiency Stats */}
+                    <div style={{
+                      display: 'flex',
+                      gap: '12px'
+                    }}>
+                      <div style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#1a1a2e' }}>
+                          {stats.avgCompletionDays}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Avg Days to Complete</div>
+                      </div>
+                      <div style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#f59e0b' }}>
+                          {stats.statusCounts.printing}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Printing</div>
+                      </div>
+                      <div style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#10b981' }}>
+                          {stats.statusCounts.ready}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Ready to Ship</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
