@@ -64,7 +64,9 @@ export default function AdminPanel({ companyId, onClose }) {
     setRegenerating(true);
     setError('');
     try {
-      const newCode = Math.random().toString(36).substring(2, 10);
+      const array = new Uint8Array(5);
+      crypto.getRandomValues(array);
+      const newCode = Array.from(array, b => b.toString(36).padStart(2, '0')).join('').substring(0, 10);
       const { error } = await supabase
         .from('companies')
         .update({ invite_code: newCode })

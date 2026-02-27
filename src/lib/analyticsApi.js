@@ -3,8 +3,10 @@
  * Connects to the Python analytics backend for financial data, health scores, and AI insights
  */
 
+import { supabase } from './supabase';
+
 // API base URL - use Railway production URL or local development
-const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
+export const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
   || (window.location.hostname !== 'localhost'
       ? 'https://web-production-7f385.up.railway.app'
       : 'http://localhost:8070');
@@ -16,9 +18,24 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
+  // Inject Supabase auth token when available
+  let authHeaders = {};
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      authHeaders = { 'Authorization': `Bearer ${session.access_token}` };
+    }
+  } catch {
+    // Auth not available — proceed without token
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
+      headers: {
+        ...authHeaders,
+        ...options.headers,
+      },
       signal: controller.signal,
     });
     clearTimeout(id);
@@ -206,6 +223,24 @@ export async function getProjections() {
   return fetchWithTimeout(`${API_BASE_URL}/api/charts/projections`);
 }
 
+// ─── Chat Endpoint ────────────────────────────────────────────────────────────
+
+/**
+ * Send a chat message to the AI assistant
+ * @param {string} message - The user's question
+ * @param {Array} history - Optional chat history
+ * @returns {Promise<{response: string, question: string}>}
+ */
+export async function sendChatMessage(message, history = []) {
+  return fetchWithTimeout(`${API_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message, history }),
+  }, 30000); // 30 second timeout for AI responses
+}
+
 export default {
   getOverview,
   getHealthScore,
@@ -231,4 +266,6 @@ export default {
   getTopProducts,
   getHealthBreakdown,
   getProjections,
+  // Chat
+  sendChatMessage,
 };

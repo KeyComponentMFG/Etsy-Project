@@ -68,7 +68,6 @@ export default function ProfileSettings({ profile, onClose, onUpdate }) {
         onClose();
       }, 1000);
     } catch (err) {
-      console.error('Error updating profile:', err);
       setError(err.message || 'Failed to update profile');
     } finally {
       setLoading(false);

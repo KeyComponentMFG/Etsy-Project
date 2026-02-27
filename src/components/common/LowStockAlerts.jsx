@@ -1,24 +1,39 @@
 import React, { useState } from 'react';
-import { AlertCircle, X, Palette, Printer, Box } from 'lucide-react';
+import { AlertCircle, X, Palette, Printer, Box, Clock, ExternalLink } from 'lucide-react';
+import { calculateConsumptionRate, calculateDaysUntilStockout } from '../../utils/inventoryUtils';
 
-function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActiveTab }) {
+function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActiveTab, filamentUsageHistory }) {
   const [dismissed, setDismissed] = useState(false);
 
-  // Collect all low stock items
+  // Collect all low stock items with days-until-stockout
   const lowStockItems = [];
 
-  // Check filaments
+  // Check filaments — enhanced with consumption rate and days-until-stockout
   teamMembers.forEach(member => {
     const memberFilaments = filaments[member.id] || [];
     memberFilaments.forEach(fil => {
       const threshold = fil.reorderAt ?? 250;
       if (fil.amount <= threshold && (fil.backupRolls?.length || 0) === 0) {
+        const consumptionRate = calculateConsumptionRate(fil.color, filamentUsageHistory || []);
+        const daysUntilStockout = calculateDaysUntilStockout(fil, consumptionRate);
+
+        let urgency = 'watch'; // default
+        if (daysUntilStockout !== null) {
+          if (daysUntilStockout < 7) urgency = 'critical';
+          else if (daysUntilStockout < 14) urgency = 'low';
+          else if (daysUntilStockout < 30) urgency = 'watch';
+        }
+
         lowStockItems.push({
           type: 'filament',
           name: fil.color,
           member: member.name,
           current: `${fil.amount.toFixed(0)}g`,
-          threshold: `${threshold}g`
+          threshold: `${threshold}g`,
+          daysUntilStockout,
+          consumptionRate,
+          urgency,
+          supplierUrl: fil.supplierUrl || null
         });
       }
     });
@@ -34,7 +49,9 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
           name: part.name,
           member: member.name,
           current: part.quantity.toString(),
-          threshold: part.reorderAt.toString()
+          threshold: part.reorderAt.toString(),
+          daysUntilStockout: null,
+          urgency: 'watch'
         });
       }
     });
@@ -47,13 +64,59 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
         type: 'model',
         name: model.name + (model.variantName ? ` (${model.variantName})` : ''),
         current: model.stockCount.toString(),
-        threshold: '3'
+        threshold: '3',
+        daysUntilStockout: null,
+        urgency: model.stockCount === 0 ? 'critical' : 'low'
       });
     }
   });
 
+  // Sort by urgency: critical first, then low, then watch
+  const urgencyOrder = { critical: 0, low: 1, watch: 2 };
+  lowStockItems.sort((a, b) => {
+    const urgencyDiff = (urgencyOrder[a.urgency] ?? 3) - (urgencyOrder[b.urgency] ?? 3);
+    if (urgencyDiff !== 0) return urgencyDiff;
+    // Secondary sort by days until stockout (fewest first)
+    if (a.daysUntilStockout !== null && b.daysUntilStockout !== null) {
+      return a.daysUntilStockout - b.daysUntilStockout;
+    }
+    if (a.daysUntilStockout !== null) return -1;
+    if (b.daysUntilStockout !== null) return 1;
+    return 0;
+  });
+
   // Don't show if dismissed or no items
   if (dismissed || lowStockItems.length === 0) return null;
+
+  const getUrgencyBadge = (item) => {
+    if (item.daysUntilStockout === null && item.type === 'filament') return null;
+
+    if (item.urgency === 'critical') {
+      return (
+        <span className="urgency-badge critical">
+          <Clock size={10} />
+          {item.daysUntilStockout !== null ? `${item.daysUntilStockout}d left` : 'Critical'}
+        </span>
+      );
+    }
+    if (item.urgency === 'low') {
+      return (
+        <span className="urgency-badge low-stock">
+          <Clock size={10} />
+          {item.daysUntilStockout !== null ? `${item.daysUntilStockout}d left` : 'Low'}
+        </span>
+      );
+    }
+    if (item.urgency === 'watch' && item.daysUntilStockout !== null) {
+      return (
+        <span className="urgency-badge watch">
+          <Clock size={10} />
+          {item.daysUntilStockout}d left
+        </span>
+      );
+    }
+    return null;
+  };
 
   return (
     <div style={{
@@ -93,10 +156,26 @@ function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActi
               borderRadius: '6px',
               padding: '4px 10px',
               fontSize: '0.8rem',
-              color: item.type === 'filament' ? '#00ccff' : item.type === 'model' ? '#a55eea' : '#00ff88'
+              color: item.type === 'filament' ? '#00ccff' : item.type === 'model' ? '#a55eea' : '#00ff88',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
             }}>
-              {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : item.type === 'model' ? <Printer size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
+              {item.type === 'filament' ? <Palette size={12} /> : item.type === 'model' ? <Printer size={12} /> : <Box size={12} />}
               {item.name} ({item.current})
+              {getUrgencyBadge(item)}
+              {item.supplierUrl && (
+                <a
+                  href={item.supplierUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  style={{ color: 'inherit', display: 'flex' }}
+                  title="Quick Reorder"
+                >
+                  <ExternalLink size={10} />
+                </a>
+              )}
             </span>
           ))}
           {lowStockItems.length > 5 && (

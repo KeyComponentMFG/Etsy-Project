@@ -13,165 +13,22 @@ import FinancialsTab from './components/insights/FinancialsTab';
 import TaxFormsTab from './components/insights/TaxFormsTab';
 import ValuationTab from './components/insights/ValuationTab';
 import DataHubTab from './components/insights/DataHubTab';
+import ChatBot from './components/chat/ChatBot';
+import ProductAnalytics from './components/analytics/ProductAnalytics';
 import { usePermissions } from './hooks/usePermissions';
-
-// Default supply categories
-const DEFAULT_SUPPLY_CATEGORIES = [
-  { id: 'lighting', name: 'Lighting' },
-  { id: 'electronics', name: 'Electronics' },
-  { id: 'hardware', name: 'Hardware' },
-  { id: 'packaging', name: 'Packaging' }
-];
-
-// Initial team members
-const DEFAULT_TEAM = [
-  { id: 'member1', name: 'Partner 1' },
-  { id: 'member2', name: 'Partner 2' }
-];
-
-// Default stores
-const DEFAULT_STORES = [
-  { id: 'store1', name: 'Main Store', color: '#10b981' }
-];
-
-// Default printers
-const DEFAULT_PRINTERS = [
-  { id: 'printer1', name: 'Printer 1', totalHours: 0, ownerId: null }
-];
-
-// Production stages
-const PRODUCTION_STAGES = [
-  { id: 'printing', name: 'Printing', color: '#6366f1', icon: 'Printer' },
-  { id: 'curing', name: 'Curing', color: '#ff9f43', icon: 'Clock' },
-  { id: 'assembly', name: 'Assembly', color: '#8b5cf6', icon: 'Box' },
-  { id: 'qc', name: 'QC', color: '#2ed573', icon: 'Check' },
-  { id: 'packed', name: 'Packed', color: '#10b981', icon: 'Package' }
-];
-
-// Low Stock Alerts Component
-function LowStockAlerts({ filaments, externalParts, teamMembers, models, setActiveTab }) {
-  const [dismissed, setDismissed] = useState(false);
-
-  // Collect all low stock items
-  const lowStockItems = [];
-
-  // Check filaments
-  teamMembers.forEach(member => {
-    const memberFilaments = filaments[member.id] || [];
-    memberFilaments.forEach(fil => {
-      const threshold = fil.reorderAt ?? 250;
-      if (fil.amount <= threshold && (fil.backupRolls?.length || 0) === 0) {
-        lowStockItems.push({
-          type: 'filament',
-          name: fil.color,
-          member: member.name,
-          current: `${fil.amount.toFixed(0)}g`,
-          threshold: `${threshold}g`
-        });
-      }
-    });
-  });
-
-  // Check supplies
-  teamMembers.forEach(member => {
-    const memberParts = externalParts[member.id] || [];
-    memberParts.forEach(part => {
-      if (part.reorderAt && part.quantity <= part.reorderAt) {
-        lowStockItems.push({
-          type: 'supply',
-          name: part.name,
-          member: member.name,
-          current: part.quantity.toString(),
-          threshold: part.reorderAt.toString()
-        });
-      }
-    });
-  });
-
-  // Check model stock (stock count ≤ 3)
-  (models || []).forEach(model => {
-    if (model.stockCount !== null && model.stockCount !== undefined && model.stockCount <= 3) {
-      lowStockItems.push({
-        type: 'model',
-        name: model.name + (model.variantName ? ` (${model.variantName})` : ''),
-        current: model.stockCount.toString(),
-        threshold: '3'
-      });
-    }
-  });
-
-  // Don't show if dismissed or no items
-  if (dismissed || lowStockItems.length === 0) return null;
-
-  return (
-    <div style={{
-      background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 107, 107, 0.1) 100%)',
-      border: '1px solid rgba(255, 193, 7, 0.4)',
-      borderRadius: '12px',
-      padding: '16px 20px',
-      marginBottom: '20px',
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: '16px'
-    }}>
-      <AlertCircle size={24} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <h4 style={{ margin: 0, color: '#f59e0b', fontWeight: '600' }}>
-            Low Stock Alert - {lowStockItems.length} item{lowStockItems.length !== 1 ? 's' : ''} need restock
-          </h4>
-          <button
-            onClick={() => setDismissed(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6e6e73',
-              cursor: 'pointer',
-              padding: '4px'
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-          {lowStockItems.slice(0, 5).map((item, idx) => (
-            <span key={idx} style={{
-              background: item.type === 'filament' ? 'rgba(0, 204, 255, 0.2)' : item.type === 'model' ? 'rgba(165, 94, 234, 0.2)' : 'rgba(0, 255, 136, 0.2)',
-              border: `1px solid ${item.type === 'filament' ? 'rgba(0, 204, 255, 0.4)' : item.type === 'model' ? 'rgba(165, 94, 234, 0.4)' : 'rgba(0, 255, 136, 0.4)'}`,
-              borderRadius: '6px',
-              padding: '4px 10px',
-              fontSize: '0.8rem',
-              color: item.type === 'filament' ? '#6366f1' : item.type === 'model' ? '#8b5cf6' : '#10b981'
-            }}>
-              {item.type === 'filament' ? <Palette size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : item.type === 'model' ? <Printer size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> : <Box size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />}
-              {item.name} ({item.current})
-            </span>
-          ))}
-          {lowStockItems.length > 5 && (
-            <span style={{ color: '#6e6e73', fontSize: '0.8rem', padding: '4px 10px' }}>
-              +{lowStockItems.length - 5} more
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setActiveTab('restock')}
-          style={{
-            background: 'rgba(255, 193, 7, 0.2)',
-            border: '1px solid rgba(255, 193, 7, 0.4)',
-            borderRadius: '6px',
-            padding: '6px 14px',
-            color: '#f59e0b',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontWeight: '500'
-          }}
-        >
-          View Restock List
-        </button>
-      </div>
-    </div>
-  );
-}
+import { DEFAULT_SUPPLY_CATEGORIES, DEFAULT_TEAM, DEFAULT_STORES, DEFAULT_PRINTERS, PRODUCTION_STAGES, TRANSACTION_FEE_RATE, PAYMENT_PROCESSING_RATE, PAYMENT_PROCESSING_FLAT, SALES_TAX_RATE } from './constants/defaults';
+import { calculateShipByDate } from './utils/dateUtils';
+import { LowStockAlerts } from './components/index';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import PrintQueueCard from './components/orders/PrintQueueCard';
+import PrinterFleetCard from './components/equipment/PrinterFleetCard';
+import PrinterSchedule from './components/equipment/PrinterSchedule';
+import BOMEditor from './components/products/BOMEditor';
+import MaterialDeductionModal from './components/orders/MaterialDeductionModal';
+import PricingCalculator from './components/products/PricingCalculator';
+import './styles/app-layout.css';
+import './styles/features.css';
 
 // Dashboard Tab Component
 function DashboardTab({ orders, archivedOrders, purchases, models, stores, filaments, externalParts }) {
@@ -220,11 +77,7 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
     });
   };
 
-  // Etsy fee constants
-  const TRANSACTION_FEE_RATE = 0.065; // 6.5%
-  const PAYMENT_PROCESSING_RATE = 0.03; // 3%
-  const PAYMENT_PROCESSING_FLAT = 0.25; // $0.25
-  const SALES_TAX_RATE = 0.0752; // 7.52% (fallback if no actual tax)
+  // Fee constants imported from ./constants/defaults
 
   // Calculate revenue from orders (shipped orders) with fees breakdown
   const calculateRevenueWithFees = () => {
@@ -238,11 +91,24 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
       const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
       const orderTotal = parseFloat(priceStr) || 0;
 
+      // Skip orders with invalid/corrupted data
+      if (orderTotal > 100000 || orderTotal < 0) {
+        console.warn('Skipping order with invalid price:', order.orderId, orderTotal);
+        return;
+      }
+
       // Use actual sales tax if available, otherwise estimate
       let salesTax;
-      if (order.salesTax != null && order.salesTax > 0) {
+      if (order.salesTax != null && order.salesTax > 0 && order.salesTax < orderTotal) {
         salesTax = order.salesTax;
       } else {
+        const preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
+        salesTax = orderTotal - preTaxAmount;
+      }
+
+      // Extra safeguard: sales tax should never exceed 20% of order total
+      if (salesTax > orderTotal * 0.2) {
+        console.warn('Order has suspicious salesTax, recalculating:', order.orderId, salesTax);
         const preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
         salesTax = orderTotal - preTaxAmount;
       }
@@ -500,11 +366,118 @@ function DashboardTab({ orders, archivedOrders, purchases, models, stores, filam
     URL.revokeObjectURL(link.href);
   };
 
+  // Calculate previous period data for Financial Pulse comparison
+  const getPreviousPeriodData = () => {
+    const now = new Date();
+    let prevStartDate, prevEndDate;
+
+    switch (timeRange) {
+      case 'week': {
+        prevEndDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        prevStartDate = new Date(prevEndDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      }
+      case 'month': {
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        prevEndDate = new Date(thisMonthStart.getTime() - 1);
+        prevStartDate = new Date(prevEndDate.getFullYear(), prevEndDate.getMonth(), 1);
+        break;
+      }
+      case 'year': {
+        prevEndDate = new Date(now.getFullYear() - 1, 11, 31);
+        prevStartDate = new Date(now.getFullYear() - 1, 0, 1);
+        break;
+      }
+      default:
+        return null;
+    }
+
+    const prevOrders = allOrders.filter(o => {
+      const d = new Date(o.createdAt);
+      return d >= prevStartDate && d <= prevEndDate && o.status === 'shipped';
+    });
+
+    let prevRevenue = 0;
+    let prevFees = 0;
+    let prevExpenses = 0;
+    let prevShipping = 0;
+
+    prevOrders.forEach(order => {
+      const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
+      const orderTotal = parseFloat(priceStr) || 0;
+      if (orderTotal > 100000 || orderTotal < 0) return;
+
+      let salesTax;
+      if (order.salesTax != null && order.salesTax > 0 && order.salesTax < orderTotal) {
+        salesTax = order.salesTax;
+      } else {
+        const preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
+        salesTax = orderTotal - preTaxAmount;
+      }
+      if (salesTax > orderTotal * 0.2) {
+        const preTaxAmount = orderTotal / (1 + SALES_TAX_RATE);
+        salesTax = orderTotal - preTaxAmount;
+      }
+
+      prevRevenue += orderTotal - salesTax;
+      prevFees += orderTotal * TRANSACTION_FEE_RATE + orderTotal * PAYMENT_PROCESSING_RATE + PAYMENT_PROCESSING_FLAT;
+      prevExpenses += parseFloat(order.materialCost) || 0;
+      prevShipping += order.shippingCost || 0;
+    });
+
+    const prevTotalCosts = prevFees + prevExpenses + prevShipping;
+    const prevNetProfit = prevRevenue - prevTotalCosts;
+    return { prevRevenue, prevTotalCosts, prevNetProfit };
+  };
+
+  const previousPeriod = getPreviousPeriodData();
+  const totalCosts = revenueData.totalFees + expenses + shippingCosts;
+
+  const calcDelta = (current, previous) => {
+    if (!previous || previous === 0) return null;
+    return ((current - previous) / Math.abs(previous)) * 100;
+  };
+
+  const revenueDelta = previousPeriod ? calcDelta(revenueData.actualRevenue, previousPeriod.prevRevenue) : null;
+  const costsDelta = previousPeriod ? calcDelta(totalCosts, previousPeriod.prevTotalCosts) : null;
+  const profitDelta = previousPeriod ? calcDelta(netProfit, previousPeriod.prevNetProfit) : null;
+
   const dailyRevenueData = getDailyRevenueData();
   const orderStatusData = getOrderStatusData();
 
   return (
     <>
+      {/* Financial Pulse Bar */}
+      <div className="pulse-bar">
+        <div className="pulse-card revenue">
+          <div className="pulse-label">Revenue</div>
+          <div className="pulse-value">${revenueData.actualRevenue.toFixed(2)}</div>
+          {revenueDelta !== null && (
+            <span className={`pulse-delta ${revenueDelta > 0 ? 'up' : revenueDelta < 0 ? 'down' : 'neutral'}`}>
+              {revenueDelta > 0 ? '↑' : revenueDelta < 0 ? '↓' : '–'} {Math.abs(revenueDelta).toFixed(1)}%
+            </span>
+          )}
+        </div>
+        <div className="pulse-card costs">
+          <div className="pulse-label">Total Costs</div>
+          <div className="pulse-value">${totalCosts.toFixed(2)}</div>
+          {costsDelta !== null && (
+            <span className={`pulse-delta ${costsDelta < 0 ? 'up' : costsDelta > 0 ? 'down' : 'neutral'}`}>
+              {costsDelta > 0 ? '↑' : costsDelta < 0 ? '↓' : '–'} {Math.abs(costsDelta).toFixed(1)}%
+            </span>
+          )}
+        </div>
+        <div className={`pulse-card profit ${netProfit < 0 ? 'negative' : ''}`}>
+          <div className="pulse-label">Net Profit</div>
+          <div className="pulse-value">{netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}</div>
+          {profitDelta !== null && (
+            <span className={`pulse-delta ${profitDelta > 0 ? 'up' : profitDelta < 0 ? 'down' : 'neutral'}`}>
+              {profitDelta > 0 ? '↑' : profitDelta < 0 ? '↓' : '–'} {Math.abs(profitDelta).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="section-header">
         <h2 className="page-title"><TrendingUp size={28} /> Revenue Dashboard</h2>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -1562,7 +1535,24 @@ export default function EtsyOrderManager() {
   const [filamentUsageHistory, setFilamentUsageHistory] = useState([]);
   const [fulfillmentPartPrompt, setFulfillmentPartPrompt] = useState(null); // {orderId, modelName, availableParts}
   const [selectedFulfillmentParts, setSelectedFulfillmentParts] = useState({}); // {partName: quantity}
+  const [materialDeductionPrompt, setMaterialDeductionPrompt] = useState(null); // F7: {orderId, model, order}
   const [subscriptions, setSubscriptions] = useState([]);
+
+  // F3: Printer fleet status state
+  const [printerStatus, setPrinterStatus] = useState(() => {
+    try {
+      const saved = localStorage.getItem('printerStatus');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  const updatePrinterStatus = (printerId, updates) => {
+    setPrinterStatus(prev => {
+      const next = { ...prev, [printerId]: { ...(prev[printerId] || {}), ...updates } };
+      localStorage.setItem('printerStatus', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // UI Mode: 'simple' or 'advanced'
   const [uiMode, setUiMode] = useState('simple');
@@ -1594,9 +1584,6 @@ export default function EtsyOrderManager() {
     let extractedColor = '';
     const extraParts = [];
 
-    console.log('parseColorField input:', colorField);
-    console.log('parseColorField parts:', parts);
-
     for (const part of parts) {
       const lowerPart = part.toLowerCase();
 
@@ -1604,7 +1591,6 @@ export default function EtsyOrderManager() {
       if (skipLabels.some(label => lowerPart === label) ||
           lowerPart.startsWith('not requested') ||
           lowerPart === 'not applicable') {
-        console.log('Skipping:', part);
         continue;
       }
 
@@ -1614,19 +1600,16 @@ export default function EtsyOrderManager() {
           if (lowerPart === color || lowerPart.includes(color)) {
             extractedColor = part;
             isColor = true;
-            console.log('Found color:', part);
             break;
           }
         }
       }
 
       if (!isColor) {
-        console.log('Adding to extra:', part);
         extraParts.push(part);
       }
     }
 
-    console.log('parseColorField result - color:', extractedColor, 'extra:', extraParts);
     return { extractedColor, extractedExtra: extraParts.join(', ') };
   };
 
@@ -1642,8 +1625,6 @@ export default function EtsyOrderManager() {
     
     const transactionId = txnMatch[1];
     const rest = txnMatch[2];
-    
-    console.log('Parsing chunk - TXN:', transactionId, 'Rest starts with:', rest.substring(0, 30));
     
     // Format: [Product Title (words, no digits)][Quantity (digit)][Variations]
     // Example: "Modern Minimalist Incense Holder | Customizable Japandi Home Decor1Tray Color, Stand Color, Sage Green, Brown"
@@ -1661,11 +1642,8 @@ export default function EtsyOrderManager() {
       product = splitMatch[1].trim();
       quantity = parseInt(splitMatch[2]) || 1;
       variations = splitMatch[3].trim();
-      console.log('Parsed - Product:', product.substring(0, 60), '| Qty:', quantity, '| Variations:', variations.substring(0, 40));
     } else {
-      // Fallback: just use everything as product
       product = rest.trim();
-      console.log('Fallback - Product:', product.substring(0, 60));
     }
     
     // Parse color and extra from variations
@@ -1735,9 +1713,6 @@ export default function EtsyOrderManager() {
           salesTax
         });
       } else if (hasTab || lines[0]?.includes(',')) {
-        // Has tabs or commas AND first line doesn't start with TXN - has headers
-        console.log('Format: CSV/TSV with headers');
-
         const headerLine = lines[0];
         const delimiter = headerLine.includes('\t') ? '\t' : ',';
         const headers = headerLine.split(delimiter).map(h => h.trim().toLowerCase());
@@ -1792,7 +1767,6 @@ export default function EtsyOrderManager() {
         });
       } else {
         // Unknown format
-        console.log('Unknown format - showing as single item');
         setCsvPreview({
           rowCount: 1,
           format: 'UNKNOWN',
@@ -1845,13 +1819,6 @@ export default function EtsyOrderManager() {
         supabase.from('subscriptions').select('*'),
         supabase.from('user_profiles').select('*')
       ]);
-
-      // Log any errors
-      if (modelsError) console.error('Error loading models:', modelsError);
-      if (ordersError) console.error('Error loading orders:', ordersError);
-
-      console.log('Orders from Supabase:', ordersData?.length || 0);
-      console.log('Models from Supabase:', modelsData?.length || 0, 'Error:', modelsError);
 
       // Transform orders from DB format to app format
       if (ordersData) {
@@ -1961,7 +1928,6 @@ export default function EtsyOrderManager() {
 
       // Transform models
       if (modelsData !== null && modelsData !== undefined) {
-        console.log('Raw models from Supabase:', modelsData.length, modelsData);
         const transformedModels = modelsData.map(m => ({
           id: m.id,
           name: m.name,
@@ -1979,11 +1945,9 @@ export default function EtsyOrderManager() {
           processingDays: m.processing_days || 3,
           stockCount: m.stock_count ?? null
         }));
-        console.log('Transformed models:', transformedModels.length, transformedModels);
         setModels(transformedModels);
         setModelsLoadedSuccessfully(true);
       } else {
-        console.log('No models data received from Supabase - NOT clearing local models');
         // Don't clear models if load failed - keep existing
       }
 
@@ -2089,9 +2053,6 @@ export default function EtsyOrderManager() {
 
       setLastRefresh(new Date());
 
-      if (!isInitialLoad) {
-        console.log('Data refreshed at', new Date().toLocaleTimeString());
-      }
     } catch (e) {
       console.error('Error loading from Supabase:', e);
     }
@@ -2108,7 +2069,6 @@ export default function EtsyOrderManager() {
   // Auto-refresh every 15 minutes (900000ms)
   useEffect(() => {
     const refreshInterval = setInterval(() => {
-      console.log('Auto-refreshing data...');
       loadData(false);
     }, 15 * 60 * 1000); // 15 minutes
     
@@ -2272,7 +2232,6 @@ export default function EtsyOrderManager() {
           filament_used: o.filamentUsed || 0,
           model_id: o.modelId
         }));
-        console.log('Saving archived orders:', dbFormat);
         const { error } = await supabase.from('archived_orders').upsert(dbFormat);
         if (error) {
           console.error('Error saving archived orders:', error);
@@ -2331,8 +2290,6 @@ export default function EtsyOrderManager() {
           errorDiv.textContent = `Material save failed: ${error.message}`;
           document.body.appendChild(errorDiv);
           setTimeout(() => errorDiv.remove(), 5000);
-        } else {
-          console.log('Filaments saved successfully:', allFilaments.length);
         }
       }
     };
@@ -2364,7 +2321,7 @@ export default function EtsyOrderManager() {
           const { error: deleteError } = await supabase.from('models').delete().in('id', toDelete);
           if (deleteError) console.error('Error deleting models:', deleteError);
         } else if (toDelete.length > 0 && models.length === 0) {
-          console.log('Skipping model deletion - local models empty, might be load error');
+          // Skip model deletion when local models empty — might be a load error
         }
 
         if (models.length > 0) {
@@ -2395,8 +2352,6 @@ export default function EtsyOrderManager() {
             errorDiv.textContent = `Model save failed: ${upsertError.message}`;
             document.body.appendChild(errorDiv);
             setTimeout(() => errorDiv.remove(), 5000);
-          } else {
-            console.log('Models saved successfully:', models.length);
           }
         }
       } catch (e) {
@@ -2685,20 +2640,6 @@ export default function EtsyOrderManager() {
   };
 
   const saveFilaments = async (newFilaments) => {
-    // Debug: Log filament changes
-    console.log('=== FILAMENT CHANGE ===');
-    console.log('Stack trace:', new Error().stack);
-    Object.entries(newFilaments).forEach(([memberId, memberFils]) => {
-      const oldMemberFils = filaments[memberId] || [];
-      memberFils.forEach(newFil => {
-        const oldFil = oldMemberFils.find(f => f.color === newFil.color);
-        if (oldFil && oldFil.amount !== newFil.amount) {
-          const diff = newFil.amount - oldFil.amount;
-          console.log(`${newFil.color}: ${oldFil.amount.toFixed(2)}g -> ${newFil.amount.toFixed(2)}g (${diff > 0 ? '+' : ''}${diff.toFixed(2)}g)`);
-        }
-      });
-    });
-    console.log('======================');
     setFilaments(newFilaments);
   };
 
@@ -3789,8 +3730,6 @@ export default function EtsyOrderManager() {
       const gid = gidMatch ? gidMatch[1] : '0';
       csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 
-      console.log('Fetching CSV from:', csvUrl);
-
       // Fetch the CSV
       const response = await fetch(csvUrl);
       if (!response.ok) {
@@ -3798,7 +3737,6 @@ export default function EtsyOrderManager() {
       }
 
       const csvText = await response.text();
-      console.log('Received CSV:', csvText.substring(0, 200));
 
       // Parse CSV
       const lines = csvText.split('\n').map(l => l.trim()).filter(l => l);
@@ -3810,7 +3748,6 @@ export default function EtsyOrderManager() {
 
       // Parse header row
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-      console.log('Headers:', headers);
 
       // Find column indices
       const txnIdx = headers.findIndex(h => h.includes('transaction') || h.includes('order') || h.includes('sale id') || h.includes('order id'));
@@ -3826,8 +3763,6 @@ export default function EtsyOrderManager() {
         setSyncingSheet(false);
         return;
       }
-
-      console.log('Column indices:', { txnIdx, productIdx, qtyIdx, colorIdx, buyerIdx, priceIdx, taxIdx });
 
       // Parse rows
       const newOrders = [];
@@ -3910,10 +3845,8 @@ export default function EtsyOrderManager() {
 
   // Update order status
   const updateOrderStatus = (orderId, newStatus, shippingCost = null) => {
-    console.log('updateOrderStatus called - orderId:', orderId, 'newStatus:', newStatus);
     const updated = orders.map(o => {
       if (o.orderId === orderId) {
-        console.log('updateOrderStatus - current status:', o.status, '-> new status:', newStatus);
         const updates = { status: newStatus };
         if (newStatus === 'shipped') {
           updates.shippedAt = Date.now();
@@ -4395,17 +4328,14 @@ export default function EtsyOrderManager() {
     // Deduct filament for this order
     if (order && order.assignedTo) {
       const model = findBestModelMatch(order.item, order.extra);
-      console.log('completeFulfillmentWithParts - model found:', model?.name, 'variant:', model?.variantName);
       if (model) {
         const memberFilaments = [...(filaments[order.assignedTo] || [])];
         const printerSettings = model.printerSettings?.find(ps => ps.printerId === order.printerId) || model.printerSettings?.[0];
-        console.log('completeFulfillmentWithParts - printerSettings:', printerSettings ? 'found' : 'not found');
 
         // Check if plates were already completed (filament already deducted per-plate)
         const plates = printerSettings?.plates || [];
         const completedPlates = order.completedPlates || [];
         const platesWereUsed = plates.length > 0 && completedPlates.length === plates.length;
-        console.log('completeFulfillmentWithParts - plates:', plates.length, 'completedPlates:', completedPlates.length, 'platesWereUsed:', platesWereUsed);
 
         if (!platesWereUsed) {
           const orderColor = (order.color || model.defaultColor || '').toLowerCase().trim();
@@ -4436,7 +4366,6 @@ export default function EtsyOrderManager() {
           }
 
           const totalUsed = orderColorUsage * (order.quantity || 1);
-          console.log('completeFulfillmentWithParts - orderColorUsage:', orderColorUsage, 'totalUsed:', totalUsed, 'orderColor:', orderColor);
 
           if (totalUsed > 0) {
             const filamentIdx = memberFilaments.findIndex(f => {
@@ -4446,7 +4375,6 @@ export default function EtsyOrderManager() {
 
             if (filamentIdx >= 0) {
               let newAmount = memberFilaments[filamentIdx].amount - totalUsed;
-              console.log('completeFulfillmentWithParts - DEDUCTING filament, newAmount:', newAmount);
               let backupRolls = [...(memberFilaments[filamentIdx].backupRolls || [])];
               let currentRollCost = memberFilaments[filamentIdx].currentRollCost || 0;
 
@@ -5339,1269 +5267,9 @@ export default function EtsyOrderManager() {
 
   return (
     <div className="app-container">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      {/* CSS extracted to src/styles/app-layout.css — imported at top of file */}
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        .app-container {
-          min-height: 100vh;
-          background: #f5f5f7;
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-          color: #1d1d1f;
-          overflow-x: hidden;
-        }
-
-        .loading-screen {
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: #f5f5f7;
-          color: #1d1d1f;
-        }
-
-        .loader {
-          width: 50px;
-          height: 50px;
-          border: 3px solid #e8e8ed;
-          border-top-color: #007aff;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        .header {
-          background: rgba(255, 255, 255, 0.8);
-          border-bottom: 1px solid #d2d2d7;
-          padding: 1rem 2rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          position: sticky;
-          top: 0;
-          z-index: 100;
-        }
-
-        .logo {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .logo-icon {
-          width: 40px;
-          height: 40px;
-          background: #007aff;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-
-        .logo h1 {
-          font-size: 1.25rem;
-          font-weight: 600;
-          color: #1d1d1f;
-        }
-        
-        .header-actions {
-          display: flex;
-          gap: 12px;
-        }
-
-        .btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 20px;
-          border: none;
-          border-radius: 980px;
-          font-size: 0.875rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .btn-primary {
-          background: #007aff;
-          color: white;
-        }
-
-        .btn-primary:hover {
-          background: #0066d6;
-        }
-
-        .btn-primary:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .btn-secondary {
-          background: #e8e8ed;
-          color: #1d1d1f;
-        }
-
-        .btn-secondary:hover {
-          background: #d2d2d7;
-        }
-
-        .btn-danger {
-          background: #ff3b30;
-          color: white;
-        }
-
-        .btn-danger:hover {
-          background: #d63028;
-        }
-
-        .btn-small {
-          padding: 6px 14px;
-          font-size: 0.8rem;
-        }
-
-        .main-content {
-          display: flex;
-          min-height: calc(100vh - 73px);
-        }
-
-        .sidebar {
-          width: 220px;
-          background: #ffffff;
-          border-right: 1px solid #d2d2d7;
-          padding: 1.5rem 1rem;
-        }
-
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 14px;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.15s ease;
-          margin-bottom: 2px;
-          color: #6e6e73;
-          font-size: 0.9rem;
-          font-weight: 500;
-        }
-
-        .nav-item:hover {
-          background: #f5f5f7;
-          color: #1d1d1f;
-        }
-
-        .nav-item.active {
-          background: #007aff;
-          color: white;
-        }
-
-        .content-area {
-          flex: 1;
-          padding: 2rem;
-          overflow-y: auto;
-          background: #f5f5f7;
-        }
-
-        .page-title {
-          font-size: 1.75rem;
-          font-weight: 600;
-          margin-bottom: 1.5rem;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          color: #1d1d1f;
-        }
-
-        .page-title svg {
-          color: #007aff;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-
-        .stat-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 1.25rem;
-          transition: all 0.2s ease;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .stat-card:hover {
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .stat-label {
-          font-size: 0.8rem;
-          color: #6e6e73;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-
-        .stat-value {
-          font-size: 2rem;
-          font-weight: 600;
-          color: #1d1d1f;
-        }
-        
-        .orders-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 1rem;
-          align-items: start;
-        }
-
-        .order-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 1.25rem;
-          transition: all 0.2s ease;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .order-card:hover {
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .order-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 1rem;
-        }
-
-        .order-id {
-          font-size: 0.8rem;
-          color: #007aff;
-          margin-bottom: 6px;
-          background: rgba(0, 122, 255, 0.1);
-          padding: 4px 8px;
-          border-radius: 6px;
-          display: inline-block;
-          font-weight: 500;
-        }
-
-        .order-id::before {
-          content: 'TXN: ';
-          color: #6e6e73;
-        }
-
-        .order-item {
-          color: #1d1d1f;
-          font-size: 1.1rem;
-          font-weight: 600;
-        }
-
-        .order-details {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 1rem;
-          margin: 1rem 0;
-          padding: 1rem;
-          background: #f5f5f7;
-          border-radius: 8px;
-        }
-
-        .detail-item {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .detail-label {
-          font-size: 0.75rem;
-          color: #6e6e73;
-          text-transform: uppercase;
-        }
-
-        .detail-value {
-          font-size: 0.9rem;
-          color: #1d1d1f;
-        }
-
-        .status-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 980px;
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-
-        .status-received {
-          background: #fff3cd;
-          color: #856404;
-        }
-
-        .status-fulfilled {
-          background: #cce5ff;
-          color: #004085;
-        }
-
-        .status-shipped {
-          background: #d4edda;
-          color: #155724;
-        }
-
-        .order-actions {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 1rem;
-          padding-top: 1rem;
-          border-top: 1px solid #e8e8ed;
-        }
-
-        .assign-select {
-          background: #ffffff;
-          border: 1px solid #d2d2d7;
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: #1d1d1f;
-          font-size: 0.875rem;
-          cursor: pointer;
-        }
-
-        .assign-select:focus {
-          outline: none;
-          border-color: #007aff;
-          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
-        }
-
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.4);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-        }
-
-        .modal {
-          background: #ffffff;
-          border-radius: 14px;
-          padding: 2rem;
-          max-width: 700px;
-          width: 90%;
-          max-height: 80vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-        }
-
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-        }
-
-        .modal-title {
-          font-size: 1.25rem;
-          font-weight: 600;
-          color: #1d1d1f;
-        }
-
-        .modal-close {
-          background: #e8e8ed;
-          border: none;
-          color: #6e6e73;
-          cursor: pointer;
-          padding: 8px;
-          border-radius: 50%;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .modal-close:hover {
-          background: #d2d2d7;
-          color: #1d1d1f;
-        }
-
-        .csv-textarea {
-          width: 100%;
-          height: 300px;
-          background: #f5f5f7;
-          border: 1px solid #d2d2d7;
-          border-radius: 8px;
-          padding: 1rem;
-          color: #1d1d1f;
-          font-family: 'SF Mono', Monaco, monospace;
-          font-size: 0.8rem;
-          resize: vertical;
-          margin-bottom: 1rem;
-        }
-
-        .csv-textarea:focus {
-          outline: none;
-          border-color: #007aff;
-          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
-        }
-        
-        .csv-help {
-          font-size: 0.8rem;
-          color: #6e6e73;
-          margin-bottom: 1rem;
-        }
-
-        .form-group {
-          margin-bottom: 1rem;
-        }
-
-        .form-label {
-          display: block;
-          font-size: 0.85rem;
-          color: #6e6e73;
-          margin-bottom: 6px;
-          font-weight: 500;
-        }
-
-        .form-input {
-          width: 100%;
-          background: #ffffff;
-          border: 1px solid #d2d2d7;
-          border-radius: 8px;
-          padding: 10px 12px;
-          color: #1d1d1f;
-          font-size: 0.9rem;
-        }
-
-        .form-input:focus {
-          outline: none;
-          border-color: #007aff;
-          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-        }
-
-        .inventory-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-          gap: 1.5rem;
-        }
-
-        .inventory-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 1.5rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .inventory-card h3 {
-          font-size: 1.1rem;
-          margin-bottom: 1rem;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #1d1d1f;
-        }
-
-        .inventory-items {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .inventory-item {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 12px 14px;
-          background: #f5f5f7;
-          border-radius: 8px;
-        }
-
-        .inventory-item-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .inventory-item-name {
-          font-size: 0.95rem;
-          font-weight: 500;
-          color: #1d1d1f;
-        }
-
-        .inventory-item-meta {
-          font-size: 0.8rem;
-          color: #6e6e73;
-        }
-
-        .inventory-item-controls {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .qty-btn {
-          width: 28px;
-          height: 28px;
-          border-radius: 6px;
-          border: none;
-          background: #e8e8ed;
-          color: #1d1d1f;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.15s ease;
-          flex-shrink: 0;
-        }
-
-        .qty-btn:hover {
-          background: #007aff;
-          color: white;
-        }
-
-        .qty-value {
-          min-width: 50px;
-          text-align: center;
-          font-weight: 600;
-          color: #1d1d1f;
-        }
-
-        .color-dot {
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          border: 2px solid rgba(0, 0, 0, 0.1);
-        }
-
-        .add-item-form {
-          margin-top: 1rem;
-          padding-top: 1rem;
-          border-top: 1px solid #e8e8ed;
-        }
-
-        .add-item-row {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          align-items: center;
-        }
-
-        .add-item-input {
-          flex: 1;
-          min-width: 80px;
-          background: #ffffff;
-          border: 1px solid #d2d2d7;
-          border-radius: 8px;
-          padding: 10px 12px;
-          color: #1d1d1f;
-          font-size: 0.9rem;
-        }
-
-        .add-item-input:focus {
-          outline: none;
-          border-color: #007aff;
-          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
-        }
-
-        .model-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin-bottom: 1rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .model-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 1rem;
-        }
-
-        .model-name {
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: #1d1d1f;
-        }
-
-        .model-meta {
-          display: flex;
-          gap: 1.5rem;
-          flex-wrap: wrap;
-          margin-bottom: 1rem;
-        }
-
-        .model-meta-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 0.85rem;
-          color: #6e6e73;
-        }
-        
-        .model-meta-item span {
-          color: #007aff;
-          font-weight: 600;
-        }
-
-        .parts-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .part-tag {
-          background: #e8e8ed;
-          color: #1d1d1f;
-          padding: 4px 10px;
-          border-radius: 980px;
-          font-size: 0.75rem;
-          font-weight: 500;
-        }
-
-        .notification {
-          position: fixed;
-          top: 80px;
-          right: 20px;
-          padding: 14px 20px;
-          border-radius: 12px;
-          font-size: 0.9rem;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          z-index: 1001;
-          animation: slideIn 0.3s ease;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-        }
-
-        .notification.success {
-          background: #ffffff;
-          color: #34c759;
-        }
-
-        .notification.error {
-          background: #ffffff;
-          color: #ff3b30;
-        }
-
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateX(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: 3rem;
-          color: #6e6e73;
-        }
-
-        .empty-state svg {
-          width: 64px;
-          height: 64px;
-          margin-bottom: 1rem;
-          opacity: 0.4;
-        }
-
-        .team-member-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 1.5rem;
-          margin-bottom: 1rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .team-member-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-        }
-
-        .team-member-name {
-          font-size: 1.2rem;
-          font-weight: 600;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          color: #1d1d1f;
-        }
-
-        .team-member-stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 1rem;
-        }
-
-        .team-stat {
-          text-align: center;
-          padding: 1rem;
-          background: #f5f5f7;
-          border-radius: 10px;
-        }
-
-        .team-stat-value {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #007aff;
-        }
-
-        .team-stat-label {
-          font-size: 0.75rem;
-          color: #6e6e73;
-          text-transform: uppercase;
-          margin-top: 4px;
-        }
-
-        .archive-filters {
-          display: flex;
-          gap: 1rem;
-          margin-bottom: 1.5rem;
-        }
-
-        .filter-input {
-          background: #ffffff;
-          border: 1px solid #d2d2d7;
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: #1d1d1f;
-          font-size: 0.875rem;
-        }
-
-        .filter-input:focus {
-          outline: none;
-          border-color: #007aff;
-          box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
-        }
-
-        .section-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-        }
-
-        /* Search Overlay */
-        .search-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.5);
-          backdrop-filter: blur(4px);
-          z-index: 2000;
-          display: flex;
-          justify-content: center;
-          padding-top: 100px;
-          animation: fadeIn 0.15s ease;
-        }
-
-        .search-modal {
-          background: #ffffff;
-          border-radius: 16px;
-          width: 90%;
-          max-width: 600px;
-          max-height: 70vh;
-          overflow: hidden;
-          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-          animation: slideDown 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        .search-input-container {
-          display: flex;
-          align-items: center;
-          padding: 16px 20px;
-          border-bottom: 1px solid #e5e5e5;
-          gap: 12px;
-        }
-
-        .search-input {
-          flex: 1;
-          border: none;
-          outline: none;
-          font-size: 1.1rem;
-          background: transparent;
-          color: #1d1d1f;
-        }
-
-        .search-input::placeholder {
-          color: #86868b;
-        }
-
-        .search-shortcut {
-          background: #e8e8ed;
-          padding: 4px 8px;
-          border-radius: 6px;
-          font-size: 0.75rem;
-          color: #6e6e73;
-          font-weight: 500;
-        }
-
-        .search-results {
-          max-height: calc(70vh - 60px);
-          overflow-y: auto;
-          padding: 12px;
-        }
-
-        .search-category {
-          margin-bottom: 16px;
-        }
-
-        .search-category-title {
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: #86868b;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          padding: 8px 12px;
-        }
-
-        .search-result-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px;
-          border-radius: 10px;
-          cursor: pointer;
-          transition: background 0.15s ease;
-        }
-
-        .search-result-item:hover {
-          background: #f5f5f7;
-        }
-
-        .search-result-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .search-result-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .search-result-title {
-          font-weight: 500;
-          color: #1d1d1f;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .search-result-meta {
-          font-size: 0.8rem;
-          color: #86868b;
-        }
-
-        /* Undo Toast */
-        .undo-toast {
-          position: fixed;
-          bottom: 24px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: #1d1d1f;
-          color: white;
-          padding: 14px 20px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          z-index: 2001;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-          animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-          from { opacity: 0; transform: translate(-50%, 20px); }
-          to { opacity: 1; transform: translate(-50%, 0); }
-        }
-
-        .undo-toast button {
-          background: #007aff;
-          border: none;
-          color: white;
-          padding: 6px 14px;
-          border-radius: 6px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 0.85rem;
-        }
-
-        .undo-toast button:hover {
-          background: #0066d6;
-        }
-
-        /* Onboarding Modal */
-        .onboarding-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.7);
-          backdrop-filter: blur(8px);
-          z-index: 3000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .onboarding-modal {
-          background: #ffffff;
-          border-radius: 20px;
-          width: 90%;
-          max-width: 500px;
-          padding: 32px;
-          text-align: center;
-          animation: scaleIn 0.3s ease;
-        }
-
-        @keyframes scaleIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-
-        .onboarding-icon {
-          width: 80px;
-          height: 80px;
-          background: linear-gradient(135deg, #007aff, #5856d6);
-          border-radius: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 24px;
-          color: white;
-        }
-
-        .onboarding-title {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #1d1d1f;
-          margin-bottom: 12px;
-        }
-
-        .onboarding-text {
-          color: #6e6e73;
-          margin-bottom: 24px;
-          line-height: 1.6;
-        }
-
-        .onboarding-steps {
-          display: flex;
-          justify-content: center;
-          gap: 8px;
-          margin-bottom: 24px;
-        }
-
-        .onboarding-step {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #e5e5e5;
-          transition: all 0.2s ease;
-        }
-
-        .onboarding-step.active {
-          width: 24px;
-          border-radius: 4px;
-          background: #007aff;
-        }
-
-        /* Bulk Selection */
-        .bulk-checkbox {
-          width: 20px;
-          height: 20px;
-          border: 2px solid #d2d2d7;
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.15s ease;
-          flex-shrink: 0;
-        }
-
-        .bulk-checkbox.selected {
-          background: #007aff;
-          border-color: #007aff;
-          color: white;
-        }
-
-        .bulk-checkbox:hover {
-          border-color: #007aff;
-        }
-
-        .bulk-actions-bar {
-          position: fixed;
-          bottom: 24px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: #1d1d1f;
-          color: white;
-          padding: 12px 20px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          z-index: 1000;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-        }
-
-        .bulk-actions-bar button {
-          background: rgba(255,255,255,0.1);
-          border: none;
-          color: white;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-weight: 500;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .bulk-actions-bar button:hover {
-          background: rgba(255,255,255,0.2);
-        }
-
-        .bulk-actions-bar button.primary {
-          background: #007aff;
-        }
-
-        /* Collapsible Section */
-        .collapsible-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          padding: 8px 0;
-          color: #6e6e73;
-          font-size: 0.85rem;
-          font-weight: 500;
-        }
-
-        .collapsible-header:hover {
-          color: #007aff;
-        }
-
-        .collapsible-content {
-          overflow: hidden;
-          transition: max-height 0.3s ease;
-        }
-
-        /* Quick Actions */
-        .quick-actions {
-          opacity: 0;
-          transition: opacity 0.15s ease;
-          display: flex;
-          gap: 4px;
-        }
-
-        .inventory-item:hover .quick-actions,
-        .order-card:hover .quick-actions {
-          opacity: 1;
-        }
-
-        .quick-action-btn {
-          background: #f5f5f7;
-          border: none;
-          border-radius: 6px;
-          padding: 6px;
-          cursor: pointer;
-          color: #6e6e73;
-          transition: all 0.15s ease;
-        }
-
-        .quick-action-btn:hover {
-          background: #007aff;
-          color: white;
-        }
-
-        /* Progress Bar */
-        .progress-bar {
-          height: 4px;
-          background: #e5e5e5;
-          border-radius: 2px;
-          overflow: hidden;
-          margin-top: 8px;
-        }
-
-        .progress-bar-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #007aff, #5856d6);
-          border-radius: 2px;
-          transition: width 0.3s ease;
-        }
-
-        /* Mobile Bottom Nav */
-        @media (max-width: 768px) {
-          .sidebar {
-            display: none;
-          }
-
-          .mobile-bottom-nav {
-            display: flex !important;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #ffffff;
-            border-top: 1px solid #e5e5e5;
-            padding: 8px 0;
-            padding-bottom: max(8px, env(safe-area-inset-bottom));
-            z-index: 1000;
-            justify-content: space-around;
-          }
-
-          .mobile-nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            padding: 8px 12px;
-            border-radius: 10px;
-            color: #86868b;
-            font-size: 0.65rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s ease;
-          }
-
-          .mobile-nav-item.active {
-            color: #007aff;
-          }
-
-          .content-area {
-            padding-bottom: 80px;
-          }
-
-          .header {
-            padding: 0.75rem 1rem;
-          }
-
-          .header-actions {
-            display: none;
-          }
-
-          .mobile-header-actions {
-            display: flex !important;
-            gap: 8px;
-          }
-        }
-
-        .mobile-bottom-nav {
-          display: none;
-        }
-
-        .mobile-header-actions {
-          display: none;
-        }
-
-        /* Keyboard Shortcut Hints */
-        .shortcut-hint {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          background: #f5f5f7;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 0.7rem;
-          color: #86868b;
-          margin-left: 8px;
-        }
-
-        /* Empty State Enhanced */
-        .empty-state-card {
-          background: #ffffff;
-          border: 2px dashed #d2d2d7;
-          border-radius: 16px;
-          padding: 3rem 2rem;
-          text-align: center;
-          margin: 2rem 0;
-        }
-
-        .empty-state-icon {
-          width: 80px;
-          height: 80px;
-          background: #f5f5f7;
-          border-radius: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 20px;
-          color: #86868b;
-        }
-
-        .empty-state-title {
-          font-size: 1.25rem;
-          font-weight: 600;
-          color: #1d1d1f;
-          margin-bottom: 8px;
-        }
-
-        .empty-state-text {
-          color: #6e6e73;
-          margin-bottom: 20px;
-          max-width: 300px;
-          margin-left: auto;
-          margin-right: auto;
-        }
-
-        /* Draggable Item */
-        .draggable {
-          cursor: grab;
-        }
-
-        .draggable:active {
-          cursor: grabbing;
-        }
-
-        .drag-handle {
-          color: #d2d2d7;
-          cursor: grab;
-        }
-
-        .drag-handle:hover {
-          color: #86868b;
-        }
-      `}</style>
+      
 
       {notification && (
         <div className={`notification ${notification.type}`}>
@@ -7080,6 +5748,7 @@ export default function EtsyOrderManager() {
               externalParts={externalParts}
               teamMembers={teamMembers}
               models={models}
+              filamentUsageHistory={filamentUsageHistory}
               setActiveTab={(tab) => {
                 if (tab === 'restock') {
                   setActiveTab('inventory');
@@ -7138,6 +5807,7 @@ export default function EtsyOrderManager() {
                   deleteOrder={deleteOrder}
                   isAdmin={isAdmin}
                   uiMode={uiMode}
+                  findBestModelMatch={findBestModelMatch}
                 />
               )}
               {uiMode === 'advanced' && ordersSubTab === 'schedule' && (
@@ -7216,6 +5886,10 @@ export default function EtsyOrderManager() {
               externalParts={externalParts}
               saveModels={saveModels}
               showNotification={showNotification}
+              orders={orders}
+              archivedOrders={archivedOrders}
+              filaments={filaments}
+              teamMembers={teamMembers}
             />
           )}
 
@@ -7238,9 +5912,75 @@ export default function EtsyOrderManager() {
                     <Store size={16} style={{ marginRight: '6px' }} />
                     Stores
                   </button>
+                  <button
+                    className={equipmentSubTab === 'schedule' ? 'active' : ''}
+                    onClick={() => setEquipmentSubTab('schedule')}
+                  >
+                    <Clock size={16} style={{ marginRight: '6px' }} />
+                    Schedule
+                  </button>
                 </div>
               )}
               {(uiMode === 'simple' || equipmentSubTab === 'printers') && (
+                <>
+                {/* F3: Fleet Overview */}
+                <div className="fleet-overview">
+                  <div className="fleet-stat">
+                    <div className="fleet-stat-value" style={{ color: '#3b82f6' }}>
+                      {printers.filter(p => (printerStatus[p.id]?.status || 'idle') === 'printing').length}
+                    </div>
+                    <div className="fleet-stat-label">Printing</div>
+                  </div>
+                  <div className="fleet-stat">
+                    <div className="fleet-stat-value" style={{ color: '#10b981' }}>
+                      {printers.filter(p => (printerStatus[p.id]?.status || 'idle') === 'idle').length}
+                    </div>
+                    <div className="fleet-stat-label">Idle</div>
+                  </div>
+                  <div className="fleet-stat">
+                    <div className="fleet-stat-value" style={{ color: '#f59e0b' }}>
+                      {printers.filter(p => printerStatus[p.id]?.status === 'maintenance').length}
+                    </div>
+                    <div className="fleet-stat-label">Maintenance</div>
+                  </div>
+                  <div className="fleet-stat">
+                    <div className="fleet-stat-value" style={{ color: '#ef4444' }}>
+                      {printers.filter(p => printerStatus[p.id]?.status === 'error').length}
+                    </div>
+                    <div className="fleet-stat-label">Error</div>
+                  </div>
+                </div>
+
+                {/* F3: Fleet Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                  {printers.map(printer => (
+                    <PrinterFleetCard
+                      key={printer.id}
+                      printer={printer}
+                      printerStatus={printerStatus[printer.id]}
+                      orders={orders}
+                      teamMembers={teamMembers}
+                      onUpdateStatus={updatePrinterStatus}
+                      onStartJob={(printerId) => {
+                        const queuedOrders = orders.filter(o => o.printerId === printerId && o.status === 'received');
+                        if (queuedOrders.length === 0) {
+                          showNotification('No orders queued for this printer', 'error');
+                          return;
+                        }
+                        const job = queuedOrders[0];
+                        const estimatedMs = 2 * 60 * 60 * 1000; // Default 2h
+                        updatePrinterStatus(printerId, {
+                          status: 'printing',
+                          currentJobOrderId: job.orderId,
+                          startedAt: Date.now(),
+                          estimatedEndAt: Date.now() + estimatedMs
+                        });
+                        showNotification(`Started printing ${job.item} on ${printers.find(p => p.id === printerId)?.name}`);
+                      }}
+                    />
+                  ))}
+                </div>
+
                 <PrintersTab
                   printers={printers}
                   savePrinters={savePrinters}
@@ -7248,6 +5988,7 @@ export default function EtsyOrderManager() {
                   teamMembers={teamMembers}
                   showNotification={showNotification}
                 />
+                </>
               )}
               {uiMode === 'advanced' && equipmentSubTab === 'stores' && (
                 <StoresTab
@@ -7256,6 +5997,15 @@ export default function EtsyOrderManager() {
                   orders={orders}
                   archivedOrders={archivedOrders}
                   showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && equipmentSubTab === 'schedule' && (
+                <PrinterSchedule
+                  printers={printers}
+                  printerStatus={printerStatus}
+                  orders={orders}
+                  models={models}
+                  teamMembers={teamMembers}
                 />
               )}
             </>
@@ -7385,6 +6135,13 @@ export default function EtsyOrderManager() {
                     <Upload size={16} style={{ marginRight: '6px' }} />
                     Data Hub
                   </button>
+                  <button
+                    className={insightsSubTab === 'analytics' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('analytics')}
+                  >
+                    <BarChart3 size={16} style={{ marginRight: '6px' }} />
+                    Product Analytics
+                  </button>
                 </div>
               )}
               {(uiMode === 'simple' || insightsSubTab === 'overview') && (
@@ -7410,6 +6167,13 @@ export default function EtsyOrderManager() {
               {uiMode === 'advanced' && insightsSubTab === 'datahub' && (
                 <DataHubTab
                   showNotification={showNotification}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'analytics' && (
+                <ProductAnalytics
+                  orders={orders}
+                  archivedOrders={archivedOrders}
+                  models={models}
                 />
               )}
             </>
@@ -7839,39 +6603,109 @@ export default function EtsyOrderManager() {
           </div>
         </div>
       )}
+
+      {/* F7: Material Deduction Confirmation Modal */}
+      {materialDeductionPrompt && (
+        <MaterialDeductionModal
+          order={materialDeductionPrompt.order}
+          model={materialDeductionPrompt.model}
+          filaments={filaments}
+          externalParts={externalParts}
+          memberId={materialDeductionPrompt.order?.assignedTo}
+          onConfirm={(confirmedMaterials) => {
+            // Track actual usage on the order
+            const updatedOrders = orders.map(o => {
+              if (o.orderId === materialDeductionPrompt.order.orderId) {
+                return { ...o, actualFilamentUsed: confirmedMaterials.find(m => m.type === 'filament')?.actual || 0 };
+              }
+              return o;
+            });
+            setOrders(updatedOrders);
+            // Proceed with original fulfillment
+            completeFulfillmentWithParts(materialDeductionPrompt.order.orderId, materialDeductionPrompt.parts || {});
+            setMaterialDeductionPrompt(null);
+          }}
+          onCancel={() => setMaterialDeductionPrompt(null)}
+        />
+      )}
+
+      {/* ChatBot - floating chat assistant */}
+      <ChatBot />
     </div>
   );
 }
 
-// Calculate ship by date adding business days (skipping weekends)
-function calculateShipByDate(orderDate, processingDays) {
-  if (!orderDate || !processingDays) return null;
-
-  const date = new Date(orderDate);
-  if (isNaN(date.getTime())) return null;
-
-  let daysToAdd = processingDays;
-
-  while (daysToAdd > 0) {
-    date.setDate(date.getDate() + 1);
-    const dayOfWeek = date.getDay();
-    // Skip Saturday (6) and Sunday (0)
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      daysToAdd--;
-    }
-  }
-
-  return date;
-}
-
 // Queue Tab Component
-function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete, deleteOrder, isAdmin, uiMode = 'advanced' }) {
+function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, filaments, externalParts, selectedStoreFilter, setSelectedStoreFilter, updateOrderStatus, initiateFulfillment, reassignOrder, showNotification, saveFilaments, togglePlateComplete, reprintPart, deleteReprint, fulfillLineItem, unfulfillLineItem, toggleLineItemPlateComplete, deleteOrder, isAdmin, uiMode = 'advanced', findBestModelMatch }) {
   const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'received', 'fulfilled', 'shipped'
   const [showExtraPrintForm, setShowExtraPrintForm] = useState(false);
   const [groupBy, setGroupBy] = useState('shipDate'); // 'none', 'buyer', 'shipDate'
   const [sortBy, setSortBy] = useState('shipDate'); // 'shipDate', 'color', 'newest', 'oldest'
   const [collapsedBuyers, setCollapsedBuyers] = useState({});
+
+  // F2: Pipeline & Bulk Actions state
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
+  const [showFilters, setShowFilters] = useState(true);
+
+  // F1: Drag-and-Drop state
+  const [viewMode, setViewMode] = useState('pipeline'); // 'pipeline' | 'queue'
+  const [queueOrder, setQueueOrder] = useState([]); // custom sort order for DnD
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const toggleSelectOrder = (orderId) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const selectAllVisible = (visibleOrders) => {
+    const allSelected = visibleOrders.every(o => selectedOrders.has(o.orderId));
+    if (allSelected) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(visibleOrders.map(o => o.orderId)));
+    }
+  };
+
+  const bulkUpdateStatus = (newStatus) => {
+    if (selectedOrders.size === 0) return;
+    selectedOrders.forEach(orderId => {
+      if (newStatus === 'fulfilled') {
+        initiateFulfillment(orderId);
+      } else {
+        updateOrderStatus(orderId, newStatus);
+      }
+    });
+    showNotification(`${selectedOrders.size} order${selectedOrders.size > 1 ? 's' : ''} updated to ${newStatus}`);
+    setSelectedOrders(new Set());
+  };
+
+  const bulkDelete = () => {
+    if (selectedOrders.size === 0) return;
+    selectedOrders.forEach(orderId => deleteOrder(orderId));
+    showNotification(`${selectedOrders.size} order${selectedOrders.size > 1 ? 's' : ''} deleted`);
+    setSelectedOrders(new Set());
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentIds = queueOrder.length > 0 ? queueOrder : activeOrders.map(o => o.orderId || o.id);
+    const oldIndex = currentIds.indexOf(active.id);
+    const newIndex = currentIds.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    setQueueOrder(arrayMove(currentIds, oldIndex, newIndex));
+  };
+
   const [extraPrint, setExtraPrint] = useState({
     name: '',
     color: '',
@@ -8017,10 +6851,70 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
 
   return (
     <>
-      <h2 className="page-title"><Package size={28} /> Order Queue</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h2 className="page-title"><Package size={28} /> Order Queue</h2>
+        {/* View Mode Toggle */}
+        <div className="view-mode-toggle">
+          <button className={viewMode === 'pipeline' ? 'active' : ''} onClick={() => setViewMode('pipeline')}>
+            <Package size={14} /> Pipeline
+          </button>
+          <button className={viewMode === 'queue' ? 'active' : ''} onClick={() => setViewMode('queue')}>
+            <GripVertical size={14} /> Print Queue
+          </button>
+        </div>
+      </div>
 
-      {/* Filters */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+      {/* F2: Pipeline Status Tabs */}
+      <div className="pipeline-tabs">
+        <button className={`pipeline-tab ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>
+          All Active <span className="tab-count">{filteredOrders.filter(o => o.status !== 'shipped').length}</span>
+        </button>
+        <button className={`pipeline-tab ${statusFilter === 'received' ? 'active' : ''}`} onClick={() => setStatusFilter('received')}>
+          Received <span className="tab-count">{receivedCount}</span>
+        </button>
+        <button className={`pipeline-tab ${statusFilter === 'fulfilled' ? 'active' : ''}`} onClick={() => setStatusFilter('fulfilled')}>
+          Fulfilled <span className="tab-count">{fulfilledCount}</span>
+        </button>
+        <button className={`pipeline-tab ${statusFilter === 'shipped' ? 'active' : ''}`} onClick={() => setStatusFilter('shipped')}>
+          Shipped <span className="tab-count">{shippedCount}</span>
+        </button>
+      </div>
+
+      {/* F2: Bulk Actions Toolbar */}
+      {selectedOrders.size > 0 && (
+        <div className="bulk-actions-toolbar">
+          <span className="bulk-count">{selectedOrders.size} selected</span>
+          <button className="bulk-btn-fulfill" onClick={() => bulkUpdateStatus('fulfilled')}>
+            <Check size={14} /> Mark Fulfilled
+          </button>
+          <button className="bulk-btn-ship" onClick={() => bulkUpdateStatus('shipped')}>
+            <Truck size={14} /> Mark Shipped
+          </button>
+          <button className="bulk-btn-delete" onClick={bulkDelete}>
+            <Trash2 size={14} /> Delete
+          </button>
+          <button style={{ background: 'none', border: '1px solid #e5e7eb', color: '#6e6e73', marginLeft: 'auto' }}
+            onClick={() => setSelectedOrders(new Set())}>
+            <X size={14} /> Clear
+          </button>
+        </div>
+      )}
+
+      {/* Collapsible Filters */}
+      <div style={{ marginBottom: '1rem' }}>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#6e6e73', fontSize: '0.85rem', display: 'flex',
+            alignItems: 'center', gap: '4px', padding: '4px 0', marginBottom: '8px'
+          }}
+        >
+          {showFilters ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          Filters & Sort
+        </button>
+        {showFilters && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
         {/* Store Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Store size={20} style={{ color: '#10b981' }} />
@@ -8312,7 +7206,47 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
           Clear Queue
         </button>
       </div>
-      
+        )}
+      </div>
+
+      {/* Drag-and-Drop Print Queue View */}
+      {viewMode === 'queue' && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ color: '#6e6e73', fontSize: '0.85rem' }}>Drag to reorder print priority</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{activeOrders.length} orders</span>
+            </div>
+            <SortableContext
+              items={(queueOrder.length > 0 ? queueOrder : activeOrders.map(o => o.orderId || o.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(queueOrder.length > 0
+                  ? queueOrder.map(id => activeOrders.find(o => (o.orderId || o.id) === id)).filter(Boolean)
+                  : activeOrders
+                ).map(order => {
+                  const model = findBestModelMatch ? findBestModelMatch(order.item, order.extra) : findModelForOrder(order);
+                  return (
+                    <PrintQueueCard
+                      key={order.orderId || order.id}
+                      order={order}
+                      model={model}
+                      filaments={filaments}
+                      printers={printers}
+                      teamMembers={teamMembers}
+                    />
+                  );
+                })}
+              </div>
+            </SortableContext>
+          </div>
+        </DndContext>
+      )}
+
+      {/* Pipeline View (existing) */}
+      {viewMode === 'pipeline' && (
+      <>
       {/* Stats - Clickable to filter */}
       <div className="stats-grid">
         <div
@@ -8505,8 +7439,11 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                         <div style={{ padding: '16px' }}>
                           <div className="orders-list">
                             {categoryOrders.map(order => (
+                              <div key={order.orderId} style={{ position: 'relative' }}>
+                                <div className="order-select-checkbox" onClick={(e) => { e.stopPropagation(); toggleSelectOrder(order.orderId); }}>
+                                  {selectedOrders.has(order.orderId) ? <CheckSquare size={16} color="#007aff" /> : <Square size={16} color="#c8c8cd" />}
+                                </div>
                               <OrderCard
-                                key={order.orderId}
                                 order={order}
                                 orders={orders}
                                 setOrders={setOrders}
@@ -8530,6 +7467,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                 canDeleteOrder={isAdmin}
                                 uiMode={uiMode}
                               />
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -8642,8 +7580,11 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                           <div style={{ padding: isMultiOrder ? '12px' : '0' }}>
                             <div className="orders-list" style={{ gap: isMultiOrder ? '8px' : undefined }}>
                               {buyerOrders.map(order => (
+                                <div key={order.orderId} style={{ position: 'relative' }}>
+                                  <div className="order-select-checkbox" onClick={(e) => { e.stopPropagation(); toggleSelectOrder(order.orderId); }}>
+                                    {selectedOrders.has(order.orderId) ? <CheckSquare size={16} color="#007aff" /> : <Square size={16} color="#d2d2d7" />}
+                                  </div>
                                 <OrderCard
-                                  key={order.orderId}
                                   order={order}
                                   orders={orders}
                                   setOrders={setOrders}
@@ -8667,6 +7608,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                                   canDeleteOrder={isAdmin}
                                   uiMode={uiMode}
                                 />
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -8704,8 +7646,11 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                 </div>
               ) : (
                 activeOrders.map(order => (
+                  <div key={order.orderId} style={{ position: 'relative' }}>
+                    <div className="order-select-checkbox" onClick={(e) => { e.stopPropagation(); toggleSelectOrder(order.orderId); }}>
+                      {selectedOrders.has(order.orderId) ? <CheckSquare size={16} color="#007aff" /> : <Square size={16} color="#d2d2d7" />}
+                    </div>
                   <OrderCard
-                    key={order.orderId}
                     order={order}
                     orders={orders}
                     setOrders={setOrders}
@@ -8729,6 +7674,7 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     canDeleteOrder={isAdmin}
                     uiMode={uiMode}
                   />
+                  </div>
                 ))
               )}
             </div>
@@ -8748,8 +7694,11 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                 </div>
               ) : (
                 activeOrders.map(order => (
+                  <div key={order.orderId} style={{ position: 'relative' }}>
+                    <div className="order-select-checkbox" onClick={(e) => { e.stopPropagation(); toggleSelectOrder(order.orderId); }}>
+                      {selectedOrders.has(order.orderId) ? <CheckSquare size={16} color="#007aff" /> : <Square size={16} color="#d2d2d7" />}
+                    </div>
                   <OrderCard
-                    key={order.orderId}
                     order={order}
                     orders={orders}
                     setOrders={setOrders}
@@ -8773,12 +7722,15 @@ function QueueTab({ orders, setOrders, teamMembers, stores, printers, models, fi
                     canDeleteOrder={isAdmin}
                     uiMode={uiMode}
                   />
+                  </div>
                 ))
               )}
             </div>
           </div>
         );
       })()}
+      </>
+      )}
     </>
   );
 }
@@ -8982,11 +7934,7 @@ function OrderCard({ order, orders, setOrders, teamMembers, stores, printers, mo
     const priceStr = order.price?.replace(/[^0-9.]/g, '') || '0';
     const orderTotal = parseFloat(priceStr) || 0;
 
-    // Etsy fees
-    const TRANSACTION_FEE_RATE = 0.065; // 6.5%
-    const PAYMENT_PROCESSING_RATE = 0.03; // 3%
-    const PAYMENT_PROCESSING_FLAT = 0.25; // $0.25
-    const SALES_TAX_RATE = 0.0752; // 7.52% (fallback if no actual tax)
+    // Fee constants imported from ./constants/defaults
 
     // Use actual sales tax if available, otherwise estimate from rate
     let salesTax;
@@ -12100,7 +11048,7 @@ function FilamentTab({ filaments, teamMembers, saveFilaments, showNotification }
 }
 
 // Models Tab Component
-function ModelsTab({ models, stores, printers, externalParts, saveModels, showNotification }) {
+function ModelsTab({ models, stores, printers, externalParts, saveModels, showNotification, orders, archivedOrders, filaments, teamMembers }) {
   const [showAddModel, setShowAddModel] = useState(false);
   const [editingModel, setEditingModel] = useState(null);
   const [newModel, setNewModel] = useState({
@@ -12185,6 +11133,45 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
   };
 
   const [folderJustCreated, setFolderJustCreated] = useState(false);
+  const [pricingCalcModel, setPricingCalcModel] = useState(null); // F8: model for pricing calculator
+
+  // F10: Generate sparkline data for a model (orders per day, last 30 days)
+  const getModelSparklineData = (model) => {
+    const allOrders = [...(orders || []), ...(archivedOrders || [])];
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const lowerName = model.name.toLowerCase();
+    const aliases = (model.aliases || []).map(a => a.toLowerCase());
+
+    const matchingOrders = allOrders.filter(o => {
+      if (!o.createdAt || o.createdAt < thirtyDaysAgo) return false;
+      const item = (o.item || '').toLowerCase();
+      return item.includes(lowerName) || lowerName.includes(item) ||
+        aliases.some(a => item.includes(a) || a.includes(item));
+    });
+
+    // Bucket into days
+    const dayBuckets = {};
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(now - (29 - i) * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().split('T')[0];
+      dayBuckets[key] = 0;
+    }
+
+    matchingOrders.forEach(o => {
+      const key = new Date(o.createdAt).toISOString().split('T')[0];
+      if (dayBuckets[key] !== undefined) dayBuckets[key]++;
+    });
+
+    const data = Object.entries(dayBuckets).map(([date, count]) => ({ date, count }));
+
+    // Determine trend: last 7 days vs previous 7 days
+    const last7 = data.slice(-7).reduce((s, d) => s + d.count, 0);
+    const prev7 = data.slice(-14, -7).reduce((s, d) => s + d.count, 0);
+    const trending = last7 > prev7 ? 'up' : last7 < prev7 ? 'down' : 'flat';
+
+    return { data, trending };
+  };
 
   const createFolder = () => {
     try {
@@ -12445,9 +11432,6 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
     }
 
     // Convert printer settings to proper format with plates and parts
-    console.log('newModel.printerSettings BEFORE transform:', JSON.stringify(newModel.printerSettings, null, 2));
-
-    // Keep all plates and parts, just convert values to proper types
     const printerSettings = newModel.printerSettings.map(s => ({
       printerId: s.printerId,
       plates: (s.plates || []).map(plate => ({
@@ -12463,8 +11447,6 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
         }))
       }))
     }));
-
-    console.log('Saving model with printerSettings:', JSON.stringify(printerSettings, null, 2));
 
     const model = {
       id: Date.now().toString(),
@@ -12717,13 +11699,37 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                           )}
 
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>
-                              {model.name}
-                              {model.variantName && (
-                                <span style={{ color: '#6366f1', fontWeight: 'normal', marginLeft: '8px' }}>
-                                  — {model.variantName}
-                                </span>
-                              )}
+                            <div style={{ fontWeight: '600', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>
+                                {model.name}
+                                {model.variantName && (
+                                  <span style={{ color: '#6366f1', fontWeight: 'normal', marginLeft: '8px' }}>
+                                    — {model.variantName}
+                                  </span>
+                                )}
+                              </span>
+                              {/* F10: Inline Sparkline */}
+                              {(() => {
+                                const { data, trending } = getModelSparklineData(model);
+                                const hasData = data.some(d => d.count > 0);
+                                if (!hasData) return null;
+                                const max = Math.max(...data.map(d => d.count), 1);
+                                const fillColor = trending === 'up' ? '#10b981' : trending === 'down' ? '#ef4444' : '#94a3b8';
+                                const fillOpacity = trending === 'up' ? '0.3' : trending === 'down' ? '0.2' : '0.15';
+                                return (
+                                  <span className="sparkline-container" title={`30-day sales trend: ${trending}`}>
+                                    <AreaChart width={80} height={32} data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+                                      <defs>
+                                        <linearGradient id={`sparkGrad-${model.id}`} x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="5%" stopColor={fillColor} stopOpacity={fillOpacity} />
+                                          <stop offset="95%" stopColor={fillColor} stopOpacity={0} />
+                                        </linearGradient>
+                                      </defs>
+                                      <Area type="monotone" dataKey="count" stroke={fillColor} strokeWidth={1.5} fill={`url(#sparkGrad-${model.id})`} isAnimationActive={false} />
+                                    </AreaChart>
+                                  </span>
+                                );
+                              })()}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: '#6e6e73', display: 'flex', gap: '12px', marginTop: '2px' }}>
                               {model.defaultColor && <span>Color: {model.defaultColor}</span>}
@@ -12769,6 +11775,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 <option key={f} value={f}>{f}</option>
                               ))}
                             </select>
+                            <button className="btn btn-secondary btn-small" onClick={() => setPricingCalcModel(model)} title="Calculate Price" style={{ padding: '4px 8px' }}>
+                              <DollarSign size={12} />
+                            </button>
                             <button className="btn btn-secondary btn-small" onClick={() => setEditingModel(model)} style={{ padding: '4px 8px' }}>
                               <Edit2 size={12} />
                             </button>
@@ -12925,6 +11934,9 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
                                 </div>
                               </div>
                             )}
+
+                            {/* F4: Bill of Materials */}
+                            <BOMEditor model={model} filaments={filaments} teamMembers={teamMembers} />
                           </div>
                         )}
                       </div>
@@ -14114,6 +13126,16 @@ function ModelsTab({ models, stores, printers, externalParts, saveModels, showNo
             </div>
           </div>
         </div>
+      )}
+
+      {/* F8: Pricing Calculator Modal */}
+      {pricingCalcModel && (
+        <PricingCalculator
+          model={pricingCalcModel}
+          filaments={filaments}
+          teamMembers={teamMembers}
+          onClose={() => setPricingCalcModel(null)}
+        />
       )}
     </>
   );

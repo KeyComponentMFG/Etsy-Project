@@ -21,8 +21,6 @@ export default function CompanySetup({ user, onComplete }) {
     setError('');
     setLoading(true);
 
-    console.log('Creating company:', companyName, 'for user:', user.id);
-
     try {
       // First check if user already has a profile
       const { data: existingProfile } = await supabase
@@ -32,7 +30,6 @@ export default function CompanySetup({ user, onComplete }) {
         .maybeSingle();
 
       if (existingProfile) {
-        console.log('User already has profile, completing:', existingProfile);
         onComplete({ companyId: existingProfile.company_id, role: existingProfile.role });
         return;
       }
@@ -47,11 +44,8 @@ export default function CompanySetup({ user, onComplete }) {
       let companyId;
 
       if (existingCompany) {
-        console.log('Found existing company:', existingCompany);
         companyId = existingCompany.id;
       } else {
-        // Create the company
-        console.log('Creating new company...');
         const { data: company, error: companyError } = await supabase
           .from('companies')
           .insert({
@@ -62,11 +56,8 @@ export default function CompanySetup({ user, onComplete }) {
           .single();
 
         if (companyError) {
-          console.error('Company creation error:', companyError);
-
           // If AbortError, check if company was actually created
           if (isAbortError(companyError)) {
-            console.log('AbortError on company insert, checking if it was created...');
             await new Promise(r => setTimeout(r, 500)); // Brief delay
             const { data: checkCompany } = await supabase
               .from('companies')
@@ -75,7 +66,6 @@ export default function CompanySetup({ user, onComplete }) {
               .maybeSingle();
 
             if (checkCompany) {
-              console.log('Company was created despite AbortError:', checkCompany);
               companyId = checkCompany.id;
             } else {
               throw new Error('Failed to create company. Please try again.');
@@ -84,13 +74,10 @@ export default function CompanySetup({ user, onComplete }) {
             throw companyError;
           }
         } else {
-          console.log('Company created:', company);
           companyId = company.id;
         }
       }
 
-      // Create user profile as admin
-      console.log('Creating user profile for company:', companyId);
       const { error: profileError } = await supabase
         .from('user_profiles')
         .insert({
@@ -102,11 +89,8 @@ export default function CompanySetup({ user, onComplete }) {
         });
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
-
         // If AbortError, check if profile was actually created
         if (isAbortError(profileError)) {
-          console.log('AbortError on profile insert, checking if it was created...');
           await new Promise(r => setTimeout(r, 500)); // Brief delay
           const { data: checkProfile } = await supabase
             .from('user_profiles')
@@ -115,7 +99,6 @@ export default function CompanySetup({ user, onComplete }) {
             .maybeSingle();
 
           if (checkProfile) {
-            console.log('Profile was created despite AbortError:', checkProfile);
             onComplete({ companyId, role: 'admin' });
             return;
           } else {
@@ -126,10 +109,8 @@ export default function CompanySetup({ user, onComplete }) {
         }
       }
 
-      console.log('Profile created, completing setup');
       onComplete({ companyId, role: 'admin' });
     } catch (err) {
-      console.error('handleCreateCompany error:', err);
       setError(err.message || 'Failed to create company');
       setLoading(false);
     }

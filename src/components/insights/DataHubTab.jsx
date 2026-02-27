@@ -4,12 +4,7 @@ import {
   RefreshCw, CheckCircle, AlertCircle, Clock, Trash2, Eye,
   CreditCard, Save, DollarSign
 } from 'lucide-react';
-import { checkApiHealth } from '../../lib/analyticsApi';
-
-const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
-  || (window.location.hostname !== 'localhost'
-      ? 'https://web-production-7f385.up.railway.app'
-      : 'http://localhost:8070');
+import { checkApiHealth, API_BASE_URL } from '../../lib/analyticsApi';
 
 export default function DataHubTab({ showNotification }) {
   const [files, setFiles] = useState({
@@ -56,8 +51,8 @@ export default function DataHubTab({ showNotification }) {
         setFiles(data.files || { etsy: [], bank: [], invoices: [] });
         setLastSync(data.last_sync);
       }
-    } catch (err) {
-      console.log('File history not available');
+    } catch {
+      // File history not available
     }
   };
 
@@ -123,8 +118,8 @@ export default function DataHubTab({ showNotification }) {
         setCcBalance(data.current_balance > 0 ? data.current_balance.toString() : '');
         setCcLimit(data.credit_limit > 0 ? data.credit_limit.toString() : '');
       }
-    } catch (err) {
-      console.log('Credit card config not available');
+    } catch {
+      // Credit card config not available
     }
   };
 

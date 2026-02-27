@@ -50,17 +50,13 @@ export function AuthProvider({ children }) {
 
   // Fetch user profile
   const fetchProfile = async (userId, keepExisting = false) => {
-    console.log('=== FETCHING PROFILE ===');
-    console.log('User ID:', userId);
     if (!userId) {
-      console.log('No userId, skipping profile fetch');
       if (!keepExisting) saveProfile(null);
       setProfileLoading(false);
       return null;
     }
 
     try {
-      console.log('Making Supabase query...');
 
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) =>
@@ -76,16 +72,11 @@ export function AuthProvider({ children }) {
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise])
         .catch(err => {
-          console.error('Query failed or timed out:', err);
-          return { data: null, error: err };
+            return { data: null, error: err };
         });
 
-      console.log('=== PROFILE QUERY RESULT ===');
-      console.log('Data:', data);
-      console.log('Error:', error);
 
       if (error) {
-        console.error('Profile query error:', error);
         // On error, keep existing profile - don't show CompanySetup
         // profileChecked stays false so we'll retry
         setProfileLoading(false);
@@ -93,7 +84,6 @@ export function AuthProvider({ children }) {
       }
 
       if (!data) {
-        console.log('No profile found, user needs to set up company');
         // Only set profileChecked=true when we SUCCESSFULLY queried and got no results
         // This means the user genuinely has no profile
         if (!keepExisting) saveProfile(null);
@@ -111,10 +101,8 @@ export function AuthProvider({ children }) {
           .eq('id', data.company_id)
           .maybeSingle();
         company = companyData;
-        console.log('Company data:', company);
       }
 
-      console.log('Profile found:', data);
       const profileData = {
         id: data.id,
         user_id: data.user_id,
@@ -132,7 +120,6 @@ export function AuthProvider({ children }) {
       setProfileChecked(true);
       return data;
     } catch (err) {
-      console.error('Error fetching profile:', err);
       // On error, keep existing profile - don't show CompanySetup
       setProfileLoading(false);
       return profile; // Return existing profile
@@ -150,7 +137,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Got session:', session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -162,7 +148,6 @@ export function AuthProvider({ children }) {
         setProfileLoading(false);
       }
     }).catch((err) => {
-      console.error('Error getting session:', err);
       setLoading(false);
       setProfileLoading(false);
     });
@@ -176,7 +161,6 @@ export function AuthProvider({ children }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        console.log('Auth state changed:', _event, session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
