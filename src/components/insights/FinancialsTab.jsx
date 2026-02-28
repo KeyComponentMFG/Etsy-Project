@@ -132,6 +132,9 @@ export default function FinancialsTab({ showNotification }) {
       </div>
 
       {/* P&L Section */}
+      {activeSection === 'pnl' && !pnl && (
+        <UnavailableNotice section="P&L Statement" onRetry={loadData} />
+      )}
       {activeSection === 'pnl' && pnl && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Summary Cards */}
@@ -163,17 +166,22 @@ export default function FinancialsTab({ showNotification }) {
       )}
 
       {/* Bank Section */}
-      {activeSection === 'bank' && bank && (
+      {activeSection === 'bank' && !bank && !ledger && (
+        <UnavailableNotice section="Bank & Expenses" onRetry={loadData} />
+      )}
+      {activeSection === 'bank' && (bank || ledger) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Bank Summary */}
+          {bank && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
             <SummaryCard label="Bank Balance" value={bank.balance} color="#10b981" icon={Building2} />
             <SummaryCard label="Total Deposits" value={bank.total_deposits} color="#6366f1" icon={ArrowDown} />
             <SummaryCard label="Total Debits" value={bank.total_debits} color="#ef4444" icon={ArrowUp} />
           </div>
+          )}
 
           {/* Owner Draws */}
-          {bank.owner_draws && (
+          {bank?.owner_draws && (
             <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={18} style={{ color: '#8b5cf6' }} />
@@ -205,7 +213,7 @@ export default function FinancialsTab({ showNotification }) {
           )}
 
           {/* Expense Categories */}
-          {bank.by_category && Object.keys(bank.by_category).length > 0 && (
+          {bank?.by_category && Object.keys(bank.by_category).length > 0 && (
             <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <PieChart size={18} style={{ color: '#6366f1' }} />
@@ -260,6 +268,9 @@ export default function FinancialsTab({ showNotification }) {
       )}
 
       {/* Shipping Section */}
+      {activeSection === 'shipping' && !shipping && (
+        <UnavailableNotice section="Shipping" onRetry={loadData} />
+      )}
       {activeSection === 'shipping' && shipping && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
@@ -286,6 +297,9 @@ export default function FinancialsTab({ showNotification }) {
       )}
 
       {/* Fees Section */}
+      {activeSection === 'fees' && !fees && (
+        <UnavailableNotice section="Fees" onRetry={loadData} />
+      )}
       {activeSection === 'fees' && fees && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
@@ -395,6 +409,33 @@ function FeeRow({ label, value, total }) {
         </div>
       </div>
       <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '40px', textAlign: 'right' }}>{pct.toFixed(0)}%</span>
+    </div>
+  );
+}
+
+function UnavailableNotice({ section, onRetry }) {
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      border: '1px solid #e2e8f0',
+      padding: '40px 24px',
+      textAlign: 'center'
+    }}>
+      <AlertCircle size={36} style={{ color: '#f59e0b', marginBottom: '12px' }} />
+      <h3 style={{ margin: '0 0 8px', color: '#1a1a2e', fontSize: '1.1rem' }}>
+        {section} data unavailable
+      </h3>
+      <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '0.9rem' }}>
+        The server returned an error for this report. Other sections may still be available.
+      </p>
+      <button onClick={onRetry} style={{
+        padding: '8px 16px', background: '#6366f1', color: '#fff',
+        border: 'none', borderRadius: '8px', cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', gap: '6px'
+      }}>
+        <RefreshCw size={14} /> Retry
+      </button>
     </div>
   );
 }
