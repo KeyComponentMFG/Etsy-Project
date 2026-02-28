@@ -26,8 +26,8 @@ export default function TaxFormsTab({ showNotification }) {
       }
 
       const [taxData, pnlData] = await Promise.all([
-        getTaxInfo(),
-        getPnL(),
+        getTaxInfo().catch(() => null),
+        getPnL().catch(() => null),
       ]);
 
       setTax(taxData);

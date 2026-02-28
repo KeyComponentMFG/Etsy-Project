@@ -32,11 +32,11 @@ export default function FinancialsTab({ showNotification }) {
       }
 
       const [pnlData, bankData, ledgerData, shippingData, feesData] = await Promise.all([
-        getPnL(),
-        getBankSummary(),
-        getBankLedger(),
-        getShipping(),
-        getFees(),
+        getPnL().catch(() => null),
+        getBankSummary().catch(() => null),
+        getBankLedger().catch(() => null),
+        getShipping().catch(() => null),
+        getFees().catch(() => null),
       ]);
 
       setPnl(pnlData);
