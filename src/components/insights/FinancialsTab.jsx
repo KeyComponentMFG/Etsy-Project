@@ -4,7 +4,7 @@ import {
   ArrowDown, ArrowUp, RefreshCw, ChevronDown, ChevronUp,
   Truck, Tag, Users, PieChart, Minus, Receipt
 } from 'lucide-react';
-import { getPnL, getBankSummary, getBankLedger, getShipping, getFees, checkApiHealth } from '../../lib/analyticsApi';
+import { getPnL, getBankSummary, getBankLedger, getShipping, getFees, getFinancials, checkApiHealth } from '../../lib/analyticsApi';
 
 export default function FinancialsTab({ showNotification }) {
   const [pnl, setPnl] = useState(null);
@@ -31,19 +31,71 @@ export default function FinancialsTab({ showNotification }) {
         return;
       }
 
-      const [pnlData, bankData, ledgerData, shippingData, feesData] = await Promise.all([
+      const [pnlData, bankData, ledgerData, shippingData, feesData, financialsData] = await Promise.all([
         getPnL().catch(() => null),
         getBankSummary().catch(() => null),
         getBankLedger().catch(() => null),
         getShipping().catch(() => null),
         getFees().catch(() => null),
+        getFinancials().catch(() => null),
       ]);
 
-      setPnl(pnlData);
-      setBank(bankData);
       setLedger(ledgerData);
-      setShipping(shippingData);
-      setFees(feesData);
+      setFees(feesData || (financialsData ? { total: financialsData.fees?.total, as_percent_of_sales: financialsData.profit?.margin_percent ? (100 - financialsData.profit.margin_percent).toFixed(1) : null, breakdown: financialsData.fees, marketing: { etsy_ads: financialsData.fees?.marketing }, credits: null } : null));
+
+      // Build P&L from /api/pnl or fall back to /api/financials
+      if (pnlData) {
+        setPnl(pnlData);
+      } else if (financialsData) {
+        const f = financialsData;
+        setPnl({
+          revenue: { gross_sales: f.revenue?.gross_sales || 0, refunds: f.revenue?.refunds || 0, net_sales: f.revenue?.net_sales || 0 },
+          etsy_fees: { total_fees: f.fees?.total || 0 },
+          shipping: { label_costs: f.shipping?.label_costs || f.fees?.shipping_labels || 0 },
+          marketing: { total: f.fees?.marketing || 0 },
+          after_etsy_fees: f.profit?.etsy_net || 0,
+          owner_draws: f.owner_draws?.total || 0,
+          net_profit: f.profit?.after_expenses || 0,
+          cash_on_hand: f.bank?.cash_on_hand || 0,
+        });
+      }
+
+      // Build bank data from /api/bank/summary or fall back to /api/financials
+      if (bankData) {
+        setBank(bankData);
+      } else if (financialsData?.bank) {
+        const fb = financialsData.bank;
+        const draws = financialsData.owner_draws || {};
+        setBank({
+          balance: fb.cash_on_hand || 0,
+          total_deposits: fb.total_deposits || 0,
+          total_debits: fb.total_debits || 0,
+          by_category: fb.categories || {},
+          owner_draws: {
+            tulsa: draws.tulsa || 0,
+            texas: draws.texas || 0,
+            total: draws.total || 0,
+            difference: Math.abs((draws.tulsa || 0) - (draws.texas || 0)),
+            owed_to: (draws.tulsa || 0) > (draws.texas || 0) ? 'Texas (Braden)' : (draws.texas || 0) > (draws.tulsa || 0) ? 'Tulsa (TJ)' : null,
+          },
+        });
+      }
+
+      // Build shipping from /api/shipping or fall back to /api/financials
+      if (shippingData) {
+        setShipping(shippingData);
+      } else if (financialsData?.shipping) {
+        setShipping({
+          summary: {
+            buyer_paid: financialsData.shipping.buyer_paid || 0,
+            label_costs: financialsData.shipping.label_costs || financialsData.fees?.shipping_labels || 0,
+            profit_loss: financialsData.shipping.profit || 0,
+            margin: financialsData.shipping.margin || 0,
+          },
+          labels: null,
+          orders: null,
+        });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
