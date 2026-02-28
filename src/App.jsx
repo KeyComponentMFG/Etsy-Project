@@ -16,6 +16,7 @@ import DataHubTab from './components/insights/DataHubTab';
 import ChatBot from './components/chat/ChatBot';
 import ProductAnalytics from './components/analytics/ProductAnalytics';
 import { usePermissions } from './hooks/usePermissions';
+import { useDataValidator } from './hooks/useDataValidator';
 import { DEFAULT_SUPPLY_CATEGORIES, DEFAULT_TEAM, DEFAULT_STORES, DEFAULT_PRINTERS, PRODUCTION_STAGES, TRANSACTION_FEE_RATE, PAYMENT_PROCESSING_RATE, PAYMENT_PROCESSING_FLAT, SALES_TAX_RATE } from './constants/defaults';
 import { calculateShipByDate } from './utils/dateUtils';
 import { LowStockAlerts } from './components/index';
@@ -1503,6 +1504,7 @@ export default function EtsyOrderManager() {
   // Auth state - must be first
   const { user, loading: authLoading, signOut, profile, profileLoading, profileChecked, refreshProfile } = useAuth();
   const { isAdmin, canEdit, canDelete, companyId } = usePermissions();
+  // Data validation hook is called below after state declarations (needs orders, archivedOrders, models)
   const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
@@ -1574,6 +1576,9 @@ export default function EtsyOrderManager() {
   const [bulkMode, setBulkMode] = useState(false);
   const [lastUsedCategory, setLastUsedCategory] = useState(''); // Smart defaults
   const searchInputRef = useRef(null);
+
+  // Data validation for ProductAnalytics
+  const dataValidation = useDataValidator({ orders, archivedOrders, models });
 
   // Helper function to parse color field
   const parseColorField = (colorField) => {
@@ -3391,9 +3396,10 @@ export default function EtsyOrderManager() {
             price: priceNum
           };
 
-          // Group by buyer name - same buyer in same import = same order
-          if (!orderGroups[buyerName]) {
-            orderGroups[buyerName] = {
+          // Group by buyer name + price — same buyer & same order total = same order
+          const groupKey = `${buyerName}::${priceNum.toFixed(2)}`;
+          if (!orderGroups[groupKey]) {
+            orderGroups[groupKey] = {
               transactionId, // Use first transaction ID as the order ID
               buyerName,
               buyerMessage,
@@ -3404,7 +3410,7 @@ export default function EtsyOrderManager() {
             };
           } else {
             // Add to existing group - DON'T sum price/tax (Etsy duplicates these on each row)
-            orderGroups[buyerName].lineItems.push(lineItem);
+            orderGroups[groupKey].lineItems.push(lineItem);
           }
         }
 
@@ -3442,6 +3448,17 @@ export default function EtsyOrderManager() {
             const totalQty = lineItems.reduce((sum, li) => sum + li.quantity, 0);
             // Use first item's color/extra for display, store all in lineItems
             const firstItem = lineItems[0];
+
+            // Normalize lineItem prices: distribute order total proportionally by quantity
+            let distributedSum = 0;
+            lineItems.forEach((li, idx) => {
+              if (idx === lineItems.length - 1) {
+                li.price = Math.round((orderPrice - distributedSum) * 100) / 100;
+              } else {
+                li.price = Math.round((orderPrice * (li.quantity || 1) / totalQty) * 100) / 100;
+                distributedSum += li.price;
+              }
+            });
 
             newOrders.push({
               orderId: group.transactionId,
@@ -3546,9 +3563,10 @@ export default function EtsyOrderManager() {
             price: priceNum
           };
 
-          // Group by buyer name - same buyer in same import = same order
-          if (!orderGroups[buyerName]) {
-            orderGroups[buyerName] = {
+          // Group by buyer name + price — same buyer & same order total = same order
+          const groupKey = `${buyerName}::${priceNum.toFixed(2)}`;
+          if (!orderGroups[groupKey]) {
+            orderGroups[groupKey] = {
               transactionId, // Use first transaction ID as the order ID
               buyerName,
               buyerMessage,
@@ -3559,7 +3577,7 @@ export default function EtsyOrderManager() {
             };
           } else {
             // Add to existing group - DON'T sum price/tax (Etsy duplicates these on each row)
-            orderGroups[buyerName].lineItems.push(lineItem);
+            orderGroups[groupKey].lineItems.push(lineItem);
           }
         }
 
@@ -3596,6 +3614,17 @@ export default function EtsyOrderManager() {
             const itemNames = lineItems.map(li => li.item).join(' + ');
             const totalQty = lineItems.reduce((sum, li) => sum + li.quantity, 0);
             const firstItem = lineItems[0];
+
+            // Normalize lineItem prices: distribute order total proportionally by quantity
+            let distributedSum = 0;
+            lineItems.forEach((li, idx) => {
+              if (idx === lineItems.length - 1) {
+                li.price = Math.round((orderPrice - distributedSum) * 100) / 100;
+              } else {
+                li.price = Math.round((orderPrice * (li.quantity || 1) / totalQty) * 100) / 100;
+                distributedSum += li.price;
+              }
+            });
 
             newOrders.push({
               orderId: group.transactionId,
@@ -3764,9 +3793,12 @@ export default function EtsyOrderManager() {
         return;
       }
 
-      // Parse rows
+      // First pass: group rows by buyer name + price (same buyer & price = same order)
       const newOrders = [];
       let duplicates = 0;
+      let combinedCount = 0;
+      const orderGroups = {};
+      const seenTransactionIds = new Set();
 
       for (let i = 1; i < lines.length; i++) {
         // Simple CSV parse (handles basic quoted fields)
@@ -3775,13 +3807,18 @@ export default function EtsyOrderManager() {
         const transactionId = txnIdx >= 0 ? values[txnIdx]?.trim() : '';
         if (!transactionId || !/^\d+$/.test(transactionId)) continue;
 
-        // Check for duplicates
+        // Check if this specific transaction already exists in database
         if (orders.find(o => o.orderId === transactionId) ||
-            archivedOrders.find(o => o.orderId === transactionId) ||
-            newOrders.find(o => o.orderId === transactionId)) {
+            archivedOrders.find(o => o.orderId === transactionId)) {
           duplicates++;
           continue;
         }
+
+        // Track this transaction ID to avoid duplicates within import
+        if (seenTransactionIds.has(transactionId)) {
+          continue;
+        }
+        seenTransactionIds.add(transactionId);
 
         const product = productIdx >= 0 ? values[productIdx]?.trim() || 'Unknown' : 'Unknown';
         const quantity = qtyIdx >= 0 ? parseInt(values[qtyIdx]) || 1 : 1;
@@ -3790,26 +3827,95 @@ export default function EtsyOrderManager() {
         const priceVal = priceIdx >= 0 ? values[priceIdx]?.trim() || '$0' : '$0';
         const taxStr = taxIdx >= 0 ? values[taxIdx]?.trim() || '0' : '0';
         const salesTax = parseFloat(taxStr.replace(/[^0-9.]/g, '')) || 0;
+        const priceNum = parseFloat(priceVal.replace(/[^0-9.]/g, '')) || 0;
 
         const { extractedColor, extractedExtra } = parseColorField(colorField);
 
-        newOrders.push({
-          orderId: transactionId,
-          buyerName: buyerName,
+        const lineItem = {
+          transactionId,
           item: product,
           quantity: quantity,
           color: extractedColor,
           extra: extractedExtra,
-          price: priceVal.startsWith('$') ? priceVal : `$${priceVal}`,
-          address: '',
-          status: 'received',
-          assignedTo: null,
-          createdAt: Date.now(),
-          notes: '',
-          storeId: importStoreId || null,
-          salesTax: salesTax
-        });
+          price: priceNum
+        };
+
+        // Group by buyer name + price — same buyer & same order total = same order
+        const groupKey = `${buyerName}::${priceNum.toFixed(2)}`;
+        if (!orderGroups[groupKey]) {
+          orderGroups[groupKey] = {
+            transactionId,
+            buyerName,
+            createdAt: Date.now(),
+            salesTax,
+            orderPrice: priceNum,
+            lineItems: [lineItem]
+          };
+        } else {
+          orderGroups[groupKey].lineItems.push(lineItem);
+        }
       }
+
+      // Second pass: create orders from groups
+      Object.values(orderGroups).forEach(group => {
+        const lineItems = group.lineItems;
+        const orderPrice = group.orderPrice;
+
+        if (lineItems.length === 1) {
+          const li = lineItems[0];
+          newOrders.push({
+            orderId: group.transactionId,
+            buyerName: group.buyerName,
+            item: li.item,
+            quantity: li.quantity,
+            color: li.color,
+            extra: li.extra,
+            price: `$${orderPrice.toFixed(2)}`,
+            address: '',
+            status: 'received',
+            assignedTo: null,
+            createdAt: group.createdAt,
+            notes: '',
+            storeId: importStoreId || null,
+            salesTax: group.salesTax,
+            lineItems: null
+          });
+        } else {
+          combinedCount++;
+          const itemNames = lineItems.map(li => li.item).join(' + ');
+          const totalQty = lineItems.reduce((sum, li) => sum + li.quantity, 0);
+          const firstItem = lineItems[0];
+
+          // Normalize lineItem prices: distribute order total proportionally by quantity
+          let distributedSum = 0;
+          lineItems.forEach((li, idx) => {
+            if (idx === lineItems.length - 1) {
+              li.price = Math.round((orderPrice - distributedSum) * 100) / 100;
+            } else {
+              li.price = Math.round((orderPrice * (li.quantity || 1) / totalQty) * 100) / 100;
+              distributedSum += li.price;
+            }
+          });
+
+          newOrders.push({
+            orderId: group.transactionId,
+            buyerName: group.buyerName,
+            item: itemNames,
+            quantity: totalQty,
+            color: firstItem.color,
+            extra: firstItem.extra,
+            price: `$${orderPrice.toFixed(2)}`,
+            address: '',
+            status: 'received',
+            assignedTo: null,
+            createdAt: group.createdAt,
+            notes: '',
+            storeId: importStoreId || null,
+            salesTax: group.salesTax,
+            lineItems: lineItems
+          });
+        }
+      });
 
       if (newOrders.length === 0) {
         showNotification(`No new orders found. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
@@ -3825,7 +3931,10 @@ export default function EtsyOrderManager() {
       });
 
       saveOrders([...orders, ...newOrders]);
-      showNotification(`Synced ${newOrders.length} new order${newOrders.length > 1 ? 's' : ''} from Google Sheets. ${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped.`);
+      const parts = [`Synced ${newOrders.length} new order${newOrders.length > 1 ? 's' : ''} from Google Sheets`];
+      if (combinedCount > 0) parts.push(`${combinedCount} multi-item order${combinedCount > 1 ? 's' : ''} grouped`);
+      if (duplicates > 0) parts.push(`${duplicates} duplicate${duplicates !== 1 ? 's' : ''} skipped`);
+      showNotification(parts.join('. ') + '.');
 
       // Save the URL to localStorage for next time
       localStorage.setItem('googleSheetUrl', googleSheetUrl);
@@ -6174,6 +6283,7 @@ export default function EtsyOrderManager() {
                   orders={orders}
                   archivedOrders={archivedOrders}
                   models={models}
+                  dataValidation={dataValidation}
                 />
               )}
             </>

@@ -915,3 +915,230 @@
     flex-wrap: wrap;
   }
 }
+
+/* Data Integrity Badge */
+.data-integrity-badge-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.data-integrity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+}
+
+.data-integrity-badge.valid {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.data-integrity-badge.valid:hover {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.data-integrity-badge.warning {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.data-integrity-badge.warning:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.data-integrity-badge.error {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.data-integrity-badge.error:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.data-integrity-badge .badge-count {
+  background: currentColor;
+  color: #fff;
+  font-size: 0.7rem;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+/* Data Integrity Panel */
+.data-integrity-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 420px;
+  max-height: 480px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.15s ease;
+}
+
+.integrity-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.integrity-summary {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+
+.integrity-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.integrity-summary-chip.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.integrity-summary-chip.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.integrity-summary-chip.info {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.integrity-summary-chip.valid {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.integrity-alerts-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Individual Alert Row */
+.integrity-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f8fafc;
+  transition: background 0.1s;
+}
+
+.integrity-alert:hover {
+  background: #f8fafc;
+}
+
+.integrity-alert-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .data-integrity-panel {
+    width: 320px;
+    right: -40px;
+  }
+}
+
+/* Health Metric Tooltip */
+.health-metric-block {
+  transition: background 0.15s;
+}
+
+.health-metric-block:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.health-metric-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 260px;
+  background: #1e293b;
+  color: #f1f5f9;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 50;
+  pointer-events: none;
+  line-height: 1.4;
+}
+
+.health-metric-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1e293b;
+}
+
+.health-metric-block:hover .health-metric-tooltip {
+  display: block;
+}
+
+/* Keep tooltip on-screen for edge items */
+.health-metric-block:first-child .health-metric-tooltip {
+  left: 0;
+  transform: none;
+}
+
+.health-metric-block:first-child .health-metric-tooltip::after {
+  left: 24px;
+  transform: none;
+}
+
+.health-metric-block:last-child .health-metric-tooltip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.health-metric-block:last-child .health-metric-tooltip::after {
+  left: auto;
+  right: 24px;
+  transform: none;
+}

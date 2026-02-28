@@ -4,7 +4,7 @@ import {
   RefreshCw, CheckCircle, AlertCircle, Clock, Trash2, Eye,
   CreditCard, Save, DollarSign
 } from 'lucide-react';
-import { checkApiHealth, API_BASE_URL } from '../../lib/analyticsApi';
+import { checkApiHealth, getApiBaseUrl } from '../../lib/analyticsApi';
 
 export default function DataHubTab({ showNotification }) {
   const [files, setFiles] = useState({
@@ -45,7 +45,7 @@ export default function DataHubTab({ showNotification }) {
 
   const loadFileHistory = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/data/files`);
+      const response = await fetch(`${getApiBaseUrl()}/api/data/files`);
       if (response.ok) {
         const data = await response.json();
         setFiles(data.files || { etsy: [], bank: [], invoices: [] });
@@ -68,7 +68,7 @@ export default function DataHubTab({ showNotification }) {
     formData.append('type', type);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/data/upload`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/data/upload`, {
         method: 'POST',
         body: formData
       });
@@ -90,7 +90,7 @@ export default function DataHubTab({ showNotification }) {
   const handleReprocess = async () => {
     setUploading('reprocess');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/reload`);
+      const response = await fetch(`${getApiBaseUrl()}/api/reload`);
       if (response.ok) {
         showNotification?.('Data reprocessed successfully', 'success');
         setLastSync(new Date().toISOString());
@@ -105,7 +105,7 @@ export default function DataHubTab({ showNotification }) {
 
   const loadCreditCardConfig = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/credit-card`);
+      const response = await fetch(`${getApiBaseUrl()}/api/config/credit-card`);
       if (response.ok) {
         const data = await response.json();
         setCcConfig({
@@ -126,7 +126,7 @@ export default function DataHubTab({ showNotification }) {
   const handleSaveCreditCard = async () => {
     setSavingCc(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/credit-card`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/config/credit-card`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

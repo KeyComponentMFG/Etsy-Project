@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ArrowUpDown, TrendingUp, Palette, Package, Calendar, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { parsePrice } from '../../hooks/useDataValidator';
+import DataIntegrityBadge from '../common/DataIntegrityBadge';
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
+const ANOMALY_THRESHOLD = 100000;
 
-export default function ProductAnalytics({ orders = [], archivedOrders = [], models = [] }) {
+export default function ProductAnalytics({ orders = [], archivedOrders = [], models = [], dataValidation }) {
   const [activeTab, setActiveTab] = useState('colors');
   const [sortField, setSortField] = useState('revenue');
   const [sortDirection, setSortDirection] = useState('desc');
@@ -12,11 +15,51 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
   const [selectedModel, setSelectedModel] = useState('all');
   const [expandedModel, setExpandedModel] = useState(null);
 
-  // Combine active and archived orders
+  // Combine active and archived orders, expanding multi-item orders into individual line items
   const allOrders = useMemo(() => {
     const shipped = orders.filter(o => o.status === 'shipped');
-    const archived = archivedOrders || [];
-    return [...shipped, ...archived];
+    // Bug 2 fix: filter archived to shipped only (matches Dashboard behavior)
+    const archived = (archivedOrders || []).filter(o => o.status === 'shipped');
+    const combined = [...shipped, ...archived];
+
+    // Bug 1 fix: expand multi-item orders into individual line items
+    const expanded = [];
+    combined.forEach(order => {
+      const orderPrice = parsePrice(order.price);
+
+      // Bug 4 fix: skip anomalous prices
+      if (orderPrice > ANOMALY_THRESHOLD || orderPrice < 0) return;
+
+      if (order.lineItems && order.lineItems.length > 1) {
+        // Distribute order price proportionally by quantity across line items
+        const totalQty = order.lineItems.reduce((sum, li) => sum + (li.quantity || 1), 0);
+        let distributedSum = 0;
+        order.lineItems.forEach((li, idx) => {
+          const liQty = li.quantity || 1;
+          let proportionalPrice;
+          if (idx === order.lineItems.length - 1) {
+            // Last item gets the remainder to avoid rounding loss
+            proportionalPrice = orderPrice - distributedSum;
+          } else {
+            proportionalPrice = totalQty > 0 ? Math.round((orderPrice * liQty / totalQty) * 100) / 100 : 0;
+            distributedSum += proportionalPrice;
+          }
+          expanded.push({
+            ...order,
+            item: li.item || order.item,
+            color: li.color || order.color,
+            quantity: liQty,
+            price: String(proportionalPrice),
+            _expandedFromMultiItem: true,
+            _originalOrderId: order.orderId,
+          });
+        });
+      } else {
+        expanded.push({ ...order, price: String(orderPrice) });
+      }
+    });
+
+    return expanded;
   }, [orders, archivedOrders]);
 
   // Filter orders by date
@@ -53,8 +96,7 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
       if (!color) return;
 
       const normalizedColor = color.charAt(0).toUpperCase() + color.slice(1).toLowerCase();
-      const priceStr = (order.price || '0').toString().replace(/[^0-9.]/g, '');
-      const revenue = parseFloat(priceStr) || 0;
+      const revenue = parsePrice(order.price);
       const quantity = order.quantity || 1;
       const item = order.item || 'Unknown';
 
@@ -64,18 +106,21 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
           orders: 0,
           quantity: 0,
           revenue: 0,
-          models: {}
+          models: {},
+          _orderIds: new Set(),
         };
       }
-      stats[normalizedColor].orders += 1;
+      stats[normalizedColor]._orderIds.add(order.orderId);
+      stats[normalizedColor].orders = stats[normalizedColor]._orderIds.size;
       stats[normalizedColor].quantity += quantity;
       stats[normalizedColor].revenue += revenue;
 
       // Track by model
       if (!stats[normalizedColor].models[item]) {
-        stats[normalizedColor].models[item] = { orders: 0, quantity: 0, revenue: 0 };
+        stats[normalizedColor].models[item] = { orders: 0, quantity: 0, revenue: 0, _orderIds: new Set() };
       }
-      stats[normalizedColor].models[item].orders += 1;
+      stats[normalizedColor].models[item]._orderIds.add(order.orderId);
+      stats[normalizedColor].models[item].orders = stats[normalizedColor].models[item]._orderIds.size;
       stats[normalizedColor].models[item].quantity += quantity;
       stats[normalizedColor].models[item].revenue += revenue;
     });
@@ -96,8 +141,7 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
     filteredOrders.forEach(order => {
       const fullItem = order.item || 'Unknown';
       const baseModel = getBaseModelName(fullItem);
-      const priceStr = (order.price || '0').toString().replace(/[^0-9.]/g, '');
-      const revenue = parseFloat(priceStr) || 0;
+      const revenue = parsePrice(order.price);
       const quantity = order.quantity || 1;
       const color = (order.color || 'Unknown').trim();
       const normalizedColor = color.charAt(0).toUpperCase() + color.slice(1).toLowerCase();
@@ -111,34 +155,38 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
           revenue: 0,
           avgPrice: 0,
           colors: {},
-          variants: {}
+          variants: {},
+          _orderIds: new Set(),
         };
       }
       stats[baseModel].fullNames.add(fullItem);
-      stats[baseModel].orders += 1;
+      stats[baseModel]._orderIds.add(order.orderId);
+      stats[baseModel].orders = stats[baseModel]._orderIds.size;
       stats[baseModel].quantity += quantity;
       stats[baseModel].revenue += revenue;
 
       // Track colors per model
       if (!stats[baseModel].colors[normalizedColor]) {
-        stats[baseModel].colors[normalizedColor] = { orders: 0, quantity: 0, revenue: 0 };
+        stats[baseModel].colors[normalizedColor] = { orders: 0, quantity: 0, revenue: 0, _orderIds: new Set() };
       }
-      stats[baseModel].colors[normalizedColor].orders += 1;
+      stats[baseModel].colors[normalizedColor]._orderIds.add(order.orderId);
+      stats[baseModel].colors[normalizedColor].orders = stats[baseModel].colors[normalizedColor]._orderIds.size;
       stats[baseModel].colors[normalizedColor].quantity += quantity;
       stats[baseModel].colors[normalizedColor].revenue += revenue;
 
       // Track variants (full names) per base model
       if (!stats[baseModel].variants[fullItem]) {
-        stats[baseModel].variants[fullItem] = { orders: 0, quantity: 0, revenue: 0 };
+        stats[baseModel].variants[fullItem] = { orders: 0, quantity: 0, revenue: 0, _orderIds: new Set() };
       }
-      stats[baseModel].variants[fullItem].orders += 1;
+      stats[baseModel].variants[fullItem]._orderIds.add(order.orderId);
+      stats[baseModel].variants[fullItem].orders = stats[baseModel].variants[fullItem]._orderIds.size;
       stats[baseModel].variants[fullItem].quantity += quantity;
       stats[baseModel].variants[fullItem].revenue += revenue;
     });
 
     // Calculate averages and convert Sets to arrays
     Object.values(stats).forEach(s => {
-      s.avgPrice = s.orders > 0 ? s.revenue / s.orders : 0;
+      s.avgPrice = s.quantity > 0 ? s.revenue / s.quantity : 0;
       s.variantCount = s.fullNames.size;
       s.fullNames = Array.from(s.fullNames);
     });
@@ -148,7 +196,7 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
 
   // Time Analytics
   const timeStats = useMemo(() => {
-    const dayOfWeek = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    const dayOfWeekIds = { Mon: new Set(), Tue: new Set(), Wed: new Set(), Thu: new Set(), Fri: new Set(), Sat: new Set(), Sun: new Set() };
     const dayOfWeekRevenue = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
     const monthly = {};
     const hourly = {};
@@ -159,38 +207,42 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
       const date = new Date(order.shippedAt || order.createdAt || order.archivedAt);
       if (isNaN(date.getTime())) return;
 
-      const priceStr = (order.price || '0').toString().replace(/[^0-9.]/g, '');
-      const revenue = parseFloat(priceStr) || 0;
+      const revenue = parsePrice(order.price);
 
       // Day of week
       const day = dayNames[date.getDay()];
-      dayOfWeek[day] += 1;
+      dayOfWeekIds[day].add(order.orderId);
       dayOfWeekRevenue[day] += revenue;
 
       // Monthly
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       if (!monthly[monthKey]) {
-        monthly[monthKey] = { month: monthKey, orders: 0, revenue: 0 };
+        monthly[monthKey] = { month: monthKey, _orderIds: new Set(), orders: 0, revenue: 0 };
       }
-      monthly[monthKey].orders += 1;
+      monthly[monthKey]._orderIds.add(order.orderId);
+      monthly[monthKey].orders = monthly[monthKey]._orderIds.size;
       monthly[monthKey].revenue += revenue;
 
       // Hourly
       const hour = date.getHours();
       if (!hourly[hour]) {
-        hourly[hour] = { hour, orders: 0, revenue: 0 };
+        hourly[hour] = { hour, _orderIds: new Set(), orders: 0, revenue: 0 };
       }
-      hourly[hour].orders += 1;
+      hourly[hour]._orderIds.add(order.orderId);
+      hourly[hour].orders = hourly[hour]._orderIds.size;
       hourly[hour].revenue += revenue;
     });
 
     return {
-      dayOfWeek: Object.entries(dayOfWeek).map(([day, orders]) => ({
-        day,
-        orders,
-        revenue: dayOfWeekRevenue[day],
-        avgRevenue: orders > 0 ? dayOfWeekRevenue[day] / orders : 0
-      })),
+      dayOfWeek: Object.entries(dayOfWeekIds).map(([day, idSet]) => {
+        const orders = idSet.size;
+        return {
+          day,
+          orders,
+          revenue: dayOfWeekRevenue[day],
+          avgRevenue: orders > 0 ? dayOfWeekRevenue[day] / orders : 0
+        };
+      }),
       monthly: Object.values(monthly).sort((a, b) => a.month.localeCompare(b.month)),
       hourly: Object.values(hourly).sort((a, b) => a.hour - b.hour)
     };
@@ -362,16 +414,19 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
     <div style={styles.container}>
       {/* Header with Tabs and Filters */}
       <div style={styles.header}>
-        <div style={styles.tabs}>
-          <button style={styles.tab(activeTab === 'colors')} onClick={() => setActiveTab('colors')}>
-            <Palette size={18} /> Colors
-          </button>
-          <button style={styles.tab(activeTab === 'models')} onClick={() => setActiveTab('models')}>
-            <Package size={18} /> Models
-          </button>
-          <button style={styles.tab(activeTab === 'time')} onClick={() => setActiveTab('time')}>
-            <Calendar size={18} /> Time Trends
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={styles.tabs}>
+            <button style={styles.tab(activeTab === 'colors')} onClick={() => setActiveTab('colors')}>
+              <Palette size={18} /> Colors
+            </button>
+            <button style={styles.tab(activeTab === 'models')} onClick={() => setActiveTab('models')}>
+              <Package size={18} /> Models
+            </button>
+            <button style={styles.tab(activeTab === 'time')} onClick={() => setActiveTab('time')}>
+              <Calendar size={18} /> Time Trends
+            </button>
+          </div>
+          <DataIntegrityBadge validation={dataValidation} />
         </div>
 
         <div style={styles.filters}>
@@ -407,15 +462,12 @@ export default function ProductAnalytics({ orders = [], archivedOrders = [], mod
       <div style={styles.statsGrid}>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>Total Orders</div>
-          <div style={styles.statValue}>{filteredOrders.length}</div>
+          <div style={styles.statValue}>{new Set(filteredOrders.map(o => o.orderId)).size}</div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>Total Revenue</div>
           <div style={{ ...styles.statValue, color: '#10b981' }}>
-            ${filteredOrders.reduce((sum, o) => {
-              const price = parseFloat((o.price || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-              return sum + price;
-            }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${filteredOrders.reduce((sum, o) => sum + parsePrice(o.price), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div style={styles.statCard}>

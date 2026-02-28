@@ -3,37 +3,63 @@
  * Connects to the Python analytics backend for financial data, health scores, and AI insights
  */
 
-import { supabase } from './supabase';
+// Production URL that is always available (Railway)
+const PRODUCTION_URL = 'https://web-production-7f385.up.railway.app';
+const LOCAL_URL = 'http://localhost:8070';
 
-// API base URL - use Railway production URL or local development
-export const API_BASE_URL = import.meta.env.VITE_ANALYTICS_API_URL
-  || (window.location.hostname !== 'localhost'
-      ? 'https://web-production-7f385.up.railway.app'
-      : 'http://localhost:8070');
+// Resolved API base URL — starts as production, upgraded to local if available
+let _resolvedBaseUrl = null;
 
 /**
- * Fetch with error handling and timeout
+ * Determine the best API URL. Tries local first (fast for devs),
+ * falls back to production Railway URL which is always online.
+ */
+async function resolveBaseUrl() {
+  if (_resolvedBaseUrl) return _resolvedBaseUrl;
+
+  // If env var is explicitly set, use it directly
+  if (import.meta.env.VITE_ANALYTICS_API_URL) {
+    _resolvedBaseUrl = import.meta.env.VITE_ANALYTICS_API_URL;
+    return _resolvedBaseUrl;
+  }
+
+  // Try local server with a quick ping (2s timeout)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`${LOCAL_URL}/api/diagnostics`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      _resolvedBaseUrl = LOCAL_URL;
+      console.log('[Analytics] Using local server');
+      return _resolvedBaseUrl;
+    }
+  } catch {
+    // Local not available — that's fine
+  }
+
+  // Fall back to production (always available)
+  _resolvedBaseUrl = PRODUCTION_URL;
+  console.log('[Analytics] Using production server');
+  return _resolvedBaseUrl;
+}
+
+// Expose for external reads (will be populated after first call)
+export { PRODUCTION_URL };
+export const getApiBaseUrl = () => _resolvedBaseUrl || PRODUCTION_URL;
+
+/**
+ * Fetch with error handling, timeout, and automatic failover.
+ * The analytics backend does not require auth — no Authorization header is sent.
  */
 async function fetchWithTimeout(url, options = {}, timeout = 10000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
-  // Inject Supabase auth token when available
-  let authHeaders = {};
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      authHeaders = { 'Authorization': `Bearer ${session.access_token}` };
-    }
-  } catch {
-    // Auth not available — proceed without token
-  }
-
   try {
     const response = await fetch(url, {
       ...options,
       headers: {
-        ...authHeaders,
         ...options.headers,
       },
       signal: controller.signal,
@@ -47,6 +73,15 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     return await response.json();
   } catch (error) {
     clearTimeout(id);
+
+    // If local server failed, failover to production and retry once
+    if (_resolvedBaseUrl === LOCAL_URL && url.startsWith(LOCAL_URL)) {
+      console.log('[Analytics] Local server failed, falling back to production');
+      _resolvedBaseUrl = PRODUCTION_URL;
+      const prodUrl = url.replace(LOCAL_URL, PRODUCTION_URL);
+      return fetchWithTimeout(prodUrl, options, timeout);
+    }
+
     if (error.name === 'AbortError') {
       throw new Error('Request timed out');
     }
@@ -55,60 +90,67 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 }
 
 /**
+ * Helper: build a full URL from a path using the resolved base
+ */
+async function apiUrl(path) {
+  const base = await resolveBaseUrl();
+  return `${base}${path}`;
+}
+
+/**
  * Get complete dashboard overview
- * Includes health score, briefing, actions, and KPIs
  */
 export async function getOverview() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/overview`);
+  return fetchWithTimeout(await apiUrl('/api/overview'));
 }
 
 /**
  * Get business health score with breakdown
  */
 export async function getHealthScore() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/health`);
+  return fetchWithTimeout(await apiUrl('/api/health'));
 }
 
 /**
  * Get AI-generated daily briefing
  */
 export async function getBriefing() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/briefing`);
+  return fetchWithTimeout(await apiUrl('/api/briefing'));
 }
 
 /**
  * Get priority action items
  */
 export async function getActions() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/actions`);
+  return fetchWithTimeout(await apiUrl('/api/actions'));
 }
 
 /**
  * Get detailed financial breakdown
  */
 export async function getFinancials() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/financials`);
+  return fetchWithTimeout(await apiUrl('/api/financials'));
 }
 
 /**
  * Get tax calculations and estimates
  */
 export async function getTaxInfo() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/tax`);
+  return fetchWithTimeout(await apiUrl('/api/tax'));
 }
 
 /**
  * Get basic diagnostics (lightweight health check)
  */
 export async function getDiagnostics() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/diagnostics`);
+  return fetchWithTimeout(await apiUrl('/api/diagnostics'));
 }
 
 /**
  * Force reload data on the analytics server
  */
 export async function reloadAnalytics() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/reload`);
+  return fetchWithTimeout(await apiUrl('/api/reload'));
 }
 
 /**
@@ -116,9 +158,13 @@ export async function reloadAnalytics() {
  */
 export async function checkApiHealth() {
   try {
-    await fetchWithTimeout(`${API_BASE_URL}/api/diagnostics`, {}, 5000);
+    // resolveBaseUrl already tries local then production — so if it resolves, we're good
+    const base = await resolveBaseUrl();
+    await fetchWithTimeout(`${base}/api/diagnostics`, {}, 5000);
     return true;
   } catch {
+    // Clear cached URL so next attempt re-probes
+    _resolvedBaseUrl = null;
     return false;
   }
 }
@@ -127,118 +173,94 @@ export async function checkApiHealth() {
  * Get bank ledger with transactions
  */
 export async function getBankLedger() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/bank/ledger`);
+  return fetchWithTimeout(await apiUrl('/api/bank/ledger'));
 }
 
 /**
  * Get bank summary with categories
  */
 export async function getBankSummary() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/bank/summary`);
+  return fetchWithTimeout(await apiUrl('/api/bank/summary'));
 }
 
 /**
  * Get detailed P&L statement
  */
 export async function getPnL() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/pnl`);
+  return fetchWithTimeout(await apiUrl('/api/pnl'));
 }
 
 /**
  * Get inventory/COGS summary
  */
 export async function getInventorySummary() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/inventory/summary`);
+  return fetchWithTimeout(await apiUrl('/api/inventory/summary'));
 }
 
 /**
  * Get business valuation estimates
  */
 export async function getValuation() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/valuation`);
+  return fetchWithTimeout(await apiUrl('/api/valuation'));
 }
 
 /**
  * Get shipping analysis
  */
 export async function getShipping() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/shipping`);
+  return fetchWithTimeout(await apiUrl('/api/shipping'));
 }
 
 /**
  * Get fee breakdown
  */
 export async function getFees() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/fees`);
+  return fetchWithTimeout(await apiUrl('/api/fees'));
 }
 
 // ─── Chart Data Endpoints ────────────────────────────────────────────────────
 
-/**
- * Get monthly performance data for charts
- */
 export async function getMonthlyPerformance() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/monthly-performance`);
+  return fetchWithTimeout(await apiUrl('/api/charts/monthly-performance'));
 }
 
-/**
- * Get daily sales data for charts
- */
 export async function getDailySales() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/daily-sales`);
+  return fetchWithTimeout(await apiUrl('/api/charts/daily-sales'));
 }
 
-/**
- * Get expense breakdown for pie charts
- */
 export async function getExpenseBreakdown() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/expense-breakdown`);
+  return fetchWithTimeout(await apiUrl('/api/charts/expense-breakdown'));
 }
 
-/**
- * Get cash flow data for charts
- */
 export async function getCashFlow() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/cash-flow`);
+  return fetchWithTimeout(await apiUrl('/api/charts/cash-flow'));
 }
 
-/**
- * Get top products data for charts
- */
 export async function getTopProducts() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/products`);
+  return fetchWithTimeout(await apiUrl('/api/charts/products'));
 }
 
-/**
- * Get health score breakdown for gauge charts
- */
 export async function getHealthBreakdown() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/health-breakdown`);
+  return fetchWithTimeout(await apiUrl('/api/charts/health-breakdown'));
 }
 
-/**
- * Get revenue/profit projections for growth charts
- */
 export async function getProjections() {
-  return fetchWithTimeout(`${API_BASE_URL}/api/charts/projections`);
+  return fetchWithTimeout(await apiUrl('/api/charts/projections'));
 }
 
 // ─── Chat Endpoint ────────────────────────────────────────────────────────────
 
 /**
  * Send a chat message to the AI assistant
- * @param {string} message - The user's question
- * @param {Array} history - Optional chat history
- * @returns {Promise<{response: string, question: string}>}
  */
 export async function sendChatMessage(message, history = []) {
-  return fetchWithTimeout(`${API_BASE_URL}/api/chat`, {
+  return fetchWithTimeout(await apiUrl('/api/chat'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ message, history }),
-  }, 30000); // 30 second timeout for AI responses
+  }, 30000);
 }
 
 export default {

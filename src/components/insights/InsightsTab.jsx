@@ -4,16 +4,62 @@ import {
   DollarSign, Activity, Zap, RefreshCw, Wifi, WifiOff,
   ChevronDown, ChevronUp, Target, Lightbulb
 } from 'lucide-react';
-import { getOverview, checkApiHealth, reloadAnalytics, getMonthlyPerformance, getExpenseBreakdown } from '../../lib/analyticsApi';
+import { getOverview, checkApiHealth, reloadAnalytics, getMonthlyPerformance, getExpenseBreakdown, getCashFlow, getTopProducts, getProjections } from '../../lib/analyticsApi';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line
+  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from 'recharts';
+
+const HEALTH_METRIC_INFO = {
+  'Revenue Trend': {
+    description: 'Measures whether your revenue is growing, stable, or declining compared to recent months.',
+    improve: 'Launch new products, run promotions, or optimize listings with better photos and SEO keywords.',
+    good: 'Revenue is trending well. Keep momentum with seasonal products and repeat-customer engagement.',
+  },
+  'Profit Margin': {
+    description: 'Percentage of revenue retained after all costs (materials, fees, shipping). Higher is better.',
+    improve: 'Reduce material costs, negotiate shipping rates, raise prices on high-demand items, or cut low-margin products.',
+    good: 'Strong margins. Consider reinvesting profits into inventory or marketing to scale.',
+  },
+  'Order Velocity': {
+    description: 'How quickly orders are coming in relative to your historical average. Tracks sales momentum.',
+    improve: 'Boost visibility with Etsy ads, social media promotion, or adding more product variety.',
+    good: 'Great order flow. Make sure fulfillment can keep pace — consider batch processing.',
+  },
+  'Cash Position': {
+    description: 'How many months of operating expenses your current cash reserves can cover.',
+    improve: 'Build a cash buffer of 3+ months of expenses. Reduce unnecessary spending and time owner draws.',
+    good: 'Healthy cash reserves. Consider investing surplus into growth or keeping it as a safety buffer.',
+  },
+  'Inventory Health': {
+    description: 'Tracks stock levels across your materials. Penalizes low-stock and out-of-stock items.',
+    improve: 'Reorder low-stock filaments and supplies. Set up reorder alerts to avoid stockouts.',
+    good: 'Inventory is well-stocked. Review slow-moving items to free up capital.',
+  },
+  'Fee Efficiency': {
+    description: 'How much of your revenue goes to Etsy fees, payment processing, and advertising costs.',
+    improve: 'Reduce ad spend on low-converting listings. Use Etsy\'s Share & Save to earn fee credits.',
+    good: 'Fees are well-managed. Keep monitoring ad ROI and consider free traffic sources.',
+  },
+  'Shipping Economics': {
+    description: 'Compares what buyers pay for shipping vs. your actual label costs. Negative means you\'re subsidizing shipping.',
+    improve: 'Raise shipping prices, negotiate carrier rates, use lighter packaging, or build shipping cost into item price.',
+    good: 'Shipping is profitable or break-even. Keep monitoring as carrier rates change.',
+  },
+  'Data Quality': {
+    description: 'How complete and accurate your order data is — uncategorized items, missing costs, or unmatched models.',
+    improve: 'Categorize inventory items, assign models to products, and review orders with missing cost data.',
+    good: 'Data is clean. Periodically audit new products to keep categorization up to date.',
+  },
+};
 
 export default function InsightsTab({ showNotification }) {
   const [data, setData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [expenseData, setExpenseData] = useState(null);
+  const [cashFlowData, setCashFlowData] = useState(null);
+  const [productsData, setProductsData] = useState(null);
+  const [projectionsData, setProjectionsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [apiConnected, setApiConnected] = useState(false);
@@ -29,6 +75,15 @@ export default function InsightsTab({ showNotification }) {
     loadData();
   }, []);
 
+  // Auto-retry every 10 seconds when disconnected
+  useEffect(() => {
+    if (apiConnected || loading) return;
+    const retryInterval = setInterval(() => {
+      loadData();
+    }, 10000);
+    return () => clearInterval(retryInterval);
+  }, [apiConnected, loading]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -38,21 +93,27 @@ export default function InsightsTab({ showNotification }) {
       setApiConnected(isConnected);
 
       if (!isConnected) {
-        setError('Analytics server not available. Make sure the Python app is running.');
+        setError('Unable to connect to analytics server. Retrying...');
         setLoading(false);
         return;
       }
 
       // Load all data in parallel
-      const [overview, monthly, expenses] = await Promise.all([
+      const [overview, monthly, expenses, cashFlow, products, projections] = await Promise.all([
         getOverview(),
         getMonthlyPerformance().catch(() => null),
         getExpenseBreakdown().catch(() => null),
+        getCashFlow().catch(() => null),
+        getTopProducts().catch(() => null),
+        getProjections().catch(() => null),
       ]);
 
       setData(overview);
       setMonthlyData(monthly);
       setExpenseData(expenses);
+      setCashFlowData(cashFlow);
+      setProductsData(products);
+      setProjectionsData(projections);
     } catch (err) {
       setError(err.message || 'Failed to load analytics data');
     } finally {
@@ -119,29 +180,10 @@ export default function InsightsTab({ showNotification }) {
           textAlign: 'center'
         }}>
           <WifiOff size={48} style={{ color: '#ef4444', marginBottom: '16px' }} />
-          <h3 style={{ margin: '0 0 8px', color: '#1a1a2e' }}>Analytics Server Offline</h3>
+          <h3 style={{ margin: '0 0 8px', color: '#1a1a2e' }}>Connecting to Analytics...</h3>
           <p style={{ color: '#64748b', marginBottom: '24px' }}>
-            {error || 'Cannot connect to the analytics backend.'}
+            {error || 'Trying to reach the analytics server. Retrying automatically...'}
           </p>
-          <div style={{
-            background: '#f8fafc',
-            borderRadius: '8px',
-            padding: '16px',
-            textAlign: 'left',
-            marginBottom: '24px'
-          }}>
-            <p style={{ margin: '0 0 8px', fontWeight: '600', color: '#1a1a2e' }}>To start the analytics server:</p>
-            <code style={{
-              display: 'block',
-              background: '#1a1a2e',
-              color: '#10b981',
-              padding: '12px',
-              borderRadius: '6px',
-              fontSize: '0.9rem'
-            }}>
-              cd tjs-software-project && python etsy_dashboard.py
-            </code>
-          </div>
           <button
             onClick={loadData}
             style={{
@@ -324,32 +366,46 @@ export default function InsightsTab({ showNotification }) {
             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
             gap: '12px'
           }}>
-            {Object.entries(data.health.sub_scores).map(([name, score]) => (
-              <div key={name} style={{
-                background: 'rgba(255,255,255,0.05)',
-                borderRadius: '8px',
-                padding: '12px'
-              }}>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '4px' }}>{name}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    flex: 1,
-                    height: '6px',
-                    background: 'rgba(255,255,255,0.1)',
-                    borderRadius: '3px',
-                    overflow: 'hidden'
-                  }}>
+            {Object.entries(data.health.sub_scores).map(([name, score]) => {
+              const info = HEALTH_METRIC_INFO[name];
+              return (
+                <div key={name} className="health-metric-block" style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  position: 'relative',
+                  cursor: info ? 'help' : 'default'
+                }}>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '4px' }}>{name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
-                      width: `${score}%`,
-                      height: '100%',
-                      background: getHealthColor(score),
-                      borderRadius: '3px'
-                    }} />
+                      flex: 1,
+                      height: '6px',
+                      background: 'rgba(255,255,255,0.1)',
+                      borderRadius: '3px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${score}%`,
+                        height: '100%',
+                        background: getHealthColor(score),
+                        borderRadius: '3px'
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>{score}</span>
                   </div>
-                  <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>{score}</span>
+                  {info && (
+                    <div className="health-metric-tooltip">
+                      <div style={{ fontWeight: 600, marginBottom: '6px', fontSize: '0.8rem' }}>{name}</div>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.9, marginBottom: '8px' }}>{info.description}</div>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.7, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '6px' }}>
+                        <span style={{ fontWeight: 600 }}>Improve: </span>{score >= 80 ? info.good : info.improve}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -633,6 +689,152 @@ export default function InsightsTab({ showNotification }) {
                 </ResponsiveContainer>
               </div>
             )}
+
+            {/* Revenue & Profit Projections */}
+            {projectionsData && (projectionsData.historical?.length > 0 || projectionsData.projections?.length > 0) && (
+              <div style={{ marginTop: '24px' }}>
+                <h4 style={{ margin: '0 0 4px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                  Revenue & Profit Forecast
+                </h4>
+                <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  Solid = actual &middot; Dashed = projected &middot; Growth rate: {projectionsData.growth_rate?.toFixed(0)}%
+                </p>
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart
+                    data={[...(projectionsData.historical || []), ...(projectionsData.projections || [])]}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+                  >
+                    <defs>
+                      <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradProfit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(val) => val.split('-')[1] + '/' + val.split('-')[0].slice(2)}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [`$${value.toLocaleString()}`, name]}
+                      labelFormatter={(label) => {
+                        const item = [...(projectionsData.historical || []), ...(projectionsData.projections || [])].find(d => d.month === label);
+                        return `${label} (${item?.type === 'projection' ? 'Projected' : 'Actual'})`;
+                      }}
+                      contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      name="Revenue"
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      fill="url(#gradRevenue)"
+                      strokeDasharray={(d) => d?.type === 'projection' ? '5 5' : '0'}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        return <circle cx={cx} cy={cy} r={4} fill={payload.type === 'projection' ? '#fff' : '#6366f1'} stroke="#6366f1" strokeWidth={2} />;
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="profit"
+                      name="Profit"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      fill="url(#gradProfit)"
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        return <circle cx={cx} cy={cy} r={4} fill={payload.type === 'projection' ? '#fff' : '#10b981'} stroke="#10b981" strokeWidth={2} />;
+                      }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Cash Flow & Top Products side by side */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginTop: '24px' }}>
+
+              {/* Cash Flow Chart */}
+              {cashFlowData?.monthly && cashFlowData.monthly.length > 0 && (
+                <div>
+                  <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                    Cash Flow (Bank)
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={cashFlowData.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={(val) => val.split('-')[1] + '/' + val.split('-')[0].slice(2)}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={(val) => `$${(val / 1000).toFixed(1)}k`}
+                      />
+                      <Tooltip
+                        formatter={(value, name) => [`$${value.toLocaleString()}`, name]}
+                        contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                      />
+                      <Legend />
+                      <Bar dataKey="deposits" name="Deposits" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="debits" name="Debits" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Top Products Chart */}
+              {productsData?.products && productsData.products.length > 0 && (
+                <div>
+                  <h4 style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#1a1a2e' }}>
+                    Top Products by Revenue
+                  </h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart
+                      data={productsData.products.slice(0, 8).map(p => ({
+                        ...p,
+                        shortName: p.name.length > 25 ? p.name.substring(0, 22) + '...' : p.name
+                      }))}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={(val) => `$${(val / 1000).toFixed(1)}k`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="shortName"
+                        width={150}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+                        labelFormatter={(label) => productsData.products.find(p => p.name.startsWith(label.replace('...', '')))?.name || label}
+                        contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                      />
+                      <Bar dataKey="revenue" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
