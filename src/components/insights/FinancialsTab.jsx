@@ -283,39 +283,54 @@ export default function FinancialsTab({ showNotification }) {
           )}
 
           {/* Transaction Ledger */}
-          {ledger?.transactions && ledger.transactions.length > 0 && (
+          {ledger?.transactions && ledger.transactions.length > 0 && (() => {
+            // Compute running balance: start from current balance, work backwards to find start, then forward
+            const txns = ledger.transactions.slice(0, 50);
+            const currentBalance = ledger.current_balance || bank?.balance || 0;
+            const totalSpent = txns.reduce((sum, t) => sum + (t.amount || 0), 0);
+            const startBalance = currentBalance + totalSpent;
+            let runningBal = startBalance;
+
+            return (
             <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', fontWeight: '600' }}>
-                Recent Transactions ({ledger.transactions.length})
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: '600' }}>Recent Transactions ({ledger.transactions.length})</span>
+                <span style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: '600' }}>
+                  Current Balance: ${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
               </div>
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                   <thead style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
                     <tr>
                       <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '500', color: '#64748b' }}>Date</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '500', color: '#64748b' }}>Description</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '500', color: '#64748b' }}>Category</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '500', color: '#64748b' }}>Amount</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '500', color: '#64748b' }}>Balance</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ledger.transactions.slice(0, 50).map((txn, idx) => (
+                    {txns.map((txn, idx) => {
+                      runningBal -= (txn.amount || 0);
+                      return (
                       <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 16px', color: '#64748b' }}>{txn.date}</td>
-                        <td style={{ padding: '12px 16px', color: '#1a1a2e' }}>{txn.description?.slice(0, 40)}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', color: txn.amount >= 0 ? '#10b981' : '#ef4444', fontWeight: '500' }}>
-                          {txn.amount >= 0 ? '+' : ''}{txn.amount?.toLocaleString()}
+                        <td style={{ padding: '12px 16px', color: '#1a1a2e' }}>{txn.category || txn.description?.slice(0, 40) || '—'}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', color: '#ef4444', fontWeight: '500' }}>
+                          -${txn.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '500' }}>
-                          ${txn.running_balance?.toLocaleString()}
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '500', color: runningBal >= 0 ? '#1a1a2e' : '#ef4444' }}>
+                          ${runningBal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
