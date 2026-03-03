@@ -360,15 +360,17 @@ export default function FinancialsTab({ showNotification }) {
             <SummaryCard label="Margin" value={`${shipping.summary?.margin}%`} color="#6366f1" isPercent />
           </div>
 
+          {shipping.labels && (
           <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: '1rem' }}>Label Breakdown</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-              <StatBox label="USPS Outbound" value={`$${shipping.labels?.usps_outbound?.toLocaleString()}`} sub={`${shipping.labels?.usps_outbound_count} labels`} />
-              <StatBox label="USPS Returns" value={`$${shipping.labels?.usps_returns?.toLocaleString()}`} sub={`${shipping.labels?.usps_return_count} labels`} />
-              <StatBox label="International" value={`$${shipping.labels?.asendia?.toLocaleString()}`} sub={`${shipping.labels?.asendia_count} labels`} />
-              <StatBox label="Avg Label Cost" value={`$${shipping.orders?.avg_label_cost?.toFixed(2)}`} />
+              <StatBox label="USPS Outbound" value={`$${shipping.labels.usps_outbound?.toLocaleString() || '0'}`} sub={`${shipping.labels.usps_outbound_count || 0} labels`} />
+              <StatBox label="USPS Returns" value={`$${shipping.labels.usps_returns?.toLocaleString() || '0'}`} sub={`${shipping.labels.usps_return_count || 0} labels`} />
+              <StatBox label="International" value={`$${shipping.labels.asendia?.toLocaleString() || '0'}`} sub={`${shipping.labels.asendia_count || 0} labels`} />
+              <StatBox label="Avg Label Cost" value={`$${shipping.orders?.avg_label_cost?.toFixed(2) || '0.00'}`} />
             </div>
           </div>
+          )}
         </div>
       )}
 
