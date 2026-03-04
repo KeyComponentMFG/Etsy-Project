@@ -15,6 +15,7 @@ import ValuationTab from './components/insights/ValuationTab';
 import DataHubTab from './components/insights/DataHubTab';
 import ChatBot from './components/chat/ChatBot';
 import ProductAnalytics from './components/analytics/ProductAnalytics';
+import CustomerAnalytics from './components/analytics/CustomerAnalytics';
 import { usePermissions } from './hooks/usePermissions';
 import { useDataValidator } from './hooks/useDataValidator';
 import { DEFAULT_SUPPLY_CATEGORIES, DEFAULT_TEAM, DEFAULT_STORES, DEFAULT_PRINTERS, PRODUCTION_STAGES, TRANSACTION_FEE_RATE, PAYMENT_PROCESSING_RATE, PAYMENT_PROCESSING_FLAT, SALES_TAX_RATE } from './constants/defaults';
@@ -6251,6 +6252,13 @@ export default function EtsyOrderManager() {
                     <BarChart3 size={16} style={{ marginRight: '6px' }} />
                     Product Analytics
                   </button>
+                  <button
+                    className={insightsSubTab === 'customers' ? 'active' : ''}
+                    onClick={() => setInsightsSubTab('customers')}
+                  >
+                    <Users size={16} style={{ marginRight: '6px' }} />
+                    Customer Analytics
+                  </button>
                 </div>
               )}
               {(uiMode === 'simple' || insightsSubTab === 'overview') && (
@@ -6261,6 +6269,9 @@ export default function EtsyOrderManager() {
               {uiMode === 'advanced' && insightsSubTab === 'financials' && (
                 <FinancialsTab
                   showNotification={showNotification}
+                  orders={orders}
+                  archivedOrders={archivedOrders}
+                  models={models}
                 />
               )}
               {uiMode === 'advanced' && insightsSubTab === 'tax' && (
@@ -6284,6 +6295,12 @@ export default function EtsyOrderManager() {
                   archivedOrders={archivedOrders}
                   models={models}
                   dataValidation={dataValidation}
+                />
+              )}
+              {uiMode === 'advanced' && insightsSubTab === 'customers' && (
+                <CustomerAnalytics
+                  orders={orders}
+                  archivedOrders={archivedOrders}
                 />
               )}
             </>
